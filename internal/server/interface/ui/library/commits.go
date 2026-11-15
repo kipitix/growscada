@@ -31,10 +31,10 @@ func (l *Library) loadCommits(ctx app.Context) {
 		return
 	}
 	uiutil.LoadForGone(l.compoCtx, &l.commitsReloader, l.draft,
-		func(c context.Context, lib *apiclient.LibraryClient) ([]apiv0.CommitResponse, error) {
-			return lib.Commits(c)
+		func(c context.Context, lib *apiclient.LibraryClient) ([]apiv0.SavedStateResponse, error) {
+			return lib.SavedStates(c)
 		},
-		func(ctx app.Context, _ *apiclient.LibraryClient, commits []apiv0.CommitResponse) {
+		func(ctx app.Context, _ *apiclient.LibraryClient, commits []apiv0.SavedStateResponse) {
 			l.commits, l.commitsLoaded = commits, true
 		}, l.libraryGone, l.loadCommits)
 }
@@ -83,9 +83,9 @@ func (l *Library) saveCommit() {
 	l.savingCommit = true
 	l.compoCtx.LocalStorage().Set(uiutil.AuthorKey, author)
 	version := l.draftVersion()
-	uiutil.Call(l.compoCtx, func(c context.Context) (apiv0.CommitResponse, error) {
-		return draft.SaveCommit(c, apiv0.CreateCommitRequest{Version: version, Title: title, Author: author})
-	}, func(ctx app.Context, saved apiv0.CommitResponse) {
+	uiutil.Call(l.compoCtx, func(c context.Context) (apiv0.SavedStateResponse, error) {
+		return draft.SaveSavedState(c, apiv0.CreateSavedStateRequest{Version: version, Title: title, Author: author})
+	}, func(ctx app.Context, saved apiv0.SavedStateResponse) {
 		if draft != l.draft() {
 			l.savingCommit = false
 			return
@@ -162,9 +162,9 @@ func (l *Library) renameSavedState(ctx app.Context, number int, title string) {
 	if draft == nil || number == 0 || title == "" {
 		return
 	}
-	uiutil.Call(l.compoCtx, func(c context.Context) (apiv0.CommitResponse, error) {
-		return draft.RenameCommit(c, number, apiv0.RenameCommitRequest{Title: title})
-	}, func(ctx app.Context, _ apiv0.CommitResponse) {
+	uiutil.Call(l.compoCtx, func(c context.Context) (apiv0.SavedStateResponse, error) {
+		return draft.RenameSavedState(c, number, apiv0.RenameSavedStateRequest{Title: title})
+	}, func(ctx app.Context, _ apiv0.SavedStateResponse) {
 		if draft != l.draft() {
 			return
 		}

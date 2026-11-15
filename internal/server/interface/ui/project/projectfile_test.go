@@ -50,7 +50,7 @@ func TestProjectFileDialog_ShowsTheActionsAndTheConfirmation(t *testing.T) {
 	if !strings.Contains(html, `data-projectfile-confirmation="open"`) {
 		t.Fatalf("the picked file has no confirmation: %s", html)
 	}
-	for _, want := range []string{"draft.json", "Schema 0.3", "tags", "library imports", "replaces the whole Draft", "undo restores"} {
+	for _, want := range []string{"draft.json", "Schema 0.4", "tags", "library imports", "replaces the whole Draft", "undo restores"} {
 		if !strings.Contains(html, want) {
 			t.Errorf("the confirmation does not show %q: %s", want, html)
 		}
@@ -160,7 +160,7 @@ func TestProjectFileDialog_DeployFromFileReloadsThePreview(t *testing.T) {
 	if f.p.projectFileDialog {
 		t.Error("the dialog stayed open after the file was deployed")
 	}
-	if !f.p.deployed || f.p.deployment.Number != 1 || f.p.deployment.CommitNumber != nil {
+	if !f.p.deployed || f.p.deployment.Number != 1 || f.p.deployment.SavedStateNumber != nil {
 		t.Fatalf("the bar after a file deploy: deployed %v, %+v (dialog %v, pending %+v, toasts %+v)",
 			f.p.deployed, f.p.deployment, f.p.projectFileDialog, f.p.pendingProjectFile, f.e.TakeToasts())
 	}

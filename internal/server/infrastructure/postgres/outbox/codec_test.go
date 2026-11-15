@@ -267,3 +267,20 @@ func TestCodec_ContentEventWithoutProject_IsRefused(t *testing.T) {
 		}
 	}
 }
+
+// A row written before a Commit was called a saved state carries the number
+// under "commit" (task 88_2; ADR 0026): it still decodes, with that number.
+func TestCodec_SavedStateRowWrittenBeforeTheRename_Decodes(t *testing.T) {
+	const row = `{"timestamp":"2026-11-15T12:30:15Z","id":"b0000000-0000-4000-8000-000000000001","project_id":"b0000000-0000-4000-8000-000000000002","commit":3}`
+	decoded, err := outbox.Decode(event.EventTypeSavedStateCreated, []byte(row))
+	if err != nil {
+		t.Fatalf("Decode: %v", err)
+	}
+	savedState, ok := decoded.(draft.SavedStateEvent)
+	if !ok {
+		t.Fatalf("decoded %T, want a draft.SavedStateEvent", decoded)
+	}
+	if savedState.SavedStateNumber() != 3 {
+		t.Errorf("the saved state number is %d, want 3", savedState.SavedStateNumber())
+	}
+}

@@ -335,8 +335,8 @@ func (p *Project) currentDeploymentText() string {
 	}
 	text := fmt.Sprintf("Current deployment: %d, deployed %s.",
 		p.deployment.Number, formatDeployedAt(p.deployment.DeployedAt))
-	if p.deployment.CommitNumber != nil {
-		text += fmt.Sprintf(" It runs saved state %d.", *p.deployment.CommitNumber)
+	if p.deployment.SavedStateNumber != nil {
+		text += fmt.Sprintf(" It runs saved state %d.", *p.deployment.SavedStateNumber)
 	}
 	return text
 }

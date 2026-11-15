@@ -68,7 +68,7 @@ func TestSavedStateLabels_AssignAndUnassign(t *testing.T) {
 	if _, err := f.api.UnassignLabel(ctx, 1, first.ID); err != nil {
 		t.Fatalf("another tab's unassignment: %v", err)
 	}
-	f.event(apiv0.Event{Type: apiv0.EventLabelUnassigned, ID: servertest.MainProject.String(), Commit: 1, Label: first.ID.String()})
+	f.event(apiv0.Event{Type: apiv0.EventLabelUnassigned, ID: servertest.MainProject.String(), SavedState: 1, Label: first.ID.String()})
 	if len(f.p.commits) != 1 || len(f.p.commits[0].Labels) != 1 || f.p.commits[0].Labels[0].ID != second.ID {
 		t.Errorf("the history after another tab's unassignment: %+v", f.p.commits)
 	}

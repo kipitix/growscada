@@ -18,7 +18,7 @@ import (
 // Deployment it runs and whether the Draft differs from it). Operation reads
 // none of these: it follows the Journal from a Player of its own (ADR 0020).
 type ReloadTargets struct {
-	Projects, Libraries, WidgetTypes, LibraryImports, Scenes, Widgets, Tags, Deploy, Commits bool
+	Projects, Libraries, WidgetTypes, LibraryImports, Scenes, Widgets, Tags, Deploy, SavedStates bool
 	// Labels is the server's labels (task 85_2): a label change is the
 	// server's event, and the global Labels window rereads its list on it.
 	Labels bool
@@ -46,13 +46,13 @@ func (t ReloadTargets) DraftChanged() bool {
 }
 
 // AllTargets is every list.
-var AllTargets = ReloadTargets{Projects: true, Libraries: true, WidgetTypes: true, LibraryImports: true, Scenes: true, Widgets: true, Tags: true, Deploy: true, Commits: true, Labels: true}
+var AllTargets = ReloadTargets{Projects: true, Libraries: true, WidgetTypes: true, LibraryImports: true, Scenes: true, Widgets: true, Tags: true, Deploy: true, SavedStates: true, Labels: true}
 
 // The lists of each stream: what its resync reloads, since the events it
 // published while disconnected are lost.
 var (
-	serverTargets  = ReloadTargets{Projects: true, Libraries: true, WidgetTypes: true, Commits: true, Labels: true}
-	projectTargets = ReloadTargets{LibraryImports: true, Scenes: true, Widgets: true, Tags: true, Deploy: true, Commits: true}
+	serverTargets  = ReloadTargets{Projects: true, Libraries: true, WidgetTypes: true, SavedStates: true, Labels: true}
+	projectTargets = ReloadTargets{LibraryImports: true, Scenes: true, Widgets: true, Tags: true, Deploy: true, SavedStates: true}
 )
 
 // ReloadTargetsFor routes an event of the streams (or EventResync,
@@ -64,10 +64,10 @@ func ReloadTargetsFor(ev apiv0.Event) ReloadTargets {
 		return serverTargets
 	case EventProjectResync:
 		return projectTargets
-	case apiv0.EventCommitCreated, apiv0.EventCommitTitleUpdated:
+	case apiv0.EventSavedStateCreated, apiv0.EventSavedStateTitleUpdated:
 		// A Save or a rename changes the history alone: no content of the
 		// Draft and no DraftChange stack (task 72_2; ADR 0021).
-		return ReloadTargets{Commits: true}
+		return ReloadTargets{SavedStates: true}
 	case apiv0.EventDeploymentCreated:
 		// The Deployment the Project runs changed: Project refreshes its badge;
 		// nothing of the Draft is touched. Operation does not read this stream
@@ -78,7 +78,7 @@ func ReloadTargetsFor(ev apiv0.Event) ReloadTargets {
 		// A label or one of its assignments changed: the Labels window rereads
 		// its list and the history its chips and the label's count. No mode's
 		// content changes (task 85_2, task 85_3; ADR 0025).
-		return ReloadTargets{Labels: true, Commits: true}
+		return ReloadTargets{Labels: true, SavedStates: true}
 	case apiv0.EventProjectCreated, apiv0.EventProjectUpdated, apiv0.EventProjectDeleted:
 		// A Project was made, renamed or removed: the mode rereads the list.
 		return ReloadTargets{Projects: true, Deploy: true}

@@ -29,18 +29,18 @@ func missingLibraryImports(ctx context.Context, libraries library.LibraryReposit
 		libraryID := id.NewID(id.IDWithUUID[library.Library](imported.LibraryID))
 		if _, err := libraries.FindByID(ctx, libraryID); err != nil {
 			if errors.Is(err, library.ErrLibraryNotFound) {
-				byLibrary[imported.LibraryID] = imported.Commit
+				byLibrary[imported.LibraryID] = imported.SavedState
 				continue
 			}
 			return nil, fmt.Errorf("cannot read library %s: %w", imported.LibraryID, err)
 		}
-		if _, err := drafts.FindSavedState(ctx, draft.LibraryScope(libraryID), imported.Commit); err != nil {
+		if _, err := drafts.FindSavedState(ctx, draft.LibraryScope(libraryID), imported.SavedState); err != nil {
 			if errors.Is(err, draft.ErrSavedStateNotFound) {
-				byLibrary[imported.LibraryID] = imported.Commit
+				byLibrary[imported.LibraryID] = imported.SavedState
 				continue
 			}
 			return nil, fmt.Errorf("cannot read saved state %d of library %s: %w",
-				imported.Commit, imported.LibraryID, err)
+				imported.SavedState, imported.LibraryID, err)
 		}
 	}
 	missing := make([]appdto.MissingImport, 0, len(byLibrary))

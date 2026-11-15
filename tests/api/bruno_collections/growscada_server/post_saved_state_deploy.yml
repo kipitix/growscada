@@ -1,0 +1,34 @@
+info:
+  name: deploy a saved state
+  type: http
+  seq: 68
+
+http:
+  method: POST
+  url: http://{{API_SERVER}}/api/v0/projects/{{OTHER_PROJECT_ID}}/saved-states/{{OTHER_SAVED_STATE_NUMBER}}/deploy
+  auth: inherit
+
+docs: |
+  A saved state is made the project's running Deployment (task 85_4): its
+  ProjectFile is the content, and no Draft Version is stated. The number and
+  the time are the Runtime node's; the Deployment names the saved state it came
+  from.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '201'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.number'
+      operator: eq
+      value: '4'
+    - expression: 'res.body.deployed_at'
+      operator: isDefined
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

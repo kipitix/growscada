@@ -195,7 +195,7 @@ func (p *Picker) OnMount(ctx app.Context) {
 		// any write of a Draft's content makes one unsaved (task 73;
 		// ReloadTargetsFor).
 		if targets := eventlog.ReloadTargetsFor(ev); targets.Projects || targets.Libraries ||
-			targets.Commits || targets.DraftChanged() {
+			targets.SavedStates || targets.DraftChanged() {
 			p.load(ctx)
 		}
 	})

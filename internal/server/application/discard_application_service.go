@@ -326,12 +326,12 @@ func contentOfProjectFile(projectID id.ID[project.Project], file projectv0.Proje
 		content.Scenes = append(content.Scenes, built)
 	}
 	for _, imported := range file.LibraryImports {
-		if imported.Commit < 1 {
+		if imported.SavedState < 1 {
 			return draft.Content{}, fmt.Errorf("library %s: a saved state number is positive, got %d",
-				imported.LibraryID, imported.Commit)
+				imported.LibraryID, imported.SavedState)
 		}
 		content.LibraryImports = append(content.LibraryImports, libraryimport.ReconstituteLibraryImport(projectID,
-			id.NewID(id.IDWithUUID[library.Library](imported.LibraryID)), uuid.Nil, imported.Commit))
+			id.NewID(id.IDWithUUID[library.Library](imported.LibraryID)), uuid.Nil, imported.SavedState))
 	}
 	return content, nil
 }

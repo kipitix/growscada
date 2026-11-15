@@ -9,7 +9,7 @@ http:
     type: json
     data: |-
       {
-        "commit": 2,
+        "saved_state": 2,
         "version": 2
       }
   auth: inherit
@@ -26,7 +26,7 @@ runtime:
       value: '200'
     - expression: 'res.headers["growscada-schema-version"]'
       operator: isDefined
-    - expression: 'res.body.commit_number'
+    - expression: 'res.body.saved_state_number'
       operator: eq
       value: '2'
     - expression: 'res.body.version'

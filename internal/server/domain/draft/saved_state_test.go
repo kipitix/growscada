@@ -75,7 +75,7 @@ func TestNewSavedState_RecordsCreatedAndWithTitleRecordsUpdated(t *testing.T) {
 	}
 	events := savedState.PendingEvents()
 	if len(events) != 1 || events[0].Type() != event.EventTypeSavedStateCreated {
-		t.Fatalf("events %v, want one commit_created", events)
+		t.Fatalf("events %v, want one saved_state_created", events)
 	}
 	if savedState.DraftVersion().Number() != 7 {
 		t.Errorf("saved state fixed version %s, want 7", savedState.DraftVersion())
@@ -94,7 +94,7 @@ func TestNewSavedState_RecordsCreatedAndWithTitleRecordsUpdated(t *testing.T) {
 	}
 	events = renamed.PendingEvents()
 	if len(events) != 1 || events[0].Type() != event.EventTypeSavedStateTitleUpdated {
-		t.Fatalf("events %v, want one commit_title_updated", events)
+		t.Fatalf("events %v, want one saved_state_title_updated", events)
 	}
 }
 

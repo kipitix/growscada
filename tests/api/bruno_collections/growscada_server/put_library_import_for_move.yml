@@ -9,7 +9,7 @@ http:
     type: json
     data: |-
       {
-        "commit": 2,
+        "saved_state": 2,
         "version": 25
       }
   auth: inherit
@@ -30,7 +30,7 @@ runtime:
     - expression: 'res.body.library_id'
       operator: eq
       value: '"{{LIBRARY_ID}}"'
-    - expression: 'res.body.commit_number'
+    - expression: 'res.body.saved_state_number'
       operator: eq
       value: '2'
 

@@ -1,0 +1,33 @@
+info:
+  name: deploy a missing saved state
+  type: http
+  seq: 50
+
+http:
+  method: POST
+  url: http://{{API_SERVER}}/api/v0/projects/{{OTHER_PROJECT_ID}}/saved-states/99/deploy
+  auth: inherit
+
+docs: |
+  A saved state number the project does not have is `404 Not Found`, and the
+  answer names the saved state (task 85_4).
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '404'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.headers["content-type"]'
+      operator: eq
+      value: '"application/problem+json"'
+    - expression: 'res.body.detail'
+      operator: contains
+      value: '99'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

@@ -1,0 +1,42 @@
+info:
+  name: save the library of the cleanup flow as a saved state
+  type: http
+  seq: 196
+
+http:
+  method: POST
+  url: http://{{API_SERVER}}/api/v0/libraries/{{CLEANUP_LIBRARY_ID}}/saved-states
+  body:
+    type: json
+    data: |-
+      {
+        "version": {{CLEANUP_LIBRARY_DRAFT_VERSION}},
+        "title": "The one state",
+        "author": "Ada"
+      }
+  auth: inherit
+
+docs: |
+  A Project imports a saved state of a Library (task 85_6): the cleanup
+  library's Draft is saved, and the next request imports this saved state.
+
+runtime:
+  scripts:
+    - type: after-response
+      code: |-
+        bru.setVar("CLEANUP_LIBRARY_SAVED_STATE", res.body.number);
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '201'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.number'
+      operator: eq
+      value: '1'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

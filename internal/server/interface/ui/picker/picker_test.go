@@ -613,10 +613,10 @@ func TestPicker_ReloadsOnServerEvents(t *testing.T) {
 	// A Save fixes a Draft, and a write of one makes the project unsaved: the
 	// row's dot follows both (task 73).
 	f.create("Line 2", "")
-	f.p.compoCtx.NewActionWithValue(eventlog.ActionServerEvent, apiv0.Event{Type: apiv0.EventCommitCreated, ID: uuid.NewString()})
+	f.p.compoCtx.NewActionWithValue(eventlog.ActionServerEvent, apiv0.Event{Type: apiv0.EventSavedStateCreated, ID: uuid.NewString()})
 	f.run()
 	if len(f.p.items) != 3 {
-		t.Errorf("listed %d projects after commit_created, want 3", len(f.p.items))
+		t.Errorf("listed %d projects after saved_state_created, want 3", len(f.p.items))
 	}
 
 	f.create("Line 3", "")
@@ -685,8 +685,8 @@ func TestPicker_LibraryStates(t *testing.T) {
 	if err != nil {
 		t.Fatalf("DraftState: %v", err)
 	}
-	if _, err := lib.SaveCommit(ctx, apiv0.CreateCommitRequest{Version: state.Version, Title: "First", Author: "Ada"}); err != nil {
-		t.Fatalf("SaveCommit: %v", err)
+	if _, err := lib.SaveSavedState(ctx, apiv0.CreateSavedStateRequest{Version: state.Version, Title: "First", Author: "Ada"}); err != nil {
+		t.Fatalf("SaveSavedState: %v", err)
 	}
 	if item := reload(); item.State != StateSaved || item.StateKind != "saved" {
 		t.Errorf("after a Save: %+v, want a saved state", item)

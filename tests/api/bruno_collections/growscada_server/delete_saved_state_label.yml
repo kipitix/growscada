@@ -1,0 +1,30 @@
+info:
+  name: delete the label of a project saved state
+  type: http
+  seq: 2020
+http:
+  method: DELETE
+  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/saved-states/1/labels/{{LABEL_ID}}
+  auth: inherit
+
+docs: |
+  The label no longer marks the saved state (task 85_3; ADR 0025). A repeat is a
+  200 with no label, never a 409; the answer is every label the saved state
+  still carries.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '200'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.labels.length'
+      operator: eq
+      value: '0'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

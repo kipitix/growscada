@@ -167,7 +167,7 @@ func portFile(t *testing.T, projectID uuid.UUID, tagType string, ports []project
 	libraryID, typeID, tagID := uuid.New(), uuid.New(), uuid.New()
 	file := emptyFile(projectID)
 	file.Tags = []projectv0.TagDefinition{{ID: tagID, Name: "speed", Type: tagType}}
-	file.LibraryImports = []projectv0.LibraryImport{{LibraryID: libraryID, Commit: 1}}
+	file.LibraryImports = []projectv0.LibraryImport{{LibraryID: libraryID, SavedState: 1}}
 	file.WidgetTypes = []projectv0.WidgetType{{
 		ID: typeID, LibraryID: libraryID, Name: "gauge", ScriptLanguage: "javascript",
 		DefaultWidth: 10, DefaultHeight: 10, InputPorts: ports,
@@ -245,7 +245,7 @@ func TestValidateProjectFile_RefusesAWidgetOfTwoScenes(t *testing.T) {
 		ID: typeID, LibraryID: libraryID, Name: "gauge", ScriptLanguage: "javascript",
 		DefaultWidth: 10, DefaultHeight: 10,
 	}}
-	file.LibraryImports = []projectv0.LibraryImport{{LibraryID: libraryID, Commit: 1}}
+	file.LibraryImports = []projectv0.LibraryImport{{LibraryID: libraryID, SavedState: 1}}
 	widget := projectv0.Widget{
 		ID: widgetID, Name: "gauge", Size: projectv0.Size{Width: 10, Height: 10},
 		Origin: projectv0.Origin{X: 0.5, Y: 0.5}, TypeID: typeID,
@@ -355,7 +355,7 @@ func importedFile(t *testing.T, projectID, libraryID uuid.UUID) (projectv0.Proje
 	}
 	file := emptyFile(projectID)
 	file.Tags = []projectv0.TagDefinition{{ID: tagID, Name: "speed", Type: "integer"}}
-	file.LibraryImports = []projectv0.LibraryImport{{LibraryID: libraryID, Commit: 1}}
+	file.LibraryImports = []projectv0.LibraryImport{{LibraryID: libraryID, SavedState: 1}}
 	file.WidgetTypes = []projectv0.WidgetType{{
 		ID: typeID, LibraryID: libraryID, Name: "gauge", ScriptLanguage: "javascript",
 		DefaultWidth: 100, DefaultHeight: 100,

@@ -146,7 +146,7 @@ func TestCreateDeployment_WritesACheckpointAtTheDeploymentEntry(t *testing.T) {
 	payload := payloadOf(t, checkpoint)
 	if payload.Deployment == nil || payload.Deployment.Number != deployment.Number ||
 		payload.Deployment.Cause != recordv0.DeploymentCauseDeploy ||
-		payload.Deployment.CommitNumber == nil || *payload.Deployment.CommitNumber != savedStateNumber ||
+		payload.Deployment.SavedStateNumber == nil || *payload.Deployment.SavedStateNumber != savedStateNumber ||
 		payload.Deployment.RolledBackFrom != nil {
 		t.Errorf("deployment payload %+v", payload.Deployment)
 	}
@@ -180,7 +180,7 @@ func TestCreateDeployment_FileWritesACheckpoint(t *testing.T) {
 	}
 	payload := payloadOf(t, checkpoints[0])
 	if payload.Deployment == nil || payload.Deployment.Number != deployment.Number ||
-		payload.Deployment.Cause != recordv0.DeploymentCauseFile || payload.Deployment.CommitNumber != nil {
+		payload.Deployment.Cause != recordv0.DeploymentCauseFile || payload.Deployment.SavedStateNumber != nil {
 		t.Errorf("deployment payload %+v", payload.Deployment)
 	}
 	if payload.TagStates == nil || len(payload.TagStates) != 0 {
@@ -224,7 +224,7 @@ func TestRollback_WritesACheckpoint(t *testing.T) {
 	if payload.Deployment == nil || payload.Deployment.Number != rolledBack.Number ||
 		payload.Deployment.Cause != recordv0.DeploymentCauseRollback ||
 		payload.Deployment.RolledBackFrom == nil || *payload.Deployment.RolledBackFrom != 1 ||
-		payload.Deployment.CommitNumber == nil || *payload.Deployment.CommitNumber != firstSavedState {
+		payload.Deployment.SavedStateNumber == nil || *payload.Deployment.SavedStateNumber != firstSavedState {
 		t.Errorf("deployment payload %+v", payload.Deployment)
 	}
 	// The rolled-back document names one Tag, and its state is the one the

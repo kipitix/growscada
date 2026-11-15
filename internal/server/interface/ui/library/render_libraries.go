@@ -81,7 +81,7 @@ func (l *Library) draftStateOf(lib apiv0.LibraryResponse) (kind, text string) {
 	switch {
 	case lib.HasUnsavedChanges:
 		return "unsaved", "unsaved changes"
-	case lib.LatestCommit > 0:
+	case lib.LatestSavedState > 0:
 		return "saved", "saved"
 	default:
 		return "new", "never saved"
@@ -98,12 +98,12 @@ func (l *Library) renderLibraryStatus() app.UI {
 	kind, _ := l.draftStateOf(lib)
 	var status string
 	switch {
-	case lib.LatestCommit == 0:
+	case lib.LatestSavedState == 0:
 		status = "Never saved."
 	case kind == "unsaved":
-		status = "Saved state #" + itoa(lib.LatestCommit) + " · unsaved changes"
+		status = "Saved state #" + itoa(lib.LatestSavedState) + " · unsaved changes"
 	default:
-		status = "Saved state #" + itoa(lib.LatestCommit)
+		status = "Saved state #" + itoa(lib.LatestSavedState)
 	}
 	return app.Div().
 		Attr("data-library-status", "true").

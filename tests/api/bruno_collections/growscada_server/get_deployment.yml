@@ -23,7 +23,7 @@ runtime:
     - expression: 'res.body.number'
       operator: eq
       value: '1'
-    - expression: 'res.body.commit_number'
+    - expression: 'res.body.saved_state_number'
       operator: eq
       value: '1'
     - expression: 'res.body.content.project_id'

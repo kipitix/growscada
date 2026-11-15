@@ -18,7 +18,7 @@ import (
 )
 
 // uriLog is a transport that records the requests sent through it with their
-// query, which tells a server filter (GET …/commits?label=<id>) from one the
+// query, which tells a server filter (GET …/saved-states?label=<id>) from one the
 // client makes in memory.
 type uriLog struct {
 	mu   sync.Mutex
@@ -43,7 +43,7 @@ func (l *uriLog) take() []string {
 
 // saveState saves the Draft as the next saved state after touching it: a Save
 // of a Draft nothing was written to is the server's 409 (ADR 0021).
-func saveState(t *testing.T, api *testAPI, title string) apiv0.CommitResponse {
+func saveState(t *testing.T, api *testAPI, title string) apiv0.SavedStateResponse {
 	t.Helper()
 	ctx := context.Background()
 	createScene(t, api, title)
@@ -51,7 +51,7 @@ func saveState(t *testing.T, api *testAPI, title string) apiv0.CommitResponse {
 	if err != nil {
 		t.Fatalf("draft state: %v", err)
 	}
-	saved, err := api.SaveCommit(ctx, apiv0.CreateCommitRequest{
+	saved, err := api.SaveSavedState(ctx, apiv0.CreateSavedStateRequest{
 		Version: state.Version, Title: title, Author: "Ada"})
 	if err != nil {
 		t.Fatalf("save commit: %v", err)
@@ -110,7 +110,7 @@ func TestDeployWindow_EmptySaysWhatToDoFirst(t *testing.T) {
 }
 
 // TestDeployWindow_FilterByLabel: the filter is the server's — GET
-// …/commits?label=<id> —, All labels asks for every saved state, and a chosen
+// …/saved-states?label=<id> —, All labels asks for every saved state, and a chosen
 // label narrows the window to the ones it marks (task 85_3, task 85_5).
 func TestDeployWindow_FilterByLabel(t *testing.T) {
 	url, api := newServer(t)
@@ -152,7 +152,7 @@ func TestDeployWindow_FilterByLabel(t *testing.T) {
 	}
 	asked := false
 	for _, req := range log.take() {
-		if strings.Contains(req, apiv0.CommitPath+"?"+apiv0.CommitsQueryLabel+"="+label.ID.String()) {
+		if strings.Contains(req, apiv0.SavedStatePath+"?"+apiv0.SavedStatesQueryLabel+"="+label.ID.String()) {
 			asked = true
 		}
 	}
@@ -288,9 +288,9 @@ func TestDeployWindow_UnknownDeploymentMarksNoRow(t *testing.T) {
 	f.run()
 	first := 1
 	f.p.deployed, f.p.deploymentLoaded = true, true
-	f.p.deployment = apiv0.DeploymentResponse{Number: 4, CommitNumber: &first}
+	f.p.deployment = apiv0.DeploymentResponse{Number: 4, SavedStateNumber: &first}
 	f.p.deploymentFailed = true
-	f.p.deployCommits = []apiv0.CommitResponse{{Number: first, Title: "First"}}
+	f.p.deployCommits = []apiv0.SavedStateResponse{{Number: first, Title: "First"}}
 	f.p.deployCommitsLoaded = true
 	f.p.historyLabelsLoaded = true
 	f.p.deployDialog = true
@@ -361,7 +361,7 @@ func TestDeployWindow_DeploymentCreatedMovesTheMark(t *testing.T) {
 	f.run()
 	f.noToasts()
 
-	if _, err := f.api.DeployCommit(context.Background(), second.Number); err != nil {
+	if _, err := f.api.DeploySavedState(context.Background(), second.Number); err != nil {
 		t.Fatalf("deploy saved state: %v", err)
 	}
 	f.event(apiv0.Event{Type: apiv0.EventDeploymentCreated})

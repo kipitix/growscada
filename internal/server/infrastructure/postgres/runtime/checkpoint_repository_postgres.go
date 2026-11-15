@@ -229,9 +229,9 @@ func currentDeploymentRef(ctx context.Context, tx *sql.Tx, projectID uuid.UUID) 
 		return nil, fmt.Errorf("cannot read the running deployment of project %s: %w", projectID, err)
 	}
 	return &recordv0.Deployment{
-		Number:         number,
-		Cause:          recordv0.DeploymentCause(cause),
-		RolledBackFrom: nullableInt(rolledBackFrom),
-		CommitNumber:   nullableInt(savedStateNumber),
+		Number:           number,
+		Cause:            recordv0.DeploymentCause(cause),
+		RolledBackFrom:   nullableInt(rolledBackFrom),
+		SavedStateNumber: nullableInt(savedStateNumber),
 	}, nil
 }

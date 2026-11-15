@@ -97,7 +97,7 @@ type Repository interface {
 	SaveSavedState(ctx context.Context, scope Scope, expected version.Version[Draft], title SavedStateTitle, author Author, content SavedStateContent) (SavedState, error)
 
 	// RenameSavedState changes the title of the saved state number of the Draft
-	// and records commit_title_updated. It states no Draft Version: the title is
+	// and records saved_state_title_updated. It states no Draft Version: the title is
 	// not content, so the command works after another Engineer's writes. Returns
 	// ErrSavedStateNotFound for a number the Draft does not have.
 	RenameSavedState(ctx context.Context, scope Scope, number int, title SavedStateTitle) (SavedState, error)

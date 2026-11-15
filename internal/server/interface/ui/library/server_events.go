@@ -56,7 +56,7 @@ func (l *Library) handleServerEvents(ctx app.Context) {
 			// Draft edit never changes (task 72_7).
 			l.loadList(ctx)
 		}
-		if targets.Commits && mine {
+		if targets.SavedStates && mine {
 			l.loadCommits(ctx)
 			l.loadUnsavedChanges(ctx) // a Save makes the Draft its saved state's content
 		}

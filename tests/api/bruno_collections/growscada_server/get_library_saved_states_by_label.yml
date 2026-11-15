@@ -1,0 +1,32 @@
+info:
+  name: get the library saved states of one label
+  type: http
+  seq: 2019
+http:
+  method: GET
+  url: http://{{API_SERVER}}/api/v0/libraries/{{OTHER_LIBRARY_ID}}/saved-states?label={{LABEL_ID}}
+  auth: inherit
+
+docs: |
+  The library's history narrowed to the saved states the label marks (task
+  85_3; ADR 0025): saved state 1 alone carries it.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '200'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.saved_states.length'
+      operator: eq
+      value: '1'
+    - expression: 'res.body.saved_states[0].number'
+      operator: eq
+      value: '1'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

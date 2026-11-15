@@ -155,7 +155,7 @@ func projectFileOfContent(projectID id.ID[project.Project], content draft.Conten
 	}
 	for _, imported := range content.LibraryImports {
 		file.LibraryImports = append(file.LibraryImports, projectv0.LibraryImport{
-			LibraryID: imported.LibraryID().UUID(), Commit: imported.SavedStateNumber(),
+			LibraryID: imported.LibraryID().UUID(), SavedState: imported.SavedStateNumber(),
 		})
 	}
 

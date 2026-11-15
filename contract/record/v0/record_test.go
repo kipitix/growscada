@@ -37,3 +37,27 @@ func TestEntry_ReadsTheRevisionNamesAsDeployment(t *testing.T) {
 		t.Errorf("a written entry carries no deployment: %s", written)
 	}
 }
+
+// TestDeployment_ReadsTheCommitNumber: a Deployment written before task 88_2
+// carries its saved state under "commit_number". A reader normalizes it, and a
+// Deployment it writes carries only "saved_state_number".
+func TestDeployment_ReadsTheCommitNumber(t *testing.T) {
+	var deployment Deployment
+	old := `{"number":3,"cause":"deploy","commit_number":7,"rolled_back_from":1}`
+	if err := json.Unmarshal([]byte(old), &deployment); err != nil {
+		t.Fatalf("read an old deployment: %v", err)
+	}
+	if deployment.SavedStateNumber == nil || *deployment.SavedStateNumber != 7 {
+		t.Fatalf("the old saved state number read as %+v", deployment.SavedStateNumber)
+	}
+	written, err := json.Marshal(deployment)
+	if err != nil {
+		t.Fatalf("write the deployment: %v", err)
+	}
+	if strings.Contains(string(written), "commit_number") {
+		t.Errorf("a written deployment still carries commit_number: %s", written)
+	}
+	if !strings.Contains(string(written), `"saved_state_number":7`) {
+		t.Errorf("a written deployment carries no saved_state_number: %s", written)
+	}
+}

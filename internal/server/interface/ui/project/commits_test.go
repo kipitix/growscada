@@ -84,7 +84,7 @@ func TestSaveCommit_SuccessAndNothingToSave(t *testing.T) {
 		t.Errorf("the header does not mark the Draft saved: %s", html)
 	}
 
-	// Nothing moved since the Commit: Ctrl+S does nothing and the Save button
+	// Nothing moved since the SavedState: Ctrl+S does nothing and the Save button
 	// says why it is off.
 	f.p.saveDialog = false
 	f.p.saveFromShortcut(f.p.compoCtx)

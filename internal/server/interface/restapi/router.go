@@ -31,7 +31,7 @@ type APIRouter struct {
 	draftChangesHandlers   *DraftChangesHandlers
 	deploymentsHandlers    *DeploymentHandlers
 	projectFileHandlers    *ProjectFileHandlers
-	commitHandlers         *CommitHandlers
+	savedStateHandlers     *SavedStateHandlers
 	settingsHandlers       *SettingsHandlers
 	labelHandlers          *LabelHandlers
 	eventsHandlers         *EventsHandlers
@@ -93,7 +93,7 @@ type Services struct {
 	DraftChanges   application.DraftChangesService
 	Discard        application.DiscardService
 	ProjectFiles   application.ProjectFileService
-	Commits        application.SavedStateService
+	SavedStates    application.SavedStateService
 	// Settings are the per-user settings of the server (task 81): one
 	// person's view of its content, never its content (ADR 0024).
 	Settings application.SettingsService
@@ -131,7 +131,7 @@ func NewRouter(services Services, eventBus eventbus.EventBus, maxSSEClients int)
 		draftChangesHandlers:   NewDraftChangesHandler(services.DraftChanges),
 		deploymentsHandlers:    NewDeploymentHandler(services.Deployments),
 		projectFileHandlers:    NewProjectFileHandler(services.ProjectFiles),
-		commitHandlers:         NewCommitHandler(services.Commits, services.Labels),
+		savedStateHandlers:     NewSavedStateHandler(services.SavedStates, services.Labels),
 		settingsHandlers:       NewSettingsHandler(services.Settings),
 		labelHandlers:          NewLabelHandler(services.Labels),
 		eventsHandlers:         NewEventsHandler(eventBus, projectService, maxSSEClients, WithDeviceTokens(services.DeviceTokens)),
@@ -164,7 +164,7 @@ func (r *APIRouter) routes() []route {
 	deploy := r.deployHandlers
 	deployments := r.deploymentsHandlers
 	changes := r.draftChangesHandlers
-	commits := r.commitHandlers
+	savedStates := r.savedStateHandlers
 	settings := r.settingsHandlers
 	labels := r.labelHandlers
 	return []route{
@@ -205,13 +205,22 @@ func (r *APIRouter) routes() []route {
 		{"GET " + lp + apiv0.DraftChangesPath, changes.GetLibraryDraftChanges},
 		{"POST " + lp + apiv0.DraftChangesUndoPath, changes.PostLibraryDraftChangesUndo},
 		{"POST " + lp + apiv0.DraftChangesRedoPath, changes.PostLibraryDraftChangesRedo},
-		{"GET " + lp + apiv0.CommitPath, commits.GetCommits},
-		{"POST " + lp + apiv0.CommitPath, commits.PostCommit},
-		{"GET " + lp + apiv0.CommitPath + "/" + commitResource.wildcard(), commits.GetCommitByNumber},
-		{"PATCH " + lp + apiv0.CommitPath + "/" + commitResource.wildcard(), commits.PatchCommit},
-		{"POST " + lp + apiv0.CommitPath + "/" + commitResource.wildcard() + apiv0.CommitLoadPath, libraries.PostCommitLoad},
-		{"PUT " + lp + apiv0.CommitPath + "/" + commitResource.wildcard() + apiv0.CommitLabelsPath + "/" + labelResource.wildcard(), commits.PutCommitLabel},
-		{"DELETE " + lp + apiv0.CommitPath + "/" + commitResource.wildcard() + apiv0.CommitLabelsPath + "/" + labelResource.wildcard(), commits.DeleteCommitLabel},
+		{"GET " + lp + apiv0.SavedStatePath, savedStates.GetSavedStates},
+		{"POST " + lp + apiv0.SavedStatePath, savedStates.PostSavedState},
+		{"GET " + lp + apiv0.SavedStatePath + "/" + savedStateResource.wildcard(), savedStates.GetSavedStateByNumber},
+		{"PATCH " + lp + apiv0.SavedStatePath + "/" + savedStateResource.wildcard(), savedStates.PatchSavedState},
+		{"POST " + lp + apiv0.SavedStatePath + "/" + savedStateResource.wildcard() + apiv0.SavedStateLoadPath, libraries.PostSavedStateLoad},
+		{"PUT " + lp + apiv0.SavedStatePath + "/" + savedStateResource.wildcard() + apiv0.SavedStateLabelsPath + "/" + labelResource.wildcard(), savedStates.PutSavedStateLabel},
+		{"DELETE " + lp + apiv0.SavedStatePath + "/" + savedStateResource.wildcard() + apiv0.SavedStateLabelsPath + "/" + labelResource.wildcard(), savedStates.DeleteSavedStateLabel},
+		// The Commit routes of before task 88_2 answer 410, naming the saved
+		// state routes (removed with API 1.0; ADR 0026).
+		{"GET " + lp + removedSavedStatesPath, savedStatesRenamed},
+		{"POST " + lp + removedSavedStatesPath, savedStatesRenamed},
+		{"GET " + lp + removedSavedStatesPath + "/" + savedStateResource.wildcard(), savedStatesRenamed},
+		{"PATCH " + lp + removedSavedStatesPath + "/" + savedStateResource.wildcard(), savedStatesRenamed},
+		{"POST " + lp + removedSavedStatesPath + "/" + savedStateResource.wildcard() + apiv0.SavedStateLoadPath, savedStatesRenamed},
+		{"PUT " + lp + removedSavedStatesPath + "/" + savedStateResource.wildcard() + apiv0.SavedStateLabelsPath + "/" + labelResource.wildcard(), savedStatesRenamed},
+		{"DELETE " + lp + removedSavedStatesPath + "/" + savedStateResource.wildcard() + apiv0.SavedStateLabelsPath + "/" + labelResource.wildcard(), savedStatesRenamed},
 
 		{"GET " + lp + "/widget-types", widgetTypes.GetWidgetTypes},
 		{"GET " + lp + "/widget-types/" + widgetTypeResource.wildcard(), widgetTypes.GetWidgetTypesByID},
@@ -265,15 +274,26 @@ func (r *APIRouter) routes() []route {
 		{"GET " + pp + apiv0.DraftChangesPath, changes.GetProjectDraftChanges},
 		{"POST " + pp + apiv0.DraftChangesUndoPath, changes.PostProjectDraftChangesUndo},
 		{"POST " + pp + apiv0.DraftChangesRedoPath, changes.PostProjectDraftChangesRedo},
-		{"GET " + pp + apiv0.CommitPath, commits.GetCommits},
-		{"POST " + pp + apiv0.CommitPath, commits.PostCommit},
-		{"GET " + pp + apiv0.CommitPath + "/" + commitResource.wildcard(), commits.GetCommitByNumber},
-		{"PATCH " + pp + apiv0.CommitPath + "/" + commitResource.wildcard(), commits.PatchCommit},
-		{"POST " + pp + apiv0.CommitPath + "/" + commitResource.wildcard() + apiv0.CommitLoadPath, deploy.PostCommitLoad},
-		{"POST " + pp + apiv0.CommitPath + "/" + commitResource.wildcard() + apiv0.CommitDeployPath, deploy.PostCommitDeploy},
-		{"GET " + pp + apiv0.CommitPath + "/" + commitResource.wildcard() + "/projectfile", commits.GetCommitProjectFile},
-		{"PUT " + pp + apiv0.CommitPath + "/" + commitResource.wildcard() + apiv0.CommitLabelsPath + "/" + labelResource.wildcard(), commits.PutCommitLabel},
-		{"DELETE " + pp + apiv0.CommitPath + "/" + commitResource.wildcard() + apiv0.CommitLabelsPath + "/" + labelResource.wildcard(), commits.DeleteCommitLabel},
+		{"GET " + pp + apiv0.SavedStatePath, savedStates.GetSavedStates},
+		{"POST " + pp + apiv0.SavedStatePath, savedStates.PostSavedState},
+		{"GET " + pp + apiv0.SavedStatePath + "/" + savedStateResource.wildcard(), savedStates.GetSavedStateByNumber},
+		{"PATCH " + pp + apiv0.SavedStatePath + "/" + savedStateResource.wildcard(), savedStates.PatchSavedState},
+		{"POST " + pp + apiv0.SavedStatePath + "/" + savedStateResource.wildcard() + apiv0.SavedStateLoadPath, deploy.PostSavedStateLoad},
+		{"POST " + pp + apiv0.SavedStatePath + "/" + savedStateResource.wildcard() + apiv0.SavedStateDeployPath, deploy.PostSavedStateDeploy},
+		{"GET " + pp + apiv0.SavedStatePath + "/" + savedStateResource.wildcard() + "/projectfile", savedStates.GetSavedStateProjectFile},
+		{"PUT " + pp + apiv0.SavedStatePath + "/" + savedStateResource.wildcard() + apiv0.SavedStateLabelsPath + "/" + labelResource.wildcard(), savedStates.PutSavedStateLabel},
+		{"DELETE " + pp + apiv0.SavedStatePath + "/" + savedStateResource.wildcard() + apiv0.SavedStateLabelsPath + "/" + labelResource.wildcard(), savedStates.DeleteSavedStateLabel},
+		// The Commit routes of before task 88_2 answer 410, naming the saved
+		// state routes (removed with API 1.0; ADR 0026).
+		{"GET " + pp + removedSavedStatesPath, savedStatesRenamed},
+		{"POST " + pp + removedSavedStatesPath, savedStatesRenamed},
+		{"GET " + pp + removedSavedStatesPath + "/" + savedStateResource.wildcard(), savedStatesRenamed},
+		{"PATCH " + pp + removedSavedStatesPath + "/" + savedStateResource.wildcard(), savedStatesRenamed},
+		{"POST " + pp + removedSavedStatesPath + "/" + savedStateResource.wildcard() + apiv0.SavedStateLoadPath, savedStatesRenamed},
+		{"POST " + pp + removedSavedStatesPath + "/" + savedStateResource.wildcard() + apiv0.SavedStateDeployPath, savedStatesRenamed},
+		{"GET " + pp + removedSavedStatesPath + "/" + savedStateResource.wildcard() + "/projectfile", savedStatesRenamed},
+		{"PUT " + pp + removedSavedStatesPath + "/" + savedStateResource.wildcard() + apiv0.SavedStateLabelsPath + "/" + labelResource.wildcard(), savedStatesRenamed},
+		{"DELETE " + pp + removedSavedStatesPath + "/" + savedStateResource.wildcard() + apiv0.SavedStateLabelsPath + "/" + labelResource.wildcard(), savedStatesRenamed},
 		{"GET " + pp + "/deployment", deploy.GetDeployment},
 		{"GET " + pp + "/deployments", deployments.GetDeployments},
 		{"GET " + pp + "/deployments/" + deploymentResource.wildcard(), deployments.GetDeploymentByNumber},

@@ -1,0 +1,37 @@
+info:
+  name: load a saved state into the project draft
+  type: http
+  seq: 2003
+
+http:
+  method: POST
+  url: http://{{API_SERVER}}/api/v0/projects/{{CLEANUP_PROJECT_ID}}/saved-states/{{CLEANUP_SAVED_STATE_NUMBER}}/load
+  auth: inherit
+
+docs: |
+  A saved state becomes what is edited (task 84): the Draft is replaced by the
+  content of the saved state, its stack is cleared and its Version raised, in one
+  transaction. Loading the last saved state leaves the Draft clean — there is
+  nothing a Save would fix — and no Version is stated: the command is a reset,
+  not a write of content. The Library saved states the content names but this
+  server lacks are answered as warnings, with the Widgets of their
+  WidgetTypes dropped (task 71).
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '200'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.version'
+      operator: isNumber
+    - expression: 'res.body.has_unsaved_changes'
+      operator: eq
+      value: 'false'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

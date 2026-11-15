@@ -1,0 +1,37 @@
+info:
+  name: put a label on a library commit is gone
+  type: http
+  seq: 2038
+
+http:
+  method: PUT
+  url: http://{{API_SERVER}}/api/v0/libraries/{{LIBRARY_ID}}/commits/1/labels/{{LABEL_ID}}
+  auth: inherit
+
+docs: |
+  A Commit is a saved state now (task 88_2; ADR 0026): every Commit route of
+  before the rename answers `410 Gone` with the new path, and is removed with
+  the API 1.0.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '410'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.headers["content-type"]'
+      operator: eq
+      value: application/problem+json
+    - expression: 'res.body.status'
+      operator: eq
+      value: '410'
+    - expression: 'res.body.detail'
+      operator: contains
+      value: saved-states
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

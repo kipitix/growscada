@@ -48,7 +48,7 @@ func newDeploymentEntry(projectID uuid.UUID, at time.Time, number int, cause rec
 		Timestamp:  at.UTC().Format(time.RFC3339),
 		ProjectID:  projectID,
 		Type:       recordv0.EntryTypeDeployment,
-		Deployment: &recordv0.Deployment{Number: number, Cause: cause, RolledBackFrom: rolledBackFrom, CommitNumber: savedStateNumber},
+		Deployment: &recordv0.Deployment{Number: number, Cause: cause, RolledBackFrom: rolledBackFrom, SavedStateNumber: savedStateNumber},
 	}
 }
 

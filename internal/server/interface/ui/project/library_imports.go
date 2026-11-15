@@ -49,7 +49,7 @@ func (p *Project) importOf(id uuid.UUID) (apiv0.LibraryImportResponse, bool) {
 // importProvenance describes the saved state an import names: its number, its
 // title and the Author who saved it (task 85_6).
 func (p *Project) importProvenance(imported apiv0.LibraryImportResponse) string {
-	provenance := fmt.Sprintf("saved state #%d", imported.CommitNumber)
+	provenance := fmt.Sprintf("saved state #%d", imported.SavedStateNumber)
 	if imported.Title != "" {
 		provenance += " " + imported.Title
 	}
@@ -129,13 +129,13 @@ func (p *Project) loadImportCommits(ctx app.Context) {
 	library := p.client.Library(libraryID)
 	uiutil.LoadForGone(ctx, &p.importCommitsReloader,
 		func() importListKey { return importListKey{library: library, label: p.importLabel} },
-		func(c context.Context, k importListKey) ([]apiv0.CommitResponse, error) {
+		func(c context.Context, k importListKey) ([]apiv0.SavedStateResponse, error) {
 			if k.label == uuid.Nil {
-				return k.library.Commits(c)
+				return k.library.SavedStates(c)
 			}
-			return k.library.CommitsByLabel(c, k.label)
+			return k.library.SavedStatesByLabel(c, k.label)
 		},
-		func(ctx app.Context, _ importListKey, commits []apiv0.CommitResponse) {
+		func(ctx app.Context, _ importListKey, commits []apiv0.SavedStateResponse) {
 			if p.importLibraryID != libraryID {
 				return
 			}
@@ -160,7 +160,7 @@ func (p *Project) changeImport(libraryID uuid.UUID, commit int) {
 		return
 	}
 	imported, hasImport := p.importOf(libraryID)
-	if p.content == nil || (hasImport && imported.CommitNumber == commit) || (!hasImport && commit == 0) {
+	if p.content == nil || (hasImport && imported.SavedStateNumber == commit) || (!hasImport && commit == 0) {
 		return
 	}
 	content := p.content
@@ -196,7 +196,7 @@ func (p *Project) saveImport(content *apiclient.ProjectClient, libraryID uuid.UU
 		if commit == 0 {
 			return content.RemoveImport(c, libraryID, version)
 		}
-		return content.ImportLibrary(c, libraryID, apiv0.PutLibraryImportRequest{Commit: commit, Version: version})
+		return content.ImportLibrary(c, libraryID, apiv0.PutLibraryImportRequest{SavedState: commit, Version: version})
 	}, func(ctx app.Context, saved apiv0.LibraryImportResponse) {
 		p.observeDraftVersion(mark, saved.Version)
 		p.loadImports(ctx)
@@ -246,7 +246,7 @@ func (p *Project) showOrphaned(ctx app.Context, what string, widgets []apiv0.Aff
 func (p *Project) renderImportsPanel() app.UI {
 	rows := make([]app.UI, 0, len(p.imports))
 	for _, imported := range p.imports {
-		libraryID, number := imported.LibraryID, strconv.Itoa(imported.CommitNumber)
+		libraryID, number := imported.LibraryID, strconv.Itoa(imported.SavedStateNumber)
 		body := []app.UI{
 			app.Span().
 				Attr("data-import-library", libraryID.String()).
@@ -445,11 +445,11 @@ func (p *Project) renderImportLabelFilter() app.UI {
 func (p *Project) renderImportLibraryRow(lib apiv0.LibraryResponse) app.UI {
 	state := "Not imported"
 	if imported, ok := p.importOf(lib.ID); ok {
-		state = fmt.Sprintf("Imported: saved state #%d", imported.CommitNumber)
+		state = fmt.Sprintf("Imported: saved state #%d", imported.SavedStateNumber)
 	}
 	latest := "never saved"
-	if lib.LatestCommit > 0 {
-		latest = fmt.Sprintf("latest saved state #%d", lib.LatestCommit)
+	if lib.LatestSavedState > 0 {
+		latest = fmt.Sprintf("latest saved state #%d", lib.LatestSavedState)
 	}
 	row := app.Div().
 		Attr("data-import-library-row", lib.ID.String()).
@@ -513,7 +513,7 @@ func (p *Project) renderImportSavedStates(lib apiv0.LibraryResponse) app.UI {
 
 // renderImportSavedStateRow is one saved state of the opened library: what it
 // is, its labels and its one action.
-func (p *Project) renderImportSavedStateRow(lib apiv0.LibraryResponse, saved apiv0.CommitResponse) app.UI {
+func (p *Project) renderImportSavedStateRow(lib apiv0.LibraryResponse, saved apiv0.SavedStateResponse) app.UI {
 	number := strconv.Itoa(saved.Number)
 	imported, hasImport := p.importOf(lib.ID)
 	body := []app.UI{
@@ -537,7 +537,7 @@ func (p *Project) renderImportSavedStateRow(lib apiv0.LibraryResponse, saved api
 	}
 	var control app.UI
 	switch {
-	case hasImport && imported.CommitNumber == saved.Number:
+	case hasImport && imported.SavedStateNumber == saved.Number:
 		control = app.Span().
 			Attr("data-import-current", number).
 			Style("padding", "1px 7px").

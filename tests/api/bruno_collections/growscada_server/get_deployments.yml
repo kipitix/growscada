@@ -32,7 +32,7 @@ runtime:
     - expression: 'res.body.deployments[0].cause'
       operator: eq
       value: '"deploy"'
-    - expression: 'res.body.deployments[0].commit_number'
+    - expression: 'res.body.deployments[0].saved_state_number'
       operator: eq
       value: '1'
 

@@ -1,5 +1,5 @@
 info:
-  name: get the cleanup draft before the second commit
+  name: get the cleanup draft before the second saved state
   type: http
   seq: 1994
 http:

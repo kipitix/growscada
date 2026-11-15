@@ -365,11 +365,11 @@ func (b *Bar) addEntry(ev apiv0.Event) {
 }
 
 // eventRef is what a type's description names: the number of the saved state a
-// commit_created or commit_title_updated is about (its ID is the Project's or
+// saved_state_created or saved_state_title_updated is about (its ID is the Project's or
 // the Library's), the ID of every other event.
 func eventRef(ev apiv0.Event) string {
-	if ev.Commit > 0 {
-		return strconv.Itoa(ev.Commit)
+	if ev.SavedState > 0 {
+		return strconv.Itoa(ev.SavedState)
 	}
 	return ev.ID
 }

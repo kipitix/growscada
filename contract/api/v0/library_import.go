@@ -6,22 +6,22 @@ import (
 	"github.com/google/uuid"
 )
 
-// LibraryImportImpactQueryCommit is the parameter of GET
+// LibraryImportImpactQuerySavedState is the parameter of GET
 // /projects/{id}/library-imports/{library_id}/impact naming the saved state to
 // preview importing; without it the preview is of removing the import.
-const LibraryImportImpactQueryCommit = "commit"
+const LibraryImportImpactQuerySavedState = "saved_state"
 
 // LibraryImportResponse is the HTTP DTO of a Library Import: the saved state of
 // the Library the project uses, with its title, Author, time, labels and the
 // Version of the Project's Draft it was read at (task 85_6).
 type LibraryImportResponse struct {
-	LibraryID    uuid.UUID       `json:"library_id"`
-	CommitNumber int             `json:"commit_number"`
-	Title        string          `json:"title"`
-	Author       string          `json:"author"`
-	SavedAt      time.Time       `json:"saved_at"`
-	Labels       []LabelResponse `json:"labels,omitempty"`
-	Version      int             `json:"version"`
+	LibraryID        uuid.UUID       `json:"library_id"`
+	SavedStateNumber int             `json:"saved_state_number"`
+	Title            string          `json:"title"`
+	Author           string          `json:"author"`
+	SavedAt          time.Time       `json:"saved_at"`
+	Labels           []LabelResponse `json:"labels,omitempty"`
+	Version          int             `json:"version"`
 }
 
 // GetLibraryImportsResponse is the HTTP DTO for the imports of a project, in
@@ -32,12 +32,12 @@ type GetLibraryImportsResponse struct {
 
 // PutLibraryImportRequest is the HTTP DTO of PUT
 // /projects/{id}/library-imports/{library_id}: import the saved state whose
-// number is Commit. A Project that imports no saved state of the library gets
+// number is SavedState. A Project that imports no saved state of the library gets
 // the import, one that imports another switches it; Version is the Version of
 // the Project's Draft the client saw (ADR 0016).
 type PutLibraryImportRequest struct {
-	Commit  int `json:"commit"`
-	Version int `json:"version"`
+	SavedState int `json:"saved_state"`
+	Version    int `json:"version"`
 }
 
 // AffectedWidgetResponse names a Widget of the project: its Scene, its name and

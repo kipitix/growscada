@@ -10,7 +10,7 @@ import (
 
 // LibrariesHandlers handles HTTP requests related to libraries and their
 // Drafts. The WidgetTypes of a library's Draft are served by
-// WidgetTypesHandlers, its saved states by CommitHandlers.
+// WidgetTypesHandlers, its saved states by SavedStateHandlers.
 type LibrariesHandlers struct {
 	service application.LibraryService
 }
@@ -145,16 +145,16 @@ func (h LibrariesHandlers) PostDiscard(w http.ResponseWriter, r *http.Request) {
 	sendJSONResponse(w, http.StatusOK, apiv0.DiscardLibraryResponse(newDraftStateResponse(state)))
 }
 
-// PostCommitLoad handles POST
-// /libraries/{library_id}/commits/{commit_number}/load: the Draft replaced by
+// PostSavedStateLoad handles POST
+// /libraries/{library_id}/saved-states/{saved_state_number}/load: the Draft replaced by
 // the WidgetTypes of that saved state, in one transaction — the saved state
 // becomes what is edited (task 84). 404 for a number the library does not have.
-func (h LibrariesHandlers) PostCommitLoad(w http.ResponseWriter, r *http.Request) {
+func (h LibrariesHandlers) PostSavedStateLoad(w http.ResponseWriter, r *http.Request) {
 	libraryID, ok := pathUUID(w, r, libraryResource)
 	if !ok {
 		return
 	}
-	number, ok := pathInt(w, r, commitResource)
+	number, ok := pathInt(w, r, savedStateResource)
 	if !ok {
 		return
 	}
@@ -163,5 +163,5 @@ func (h LibrariesHandlers) PostCommitLoad(w http.ResponseWriter, r *http.Request
 		sendError(w, r, err)
 		return
 	}
-	sendJSONResponse(w, http.StatusOK, newLoadCommitResponse(loaded))
+	sendJSONResponse(w, http.StatusOK, newLoadSavedStateResponse(loaded))
 }

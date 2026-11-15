@@ -29,10 +29,10 @@ func (p *Project) loadCommits(ctx app.Context) {
 		return
 	}
 	uiutil.LoadOfProject(p.compoCtx, &p.commitsReloader, p.projectContent,
-		func(c context.Context, pc *apiclient.ProjectClient) ([]apiv0.CommitResponse, error) {
-			return pc.Commits(c)
+		func(c context.Context, pc *apiclient.ProjectClient) ([]apiv0.SavedStateResponse, error) {
+			return pc.SavedStates(c)
 		},
-		func(ctx app.Context, commits []apiv0.CommitResponse) {
+		func(ctx app.Context, commits []apiv0.SavedStateResponse) {
 			p.commits, p.commitsLoaded = commits, true
 		}, p.loadCommits)
 }
@@ -80,11 +80,11 @@ func (p *Project) saveCommit(ctx app.Context) {
 	}
 	p.savingCommit = true
 	ctx.LocalStorage().Set(uiutil.AuthorKey, author)
-	callContent(p, func(c context.Context, pc *apiclient.ProjectClient) (apiv0.CommitResponse, error) {
-		return pc.SaveCommit(c, apiv0.CreateCommitRequest{
+	callContent(p, func(c context.Context, pc *apiclient.ProjectClient) (apiv0.SavedStateResponse, error) {
+		return pc.SaveSavedState(c, apiv0.CreateSavedStateRequest{
 			Version: p.draftVersion(), Title: title, Author: author,
 		})
-	}, func(ctx app.Context, saved apiv0.CommitResponse) {
+	}, func(ctx app.Context, saved apiv0.SavedStateResponse) {
 		p.savingCommit = false
 		p.saveDialog = false
 		ctx.NewActionWithValue(toast.ActionAdd, toast.Problem{Problem: apiv0.Problem{
@@ -157,9 +157,9 @@ func (p *Project) renameSavedState(ctx app.Context, number int, title string) {
 	if number == 0 || title == "" {
 		return
 	}
-	callContent(p, func(c context.Context, pc *apiclient.ProjectClient) (apiv0.CommitResponse, error) {
-		return pc.RenameCommit(c, number, apiv0.RenameCommitRequest{Title: title})
-	}, func(ctx app.Context, _ apiv0.CommitResponse) {
+	callContent(p, func(c context.Context, pc *apiclient.ProjectClient) (apiv0.SavedStateResponse, error) {
+		return pc.RenameSavedState(c, number, apiv0.RenameSavedStateRequest{Title: title})
+	}, func(ctx app.Context, _ apiv0.SavedStateResponse) {
 		p.loadCommits(ctx)
 		ctx.Update()
 	}, nil)

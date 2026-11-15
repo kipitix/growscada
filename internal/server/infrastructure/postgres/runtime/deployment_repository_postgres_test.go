@@ -554,7 +554,7 @@ func TestDeploymentNamesLibrary_ReadsTheRunningDeploymentAlone(t *testing.T) {
 		t.Fatalf("before any Deployment: %v, %v", named, err)
 	}
 
-	pinned := documentOf(projectID, withLibraryImports(projectv0.LibraryImport{LibraryID: libraryID, Commit: 1}))
+	pinned := documentOf(projectID, withLibraryImports(projectv0.LibraryImport{LibraryID: libraryID, SavedState: 1}))
 	mustCreateDeployment(t, repo, projectID.UUID(), pinned, start)
 	if named, err := repo.DeploymentNamesLibrary(ctx, libraryID); err != nil || !named {
 		t.Fatalf("an import of the running Deployment: %v, %v", named, err)
@@ -569,7 +569,7 @@ func TestDeploymentNamesLibrary_ReadsTheRunningDeploymentAlone(t *testing.T) {
 
 	// A Project marked deleted has no running Deployment: its document stops
 	// keeping the Library, as its cleanup will remove it.
-	otherPinned := documentOf(otherProjectID, withLibraryImports(projectv0.LibraryImport{LibraryID: otherLibraryID, Commit: 1}))
+	otherPinned := documentOf(otherProjectID, withLibraryImports(projectv0.LibraryImport{LibraryID: otherLibraryID, SavedState: 1}))
 	mustCreateDeployment(t, repo, otherProjectID.UUID(), otherPinned, start.Add(2*time.Minute))
 	if _, err := db.ExecContext(ctx, `UPDATE projects SET deleted_at = now() WHERE id = $1`, otherProjectID.UUID()); err != nil {
 		t.Fatalf("mark the project deleted: %v", err)

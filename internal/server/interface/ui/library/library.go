@@ -59,7 +59,7 @@ type Library struct {
 	// commitsLoaded is false until its first answer. saveDialog is true while
 	// the Save dialog is open, saveTitle and saveAuthor its fields;
 	// savingCommit marks the request in flight.
-	commits         []apiv0.CommitResponse
+	commits         []apiv0.SavedStateResponse
 	commitsLoaded   bool
 	commitsReloader uiutil.Reloader
 	saveDialog      bool

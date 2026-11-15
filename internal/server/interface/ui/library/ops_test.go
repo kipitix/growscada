@@ -221,7 +221,7 @@ func saveAndCommit(ctx context.Context, lib *apiclient.LibraryClient) error {
 	if err != nil {
 		return err
 	}
-	_, err = lib.SaveCommit(ctx, apiv0.CreateCommitRequest{Version: state.Version, Title: "Save", Author: "Ada"})
+	_, err = lib.SaveSavedState(ctx, apiv0.CreateSavedStateRequest{Version: state.Version, Title: "Save", Author: "Ada"})
 	if err == nil || !errors.Is(err, apiclient.ErrConflict) {
 		return err
 	}

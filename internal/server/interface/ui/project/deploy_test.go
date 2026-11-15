@@ -22,11 +22,11 @@ func deployDraft(t *testing.T, api *testAPI) apiv0.DeployResponse {
 	if err != nil {
 		t.Fatalf("draft state: %v", err)
 	}
-	commit, err := api.SaveCommit(ctx, apiv0.CreateCommitRequest{Version: state.Version, Title: "Save", Author: "Ada"})
+	commit, err := api.SaveSavedState(ctx, apiv0.CreateSavedStateRequest{Version: state.Version, Title: "Save", Author: "Ada"})
 	if err != nil {
 		t.Fatalf("save commit: %v", err)
 	}
-	deployed, err := api.DeployCommit(ctx, commit.Number)
+	deployed, err := api.DeploySavedState(ctx, commit.Number)
 	if err != nil {
 		t.Fatalf("deploy saved state: %v", err)
 	}
@@ -49,7 +49,7 @@ func TestDeployBar_ShowsTheDeploymentAndItsSavedState(t *testing.T) {
 	f.p.loadDeploy(f.p.compoCtx)
 	f.run()
 	f.noToasts()
-	if !f.p.deployed || f.p.deployment.Number != 1 || f.p.deployment.CommitNumber == nil || *f.p.deployment.CommitNumber != 1 {
+	if !f.p.deployed || f.p.deployment.Number != 1 || f.p.deployment.SavedStateNumber == nil || *f.p.deployment.SavedStateNumber != 1 {
 		t.Fatalf("after Deploy: deployed %v, %+v", f.p.deployed, f.p.deployment)
 	}
 	if html := app.HTMLString(f.p.Render()); !strings.Contains(html, "Saved state #1 · running") {
@@ -68,7 +68,7 @@ func TestDeployWindow_DeploysASavedStateAndMovesTheMark(t *testing.T) {
 	if err != nil {
 		t.Fatalf("draft state: %v", err)
 	}
-	if _, err := f.api.SaveCommit(context.Background(), apiv0.CreateCommitRequest{
+	if _, err := f.api.SaveSavedState(context.Background(), apiv0.CreateSavedStateRequest{
 		Version: state.Version, Title: "Second save", Author: "Ada"}); err != nil {
 		t.Fatalf("save commit: %v", err)
 	}
@@ -91,7 +91,7 @@ func TestDeployWindow_DeploysASavedStateAndMovesTheMark(t *testing.T) {
 		!strings.Contains(got.Detail, "Deployment 2 is running") {
 		t.Errorf("the Deploy showed %+v, want its confirmation", got)
 	}
-	if f.p.deployment.CommitNumber == nil || *f.p.deployment.CommitNumber != 2 {
+	if f.p.deployment.SavedStateNumber == nil || *f.p.deployment.SavedStateNumber != 2 {
 		t.Fatalf("the running saved state after the Deploy: %+v", f.p.deployment)
 	}
 	html = app.HTMLString(f.p.Render())
@@ -108,7 +108,7 @@ func TestDeployWindow_DeploymentWithoutSavedState(t *testing.T) {
 	f.p.deployed = true
 	f.p.deploymentLoaded = true
 	f.p.deployment = apiv0.DeploymentResponse{Number: 4, DeployedAt: "2026-11-04T10:00:00Z"}
-	f.p.deployCommits = []apiv0.CommitResponse{{Number: 1, Title: "First"}}
+	f.p.deployCommits = []apiv0.SavedStateResponse{{Number: 1, Title: "First"}}
 	f.p.deployCommitsLoaded = true
 	f.p.deployDialog = true
 

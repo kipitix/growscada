@@ -115,17 +115,17 @@ func (h DeployHandlers) PostRevert(w http.ResponseWriter, r *http.Request) {
 	sendJSONResponse(w, http.StatusOK, newDiscardProjectResponse(reverted))
 }
 
-// PostCommitLoad handles POST /projects/{project_id}/commits/{commit_number}/load:
+// PostSavedStateLoad handles POST /projects/{project_id}/saved-states/{saved_state_number}/load:
 // the Draft replaced by the content of that saved state, in one transaction —
 // the saved state becomes what is edited (task 84). 404 for a number the
 // Project does not have; the saved states of Libraries it could not restore are
 // answered with the new state (task 71).
-func (h DeployHandlers) PostCommitLoad(w http.ResponseWriter, r *http.Request) {
+func (h DeployHandlers) PostSavedStateLoad(w http.ResponseWriter, r *http.Request) {
 	projectID, ok := pathUUID(w, r, projectResource)
 	if !ok {
 		return
 	}
-	number, ok := pathInt(w, r, commitResource)
+	number, ok := pathInt(w, r, savedStateResource)
 	if !ok {
 		return
 	}
@@ -134,21 +134,21 @@ func (h DeployHandlers) PostCommitLoad(w http.ResponseWriter, r *http.Request) {
 		sendError(w, r, err)
 		return
 	}
-	sendJSONResponse(w, http.StatusOK, newLoadCommitResponse(loaded))
+	sendJSONResponse(w, http.StatusOK, newLoadSavedStateResponse(loaded))
 }
 
-// PostCommitDeploy handles POST /projects/{project_id}/commits/{commit_number}/deploy:
+// PostSavedStateDeploy handles POST /projects/{project_id}/saved-states/{saved_state_number}/deploy:
 // it makes the saved state the Project's running Deployment, its content taken
 // from the saved state alone (task 85_4). 201 with the new Deployment; 404 for
 // the Project or a saved state number it does not have; 409 nothing_to_deploy
 // when that saved state is the running one. No Draft Version is stated: a saved
 // state is immutable.
-func (h DeployHandlers) PostCommitDeploy(w http.ResponseWriter, r *http.Request) {
+func (h DeployHandlers) PostSavedStateDeploy(w http.ResponseWriter, r *http.Request) {
 	projectID, ok := pathUUID(w, r, projectResource)
 	if !ok {
 		return
 	}
-	number, ok := pathInt(w, r, commitResource)
+	number, ok := pathInt(w, r, savedStateResource)
 	if !ok {
 		return
 	}
@@ -166,6 +166,6 @@ func (h DeployHandlers) PostCommitDeploy(w http.ResponseWriter, r *http.Request)
 // bare 404; it is removed when the API reaches 1.0.
 func deployDraftRemoved(w http.ResponseWriter, r *http.Request) {
 	sendProblem(w, NewGone(
-		"A Deploy takes a saved state: Save → Deploy (POST "+"/projects/{project_id}/commits/{commit_number}/deploy)",
+		"A Deploy takes a saved state: Save → Deploy (POST "+"/projects/{project_id}/saved-states/{saved_state_number}/deploy)",
 		r.URL.Path))
 }

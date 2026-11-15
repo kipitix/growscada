@@ -1,5 +1,5 @@
 info:
-  name: get the cleanup draft before the commit
+  name: get the cleanup draft before the saved state
   type: http
   seq: 1982
 http:
@@ -8,7 +8,7 @@ http:
   auth: inherit
 
 docs: |
-  The Version of the cleanup project's Draft, which the Commit below states
+  The Version of the cleanup project's Draft, which the saved state below states
   (task 72_4).
 
 runtime:

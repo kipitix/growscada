@@ -40,15 +40,15 @@ type Event struct {
 	// the stream of a Project carries the event to that Project's readers.
 	Deployment int    `json:"deployment,omitempty"`
 	DeployedAt string `json:"deployed_at,omitempty"`
-	// CommitNumber follows the saved state a Deploy made running (task 85_4);
+	// SavedStateNumber follows the saved state a Deploy made running (task 85_4);
 	// it is absent for a Deployment from a file or one made before saved
 	// states were deployed.
-	CommitNumber *int `json:"commit_number,omitempty"`
-	// Commit is the number of the saved state a commit_created or
-	// commit_title_updated is about; ID is the Project's or the Library's.
-	Commit int `json:"commit,omitempty"`
+	SavedStateNumber *int `json:"saved_state_number,omitempty"`
+	// SavedState is the number of the saved state a saved_state_created or
+	// saved_state_title_updated is about; ID is the Project's or the Library's.
+	SavedState int `json:"saved_state,omitempty"`
 	// Label is the ID of the label on label_assigned and label_unassigned; ID
-	// is the Project's or the Library's and Commit the saved state's number
+	// is the Project's or the Library's and SavedState the saved state's number
 	// (task 85_3; ADR 0025). A label_created, label_updated or label_deleted
 	// names the label in ID alone.
 	Label string `json:"label,omitempty"`
@@ -94,15 +94,15 @@ const (
 
 	EventDeploymentCreated = "deployment_created"
 
-	EventCommitCreated      = "commit_created"
-	EventCommitTitleUpdated = "commit_title_updated"
+	EventSavedStateCreated      = "saved_state_created"
+	EventSavedStateTitleUpdated = "saved_state_title_updated"
 
 	EventLabelCreated = "label_created"
 	EventLabelUpdated = "label_updated"
 	EventLabelDeleted = "label_deleted"
 	// EventLabelAssigned and EventLabelUnassigned go to the server's stream:
 	// Label names the label, ID the Project or Library of the saved state and
-	// Commit its number (task 85_3; ADR 0025).
+	// SavedState its number (task 85_3; ADR 0025).
 	EventLabelAssigned   = "label_assigned"
 	EventLabelUnassigned = "label_unassigned"
 )
@@ -123,7 +123,7 @@ func EventTypes() []string {
 		EventEnvironmentCreated, EventEnvironmentUpdated, EventEnvironmentDeleted,
 		EventEnvironmentDeviceCreated, EventEnvironmentDeviceUpdated, EventEnvironmentDeviceDeleted,
 		EventDeploymentCreated,
-		EventCommitCreated, EventCommitTitleUpdated,
+		EventSavedStateCreated, EventSavedStateTitleUpdated,
 		EventLabelCreated, EventLabelUpdated, EventLabelDeleted,
 		EventLabelAssigned, EventLabelUnassigned,
 	}

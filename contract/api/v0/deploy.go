@@ -21,28 +21,28 @@ const (
 // deployed, why it exists, the saved state it came from and the ProjectFile it
 // holds (task 35, task 85_4). GET /projects/{id}/deployment answers 404 until
 // the Project's first Deploy. RolledBackFrom names the Deployment a Rollback
-// copied and is absent for a Deploy. CommitNumber is the saved state the
+// copied and is absent for a Deploy. SavedStateNumber is the saved state the
 // Deployment came from (nil for a Deployment from a file, or one made before
 // saved states were deployed). Nothing of the Draft is part of it: Operation
 // reads this document alone.
 type DeploymentResponse struct {
-	Number         int                   `json:"number"`
-	DeployedAt     string                `json:"deployed_at"`
-	Cause          DeploymentCause       `json:"cause"`
-	RolledBackFrom *int                  `json:"rolled_back_from,omitempty"`
-	CommitNumber   *int                  `json:"commit_number,omitempty"`
-	Content        projectv0.ProjectFile `json:"content"`
+	Number           int                   `json:"number"`
+	DeployedAt       string                `json:"deployed_at"`
+	Cause            DeploymentCause       `json:"cause"`
+	RolledBackFrom   *int                  `json:"rolled_back_from,omitempty"`
+	SavedStateNumber *int                  `json:"saved_state_number,omitempty"`
+	Content          projectv0.ProjectFile `json:"content"`
 }
 
 // DeploymentSummaryResponse names a Deployment without carrying its document: the
 // number, the time it was deployed, why it exists and the saved state it came
 // from (task 85_4).
 type DeploymentSummaryResponse struct {
-	Number         int             `json:"number"`
-	DeployedAt     string          `json:"deployed_at"`
-	Cause          DeploymentCause `json:"cause"`
-	RolledBackFrom *int            `json:"rolled_back_from,omitempty"`
-	CommitNumber   *int            `json:"commit_number,omitempty"`
+	Number           int             `json:"number"`
+	DeployedAt       string          `json:"deployed_at"`
+	Cause            DeploymentCause `json:"cause"`
+	RolledBackFrom   *int            `json:"rolled_back_from,omitempty"`
+	SavedStateNumber *int            `json:"saved_state_number,omitempty"`
 }
 
 // ListDeploymentsResponse is the Project's Deployments, newest first (task 36). A
@@ -51,7 +51,7 @@ type ListDeploymentsResponse struct {
 	Deployments []DeploymentSummaryResponse `json:"deployments"`
 }
 
-// DeployResponse is the answer of POST /projects/{id}/commits/{n}/deploy and
+// DeployResponse is the answer of POST /projects/{id}/saved-states/{n}/deploy and
 // of a deploy of a project file: the Deployment the Deploy made (task 85_4).
 type DeployResponse struct {
 	Number     int    `json:"number"`
@@ -100,7 +100,7 @@ type DiscardProjectResponse struct {
 // Widgets of that Library's WidgetTypes that went with it (task 85_6).
 type DiscardWarningResponse struct {
 	LibraryID      uuid.UUID `json:"library_id"`
-	Commit         int       `json:"commit"`
+	SavedState     int       `json:"saved_state"`
 	DroppedWidgets int       `json:"dropped_widgets"`
 }
 

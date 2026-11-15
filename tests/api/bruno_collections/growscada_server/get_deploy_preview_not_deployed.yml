@@ -9,7 +9,7 @@ http:
   auth: inherit
 
 docs: |
-  The Version of the project's Draft, which the Commit below states. A Deploy
+  The Version of the project's Draft, which the saved state below states. A Deploy
   takes a saved state since task 85_4: Save → Deploy.
 
 runtime:

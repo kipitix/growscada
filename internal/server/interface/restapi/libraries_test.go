@@ -40,15 +40,15 @@ func TestLibraries_DraftSaveDiscard(t *testing.T) {
 	wt := decodeBody[apiv0.CreateWidgetTypeResponse](t, rec)
 
 	// A Save fixes the Draft as its saved state.
-	rec = serve(router, http.MethodPost, lp+"/commits", apiv0.CreateCommitRequest{Version: wt.Version, Title: "First", Author: "Ada"})
+	rec = serve(router, http.MethodPost, lp+"/saved-states", apiv0.CreateSavedStateRequest{Version: wt.Version, Title: "First", Author: "Ada"})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("POST commits: %d %s", rec.Code, rec.Body)
 	}
-	commit := decodeBody[apiv0.CommitResponse](t, rec)
+	commit := decodeBody[apiv0.SavedStateResponse](t, rec)
 	if commit.Number != 1 || commit.Title != "First" || commit.Author != "Ada" || commit.ContentCounts.WidgetTypes != 1 {
 		t.Errorf("saved state: %+v", commit)
 	}
-	if commits := decodeBody[apiv0.GetCommitsResponse](t, serve(router, http.MethodGet, lp+"/commits", nil)); len(commits.Commits) != 1 {
+	if commits := decodeBody[apiv0.GetSavedStatesResponse](t, serve(router, http.MethodGet, lp+"/saved-states", nil)); len(commits.SavedStates) != 1 {
 		t.Errorf("GET commits: %+v", commits)
 	}
 
@@ -57,7 +57,7 @@ func TestLibraries_DraftSaveDiscard(t *testing.T) {
 		t.Fatalf("PUT library: %d %s", rec.Code, rec.Body)
 	}
 	found := decodeBody[apiv0.GetLibrariesResponse](t, serve(router, http.MethodGet, p+"/libraries?name="+name+"-renamed", nil))
-	if len(found.Libraries) != 1 || found.Libraries[0].LatestCommit != commit.Number || found.Libraries[0].HasUnsavedChanges {
+	if len(found.Libraries) != 1 || found.Libraries[0].LatestSavedState != commit.Number || found.Libraries[0].HasUnsavedChanges {
 		t.Errorf("GET ?name=: %+v", found)
 	}
 	if got := found.Libraries[0].Description; got != "Renamed" {
@@ -109,16 +109,16 @@ func TestLibraryImports_AddPreviewSwitchRemove(t *testing.T) {
 	imports := mainPath + "/library-imports/" + wtLibrary.String()
 
 	wt := createWidgetTypeViaService(t, testWtInput)
-	if rec := serve(router, http.MethodPut, imports, apiv0.PutLibraryImportRequest{Commit: 1}); rec.Code != http.StatusNotFound {
+	if rec := serve(router, http.MethodPut, imports, apiv0.PutLibraryImportRequest{SavedState: 1}); rec.Code != http.StatusNotFound {
 		t.Errorf("importing a saved state that does not exist: %d, want 404", rec.Code)
 	}
-	commit := createLibraryCommitViaService(t, router, wtLibrary, wt.Version)
-	rec := serve(router, http.MethodPut, imports, apiv0.PutLibraryImportRequest{Commit: commit.Number})
+	commit := createLibrarySavedStateViaService(t, router, wtLibrary, wt.Version)
+	rec := serve(router, http.MethodPut, imports, apiv0.PutLibraryImportRequest{SavedState: commit.Number})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("add import: %d %s", rec.Code, rec.Body)
 	}
 	added := decodeBody[apiv0.LibraryImportResponse](t, rec)
-	if added.CommitNumber != commit.Number || added.Title != "Save" || added.Author != "Ada" {
+	if added.SavedStateNumber != commit.Number || added.Title != "Save" || added.Author != "Ada" {
 		t.Errorf("the provenance of the import: %+v, want saved state 1 titled Save by Ada", added)
 	}
 
@@ -137,17 +137,17 @@ func TestLibraryImports_AddPreviewSwitchRemove(t *testing.T) {
 	w := createWidgetViaService(t, sc.ID, sc.Version, input)
 
 	serve(router, http.MethodDelete, lp+"/widget-types/"+wt.ID.String()+"?version="+strconv.Itoa(testLibraryDraftVersion(t, wtLibrary)), nil)
-	second := createLibraryCommitViaService(t, router, wtLibrary, testLibraryDraftVersion(t, wtLibrary))
+	second := createLibrarySavedStateViaService(t, router, wtLibrary, testLibraryDraftVersion(t, wtLibrary))
 
-	impact := decodeBody[apiv0.ImportImpactResponse](t, serve(router, http.MethodGet, imports+"/impact?commit="+strconv.Itoa(second.Number), nil))
+	impact := decodeBody[apiv0.ImportImpactResponse](t, serve(router, http.MethodGet, imports+"/impact?saved_state="+strconv.Itoa(second.Number), nil))
 	if len(impact.OrphanedWidgets) != 1 || impact.OrphanedWidgets[0].WidgetID != w.ID {
 		t.Errorf("impact: %+v", impact)
 	}
-	if rec := serve(router, http.MethodGet, imports+"/impact?commit=x", nil); rec.Code != http.StatusBadRequest {
+	if rec := serve(router, http.MethodGet, imports+"/impact?saved_state=x", nil); rec.Code != http.StatusBadRequest {
 		t.Errorf("impact of saved state x: %d, want 400", rec.Code)
 	}
 
-	rec = serve(router, http.MethodPut, imports, apiv0.PutLibraryImportRequest{Commit: second.Number, Version: testDraftVersion(t, mainProject)})
+	rec = serve(router, http.MethodPut, imports, apiv0.PutLibraryImportRequest{SavedState: second.Number, Version: testDraftVersion(t, mainProject)})
 	if rec.Code != http.StatusConflict {
 		t.Fatalf("an orphaning switch: %d, want 409", rec.Code)
 	}
@@ -160,12 +160,12 @@ func TestLibraryImports_AddPreviewSwitchRemove(t *testing.T) {
 	}
 
 	serve(router, http.MethodDelete, mainPath+"/scenes/"+sc.ID.String()+"/widgets/"+w.ID.String(), nil)
-	rec = serve(router, http.MethodPut, imports, apiv0.PutLibraryImportRequest{Commit: second.Number, Version: testDraftVersion(t, mainProject)})
+	rec = serve(router, http.MethodPut, imports, apiv0.PutLibraryImportRequest{SavedState: second.Number, Version: testDraftVersion(t, mainProject)})
 	if rec.Code != http.StatusOK {
 		t.Fatalf("switch: %d %s", rec.Code, rec.Body)
 	}
 	switched := decodeBody[apiv0.LibraryImportResponse](t, rec)
-	if switched.CommitNumber != second.Number {
+	if switched.SavedStateNumber != second.Number {
 		t.Errorf("the provenance of the switched import: %+v", switched)
 	}
 	if list := decodeBody[apiv0.GetLibraryImportsResponse](t, serve(router, http.MethodGet, mainPath+"/library-imports", nil)); !hasImport(list, wtLibrary, second.Number) {
@@ -184,21 +184,21 @@ func TestLibraryImports_AddPreviewSwitchRemove(t *testing.T) {
 
 func hasImport(list apiv0.GetLibraryImportsResponse, libraryID uuid.UUID, commit int) bool {
 	for _, imported := range list.LibraryImports {
-		if imported.LibraryID == libraryID && imported.CommitNumber == commit {
+		if imported.LibraryID == libraryID && imported.SavedStateNumber == commit {
 			return true
 		}
 	}
 	return false
 }
 
-// createLibraryCommitViaService saves the library's Draft as a Commit through
+// createLibrarySavedStateViaService saves the library's Draft as a saved state through
 // the API, as the UI does before an Import (task 85_6).
-func createLibraryCommitViaService(t *testing.T, router servingRouter, libraryID uuid.UUID, version int) apiv0.CommitResponse {
+func createLibrarySavedStateViaService(t *testing.T, router servingRouter, libraryID uuid.UUID, version int) apiv0.SavedStateResponse {
 	t.Helper()
-	path := apiv0.PathPrefix + apiv0.LibraryPath(libraryID.String()) + "/commits"
-	rec := serve(router, http.MethodPost, path, apiv0.CreateCommitRequest{Version: version, Title: "Save", Author: "Ada"})
+	path := apiv0.PathPrefix + apiv0.LibraryPath(libraryID.String()) + "/saved-states"
+	rec := serve(router, http.MethodPost, path, apiv0.CreateSavedStateRequest{Version: version, Title: "Save", Author: "Ada"})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("POST commits: %d %s", rec.Code, rec.Body)
 	}
-	return decodeBody[apiv0.CommitResponse](t, rec)
+	return decodeBody[apiv0.SavedStateResponse](t, rec)
 }

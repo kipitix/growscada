@@ -117,7 +117,7 @@ func libraryState(l apiv0.LibraryResponse) (text, kind string) {
 	switch {
 	case l.HasUnsavedChanges:
 		return StateUnsavedChanges, "unsaved"
-	case l.LatestCommit > 0:
+	case l.LatestSavedState > 0:
 		return StateSaved, "saved"
 	default:
 		return StateNeverSaved, "new"

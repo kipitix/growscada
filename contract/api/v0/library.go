@@ -11,9 +11,9 @@ const LibrariesQueryName = "name"
 // LibraryResponse is the HTTP DTO for representing a library in API
 // responses. The WidgetTypes of its Draft live under
 // /libraries/{id}/widget-types, its saved states under
-// /libraries/{id}/commits. Description is the library's optional, free-text
+// /libraries/{id}/saved-states. Description is the library's optional, free-text
 // description of at most 500 characters (task 73); it is an attribute of the
-// library, never content. LatestCommit is the number of the Draft's last
+// library, never content. LatestSavedState is the number of the Draft's last
 // saved state, 0 when it was never saved; HasUnsavedChanges reports whether the
 // Draft moved since that saved state (task 85_7). Version is the Library's own
 // (update and deletion); the Version of its Draft is read from GET
@@ -23,7 +23,7 @@ type LibraryResponse struct {
 	Name              string    `json:"name"`
 	Description       string    `json:"description"`
 	Version           int       `json:"version"`
-	LatestCommit      int       `json:"latest_commit"`
+	LatestSavedState  int       `json:"latest_saved_state"`
 	HasUnsavedChanges bool      `json:"has_unsaved_changes"`
 }
 

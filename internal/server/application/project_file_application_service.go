@@ -182,10 +182,10 @@ func (s projectFileServiceImpl) lockLocalImports(ctx context.Context, file proje
 			}
 			return err
 		}
-		if _, err := s.content.Drafts().FindSavedState(ctx, draft.LibraryScope(libraryID), imported.Commit); err != nil {
+		if _, err := s.content.Drafts().FindSavedState(ctx, draft.LibraryScope(libraryID), imported.SavedState); err != nil {
 			if errors.Is(err, draft.ErrSavedStateNotFound) {
 				issues = append(issues, FileIssue{Path: path,
-					Message: fmt.Sprintf("library %s has no saved state %d on this server", imported.LibraryID, imported.Commit)})
+					Message: fmt.Sprintf("library %s has no saved state %d on this server", imported.LibraryID, imported.SavedState)})
 				continue
 			}
 			return err

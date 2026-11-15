@@ -122,7 +122,7 @@ func (s testServices) services() restapi.Services {
 		Draft: s.draft, DraftChanges: s.draftChanges,
 		Discard: s.discard, Deploy: s.deploy, ProjectFiles: s.projectFiles, Deployments: s.deployments,
 		DeviceConfig: s.deviceConfig, DeviceTokens: s.deviceTokens,
-		Journal: s.journal, Operation: s.operation, Commits: s.commits,
+		Journal: s.journal, Operation: s.operation, SavedStates: s.commits,
 		Settings: s.settings, Labels: s.labels,
 	}
 }

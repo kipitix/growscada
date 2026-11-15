@@ -4,7 +4,7 @@ info:
   seq: 63
 http:
   method: POST
-  url: http://{{API_SERVER}}/api/v0/projects/{{OTHER_PROJECT_ID}}/commits/{{OTHER_COMMIT_NUMBER}}/deploy
+  url: http://{{API_SERVER}}/api/v0/projects/{{OTHER_PROJECT_ID}}/saved-states/{{OTHER_SAVED_STATE_NUMBER}}/deploy
   auth: inherit
 
 docs: |

@@ -149,12 +149,12 @@ type InputPortState struct {
 // number in the write, so a snapshot restored by an undo or built from a
 // ProjectFile carries the number alone.
 //
-// The stored name of the field stays "commit" (task 88_1): the DraftChange
+// The stored name of the field stays "saved_state" (task 88_1): the DraftChange
 // snapshots of earlier builds carry it, and the JSONB documents are rewritten
 // as one with the contracts (task 88_2).
 type LibraryImportState struct {
 	LibraryID  uuid.UUID `json:"library_id"`
-	SavedState int       `json:"commit"`
+	SavedState int       `json:"saved_state"`
 }
 
 func (LibraryImportState) kind() Kind { return KindLibraryImport }

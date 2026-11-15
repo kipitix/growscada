@@ -1039,7 +1039,7 @@ func TestSaveDeploy_Project(t *testing.T) {
 		t.Errorf("a deploy of the running saved state must fail, stderr %q", stderr)
 	}
 	running, err := apiclient.New(srv.URL, srv.Client()).Project(servertest.MainProject).Deployment(context.Background())
-	if err != nil || !running.Deployed || running.CommitNumber == nil || *running.CommitNumber != 1 {
+	if err != nil || !running.Deployed || running.SavedStateNumber == nil || *running.SavedStateNumber != 1 {
 		t.Errorf("the running Deployment must be saved state 1: %+v, %v", running, err)
 	}
 }

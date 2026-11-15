@@ -28,7 +28,7 @@ runtime:
   scripts:
     - type: after-response
       code: |-
-        bru.setVar("LIBRARY_COMMIT_VERSION", res.body.version);
+        bru.setVar("LIBRARY_SAVED_STATE_VERSION", res.body.version);
   assertions:
     - expression: 'res.status'
       operator: eq

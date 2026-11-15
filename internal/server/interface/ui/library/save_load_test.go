@@ -202,10 +202,10 @@ func TestServerEvents_AnotherLibraryLeavesTheSelectedAlone(t *testing.T) {
 	}
 	f := mount(t, url, api)
 	f.run()
-	f.l.commits = []apiv0.CommitResponse{{Number: 99}}
+	f.l.commits = []apiv0.SavedStateResponse{{Number: 99}}
 
 	for _, ev := range []apiv0.Event{
-		{Type: apiv0.EventCommitCreated, ID: other.ID.String(), Commit: 7},
+		{Type: apiv0.EventSavedStateCreated, ID: other.ID.String(), SavedState: 7},
 	} {
 		f.event(ev)
 		if len(f.l.commits) != 1 || f.l.commits[0].Number != 99 {
@@ -220,7 +220,7 @@ func TestServerEvents_AnotherLibraryLeavesTheSelectedAlone(t *testing.T) {
 func TestServerEvents_ProjectResyncLeavesTheLibraryAlone(t *testing.T) {
 	f, _ := selected(t)
 	f.run()
-	f.l.commits = []apiv0.CommitResponse{{Number: 99}}
+	f.l.commits = []apiv0.SavedStateResponse{{Number: 99}}
 
 	f.event(apiv0.Event{Type: eventlog.EventProjectResync})
 	if len(f.l.commits) != 1 || f.l.commits[0].Number != 99 {

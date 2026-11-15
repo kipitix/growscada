@@ -45,7 +45,7 @@ func projectSavedStateContent() draft.SavedStateContent {
 		Scenes: []projectv0.Scene{
 			{ID: uuid.New(), Name: "Main", Width: 100, Height: 100, Widgets: []projectv0.Widget{}},
 		},
-		LibraryImports: []projectv0.LibraryImport{{LibraryID: uuid.New(), Commit: 3}},
+		LibraryImports: []projectv0.LibraryImport{{LibraryID: uuid.New(), SavedState: 3}},
 	})
 }
 

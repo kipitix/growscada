@@ -52,12 +52,12 @@ func (s WidgetTypeStep) IsChange() bool {
 // ActionUpdate switches it from the saved state From, ActionUnchanged leaves
 // it (task 85_6).
 type ImportStep struct {
-	Action  Action
-	Project string
-	Library string
-	Commit  int
-	From    int
-	Version int
+	Action     Action
+	Project    string
+	Library    string
+	SavedState int
+	From       int
+	Version    int
 }
 
 // libraryPlan is what apply does to the libraries, the WidgetTypes of their
@@ -218,13 +218,13 @@ func planLibraries(ctx context.Context, client *Client, manifests Manifests, pru
 		}
 		sort.Strings(libraryNames)
 		for _, libraryName := range libraryNames {
-			commit := m.LibraryImports[libraryName]
-			step := ImportStep{Action: ActionCreate, Project: m.Name, Library: libraryName, Commit: commit}
+			savedState := m.LibraryImports[libraryName]
+			step := ImportStep{Action: ActionCreate, Project: m.Name, Library: libraryName, SavedState: savedState}
 			if lib, ok := byName[libraryName]; ok {
 				if i, ok := imported[lib.ID]; ok {
-					step.Version, step.From = i.Version, i.CommitNumber
+					step.Version, step.From = i.Version, i.SavedStateNumber
 					step.Action = ActionUpdate
-					if i.CommitNumber == commit {
+					if i.SavedStateNumber == savedState {
 						step.Action = ActionUnchanged
 					}
 				}
@@ -257,9 +257,9 @@ func printLibraryDiff(out io.Writer, plan libraryPlan) {
 	for _, s := range plan.imports {
 		switch s.Action {
 		case ActionCreate:
-			fmt.Fprintf(out, "+ project/%s import library/%s saved state %d\n", s.Project, s.Library, s.Commit)
+			fmt.Fprintf(out, "+ project/%s import library/%s saved state %d\n", s.Project, s.Library, s.SavedState)
 		case ActionUpdate:
-			fmt.Fprintf(out, "~ project/%s import library/%s saved state %d -> %d\n", s.Project, s.Library, s.From, s.Commit)
+			fmt.Fprintf(out, "~ project/%s import library/%s saved state %d -> %d\n", s.Project, s.Library, s.From, s.SavedState)
 		}
 	}
 }
@@ -366,12 +366,12 @@ func executeLibraries(ctx context.Context, client *Client, run *settings, plan l
 			if err != nil {
 				return fmt.Errorf("project/%s: %w", s.Project, err)
 			}
-			_, err = project.ImportLibrary(ctx, lib.ID(), apiv0.PutLibraryImportRequest{Commit: s.Commit, Version: state.Version})
+			_, err = project.ImportLibrary(ctx, lib.ID(), apiv0.PutLibraryImportRequest{SavedState: s.SavedState, Version: state.Version})
 			if err != nil {
-				return fmt.Errorf("project/%s import library/%s saved state %d: %w%s", s.Project, s.Library, s.Commit, err, orphanedHint(err))
+				return fmt.Errorf("project/%s import library/%s saved state %d: %w%s", s.Project, s.Library, s.SavedState, err, orphanedHint(err))
 			}
 		}
-		fmt.Fprintf(out, "project/%s import library/%s saved state %d %s\n", s.Project, s.Library, s.Commit, importResult(s.Action))
+		fmt.Fprintf(out, "project/%s import library/%s saved state %d %s\n", s.Project, s.Library, s.SavedState, importResult(s.Action))
 	}
 	return nil
 }
@@ -562,7 +562,7 @@ func newGetLibrariesCommand(s *settings) *cobra.Command {
 			w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
 			fmt.Fprintln(w, "NAME\tCOMMIT\tUNSAVED")
 			for _, l := range libraries {
-				fmt.Fprintf(w, "%s\t%d\t%t\n", l.Name, l.LatestCommit, l.HasUnsavedChanges)
+				fmt.Fprintf(w, "%s\t%d\t%t\n", l.Name, l.LatestSavedState, l.HasUnsavedChanges)
 			}
 			return w.Flush()
 		},

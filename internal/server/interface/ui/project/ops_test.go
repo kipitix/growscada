@@ -171,11 +171,11 @@ func createWidgetType(t *testing.T, api *testAPI, name string, ports ...apiv0.In
 	if err != nil {
 		t.Fatalf("create widget type: %v", err)
 	}
-	commit, err := api.Library(lib.ID).SaveCommit(ctx, apiv0.CreateCommitRequest{Version: created.Version, Title: "Save", Author: "Ada"})
+	commit, err := api.Library(lib.ID).SaveSavedState(ctx, apiv0.CreateSavedStateRequest{Version: created.Version, Title: "Save", Author: "Ada"})
 	if err != nil {
 		t.Fatalf("save commit: %v", err)
 	}
-	if _, err := api.ImportLibrary(ctx, lib.ID, apiv0.PutLibraryImportRequest{Commit: commit.Number}); err != nil {
+	if _, err := api.ImportLibrary(ctx, lib.ID, apiv0.PutLibraryImportRequest{SavedState: commit.Number}); err != nil {
 		t.Fatalf("import: %v", err)
 	}
 	return created.ID

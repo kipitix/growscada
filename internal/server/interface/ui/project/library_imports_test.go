@@ -28,7 +28,7 @@ func libraryWithState(t *testing.T, api *testAPI) (uuid.UUID, uuid.UUID) {
 	if err != nil {
 		t.Fatalf("create widget type: %v", err)
 	}
-	if _, err := api.Library(lib.ID).SaveCommit(ctx, apiv0.CreateCommitRequest{
+	if _, err := api.Library(lib.ID).SaveSavedState(ctx, apiv0.CreateSavedStateRequest{
 		Version: created.Version, Title: "First save", Author: "Ada"}); err != nil {
 		t.Fatalf("save commit: %v", err)
 	}
@@ -37,14 +37,14 @@ func libraryWithState(t *testing.T, api *testAPI) (uuid.UUID, uuid.UUID) {
 
 // saveLibraryState saves the library's Draft as its next saved state after
 // touching it: a Save of a Draft nothing was written to is a 409.
-func saveLibraryState(t *testing.T, api *testAPI, libraryID uuid.UUID, title string) apiv0.CommitResponse {
+func saveLibraryState(t *testing.T, api *testAPI, libraryID uuid.UUID, title string) apiv0.SavedStateResponse {
 	t.Helper()
 	ctx := context.Background()
 	state, err := api.Library(libraryID).DraftState(ctx)
 	if err != nil {
 		t.Fatalf("draft state: %v", err)
 	}
-	saved, err := api.Library(libraryID).SaveCommit(ctx, apiv0.CreateCommitRequest{
+	saved, err := api.Library(libraryID).SaveSavedState(ctx, apiv0.CreateSavedStateRequest{
 		Version: state.Version, Title: title, Author: "Ada"})
 	if err != nil {
 		t.Fatalf("save commit: %v", err)
@@ -198,7 +198,7 @@ func TestImportWindow_ImportSwitchAndRemove(t *testing.T) {
 	if !strings.Contains(html, `data-import-provenance="2"`) || !strings.Contains(html, "saved state #2 Second save · Ada") {
 		t.Errorf("the switched import is not shown: %s", html)
 	}
-	if imported, ok := importOf(t, f.api, libraryID); !ok || imported.CommitNumber != 2 {
+	if imported, ok := importOf(t, f.api, libraryID); !ok || imported.SavedStateNumber != 2 {
 		t.Errorf("the server's import: %+v, %t; want saved state 2", imported, ok)
 	}
 
@@ -224,7 +224,7 @@ func TestImportWindow_OrphaningSwitchIsRefusedNamingTheWidgets(t *testing.T) {
 	f := startProject(t)
 	f.run()
 	libraryID, typeID := libraryWithState(t, f.api)
-	if _, err := f.api.ImportLibrary(context.Background(), libraryID, apiv0.PutLibraryImportRequest{Commit: 1}); err != nil {
+	if _, err := f.api.ImportLibrary(context.Background(), libraryID, apiv0.PutLibraryImportRequest{SavedState: 1}); err != nil {
 		t.Fatalf("import: %v", err)
 	}
 	sceneID := createScene(t, f.api, "Main")
@@ -250,13 +250,13 @@ func TestImportWindow_OrphaningSwitchIsRefusedNamingTheWidgets(t *testing.T) {
 	if !strings.Contains(shown.Detail, "gauge-1") {
 		t.Errorf("the toast does not name the Widget: %q", shown.Detail)
 	}
-	if imported, ok := importOf(t, f.api, libraryID); !ok || imported.CommitNumber != 1 {
+	if imported, ok := importOf(t, f.api, libraryID); !ok || imported.SavedStateNumber != 1 {
 		t.Errorf("the refused switch changed the import: %+v, %t", imported, ok)
 	}
 }
 
 // TestImportWindow_FilterByLabel: the filter is the server's — GET
-// …/commits?label=<id> —, All labels asks for every saved state, and the list
+// …/saved-states?label=<id> —, All labels asks for every saved state, and the list
 // of the libraries is never narrowed by it (task 85_3, task 85_6).
 func TestImportWindow_FilterByLabel(t *testing.T) {
 	url, api := newServer(t)
@@ -305,7 +305,7 @@ func TestImportWindow_FilterByLabel(t *testing.T) {
 	}
 	asked := false
 	for _, req := range log.take() {
-		if strings.Contains(req, apiv0.CommitPath+"?"+apiv0.CommitsQueryLabel+"="+label.ID.String()) {
+		if strings.Contains(req, apiv0.SavedStatePath+"?"+apiv0.SavedStatesQueryLabel+"="+label.ID.String()) {
 			asked = true
 		}
 	}
@@ -329,7 +329,7 @@ func TestImportWindow_AnotherClientsImportRereadsThePanel(t *testing.T) {
 	f := startProject(t)
 	f.run()
 	libraryID, typeID := libraryWithState(t, f.api)
-	if _, err := f.api.ImportLibrary(context.Background(), libraryID, apiv0.PutLibraryImportRequest{Commit: 1}); err != nil {
+	if _, err := f.api.ImportLibrary(context.Background(), libraryID, apiv0.PutLibraryImportRequest{SavedState: 1}); err != nil {
 		t.Fatalf("import: %v", err)
 	}
 

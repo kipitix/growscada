@@ -91,7 +91,7 @@ func insertSavedStateImports(ctx context.Context, tx *sql.Tx, savedState draft.S
 	for _, imported := range file.LibraryImports {
 		if _, err := tx.ExecContext(ctx,
 			`INSERT INTO engineering.saved_state_library_imports (saved_state_id, library_id, saved_state_number) VALUES ($1, $2, $3)`,
-			savedState.ID().UUID(), imported.LibraryID, imported.Commit,
+			savedState.ID().UUID(), imported.LibraryID, imported.SavedState,
 		); err != nil {
 			return fmt.Errorf("cannot insert a library import of %s: %w", savedState, err)
 		}

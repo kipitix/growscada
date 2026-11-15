@@ -245,11 +245,11 @@ func TestEventsHandlers_DeploymentCreated_CarriesTheDeploymentAndStaysInItsProje
 	<-doneOther
 
 	want := map[string]any{
-		"type":          "deployment_created",
-		"id":            mainProject.String(),
-		"deployment":    float64(3),
-		"deployed_at":   "2026-11-03T10:00:00Z",
-		"commit_number": float64(2),
+		"type":               "deployment_created",
+		"id":                 mainProject.String(),
+		"deployment":         float64(3),
+		"deployed_at":        "2026-11-03T10:00:00Z",
+		"saved_state_number": float64(2),
 	}
 	var found bool
 	for _, m := range sseEventMessages(t, rec.body()) {

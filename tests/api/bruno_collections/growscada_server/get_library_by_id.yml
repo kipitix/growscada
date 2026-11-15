@@ -9,7 +9,7 @@ http:
   auth: inherit
 
 docs: |
-  `latest_commit` is the number of the last Commit (0 for none) and
+  `latest_saved_state` is the number of the last saved state (0 for none) and
   `has_unsaved_changes` tells whether the Draft moved since it (task 74,
   task 85_7). `version` is the Library's own (rename and deletion); the Version
   of its Draft is GET /libraries/{id}/draft.
@@ -26,7 +26,7 @@ runtime:
       value: '"{{LIBRARY_ID}}"'
     - expression: 'res.body.description'
       operator: isString
-    - expression: 'res.body.latest_commit'
+    - expression: 'res.body.latest_saved_state'
       operator: eq
       value: '1'
     - expression: 'res.body.has_unsaved_changes'

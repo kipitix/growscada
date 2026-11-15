@@ -361,8 +361,8 @@ func validateProjectFileShape(file projectv0.ProjectFile, problems *fileProblems
 			problems.add(path+".library_id", "the library %s appears more than once", imported.LibraryID)
 		}
 		shape.imports[imported.LibraryID] = imported
-		if imported.Commit < 1 {
-			problems.add(path+".commit", "a saved state number is positive, got %d", imported.Commit)
+		if imported.SavedState < 1 {
+			problems.add(path+".saved_state", "a saved state number is positive, got %d", imported.SavedState)
 		}
 	}
 
@@ -481,17 +481,17 @@ func (v projectFileValidator) localWidgetTypes(ctx context.Context, file project
 		if err != nil {
 			return nil, fmt.Errorf("cannot read library %s: %w", imported.LibraryID, err)
 		}
-		savedState, err := v.drafts.FindSavedState(ctx, draft.LibraryScope(lib.ID()), imported.Commit)
+		savedState, err := v.drafts.FindSavedState(ctx, draft.LibraryScope(lib.ID()), imported.SavedState)
 		if errors.Is(err, draft.ErrSavedStateNotFound) {
-			problems.add(path, "library %s has no saved state %d on this server", imported.LibraryID, imported.Commit)
+			problems.add(path, "library %s has no saved state %d on this server", imported.LibraryID, imported.SavedState)
 			continue
 		}
 		if err != nil {
-			return nil, fmt.Errorf("cannot read saved state %d of library %s: %w", imported.Commit, imported.LibraryID, err)
+			return nil, fmt.Errorf("cannot read saved state %d of library %s: %w", imported.SavedState, imported.LibraryID, err)
 		}
 		copies, ok := savedState.Content().WidgetTypes()
 		if !ok {
-			problems.add(path, "saved state %d of library %s holds no widget types", imported.Commit, imported.LibraryID)
+			problems.add(path, "saved state %d of library %s holds no widget types", imported.SavedState, imported.LibraryID)
 			continue
 		}
 		for _, copy := range copies {

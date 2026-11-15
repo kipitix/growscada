@@ -500,12 +500,12 @@ func (l *LibraryClient) Discard(ctx context.Context) (apiv0.DiscardLibraryRespon
 	return resp, err
 }
 
-// LoadCommit makes the library's Draft the content of a saved state (task 84),
-// as a Project's LoadCommit does. The error matches ErrNotFound for a number
+// LoadSavedState makes the library's Draft the content of a saved state (task 84),
+// as a Project's LoadSavedState does. The error matches ErrNotFound for a number
 // the library does not have.
-func (l *LibraryClient) LoadCommit(ctx context.Context, number int) (apiv0.LoadCommitResponse, error) {
-	var resp apiv0.LoadCommitResponse
-	err := l.do(ctx, http.MethodPost, apiv0.CommitLoadPathOf(number), nil, http.StatusOK, &resp)
+func (l *LibraryClient) LoadSavedState(ctx context.Context, number int) (apiv0.LoadSavedStateResponse, error) {
+	var resp apiv0.LoadSavedStateResponse
+	err := l.do(ctx, http.MethodPost, apiv0.SavedStateLoadPathOf(number), nil, http.StatusOK, &resp)
 	return resp, err
 }
 
@@ -518,7 +518,7 @@ func (p *ProjectClient) Imports(ctx context.Context) ([]apiv0.LibraryImportRespo
 	return resp.LibraryImports, err
 }
 
-// ImportLibrary imports the saved state req.Commit of the library, adding the
+// ImportLibrary imports the saved state req.SavedState of the library, adding the
 // import or switching it; req.Version is the Version of the Draft the client
 // saw. The error matches ErrConflict if the version is stale or the switch
 // would leave Widgets without their WidgetType (the StatusError's Problem names
@@ -547,12 +547,12 @@ func (p *ProjectClient) RemoveImport(ctx context.Context, libraryID uuid.UUID, v
 	return resp, err
 }
 
-// ImportImpact previews importing the saved state numbered commit of the
+// ImportImpact previews importing the saved state numbered savedState of the
 // library; saved state 0 previews removing the import.
-func (p *ProjectClient) ImportImpact(ctx context.Context, libraryID uuid.UUID, commit int) (apiv0.ImportImpactResponse, error) {
+func (p *ProjectClient) ImportImpact(ctx context.Context, libraryID uuid.UUID, savedState int) (apiv0.ImportImpactResponse, error) {
 	path := libraryImportPath(libraryID) + "/impact"
-	if commit != 0 {
-		path += "?" + apiv0.LibraryImportImpactQueryCommit + "=" + strconv.Itoa(commit)
+	if savedState != 0 {
+		path += "?" + apiv0.LibraryImportImpactQuerySavedState + "=" + strconv.Itoa(savedState)
 	}
 	var resp apiv0.ImportImpactResponse
 	err := p.do(ctx, http.MethodGet, path, nil, http.StatusOK, &resp)
@@ -805,45 +805,45 @@ func widgetPath(sceneID, widgetID uuid.UUID) string {
 
 // ── saved states ─────────────────────────────────────────────────────────────
 
-// SaveCommit fixes the Draft as a saved state at the stated Version (task 72_2;
+// SaveSavedState fixes the Draft as a saved state at the stated Version (task 72_2;
 // ADR 0021). The error matches ErrConflict for nothing_to_save and for a stale
 // draft_conflict; an empty title or author is a 400.
-func (p *ProjectClient) SaveCommit(ctx context.Context, req apiv0.CreateCommitRequest) (apiv0.CommitResponse, error) {
-	var resp apiv0.CommitResponse
-	err := p.do(ctx, http.MethodPost, apiv0.CommitPath, req, http.StatusCreated, &resp)
+func (p *ProjectClient) SaveSavedState(ctx context.Context, req apiv0.CreateSavedStateRequest) (apiv0.SavedStateResponse, error) {
+	var resp apiv0.SavedStateResponse
+	err := p.do(ctx, http.MethodPost, apiv0.SavedStatePath, req, http.StatusCreated, &resp)
 	return resp, err
 }
 
-// Commits returns the Project's saved state history, newest first, without
+// SavedStates returns the Project's saved state history, newest first, without
 // content.
-func (p *ProjectClient) Commits(ctx context.Context) ([]apiv0.CommitResponse, error) {
-	var resp apiv0.GetCommitsResponse
-	err := p.do(ctx, http.MethodGet, apiv0.CommitPath, nil, http.StatusOK, &resp)
-	return resp.Commits, err
+func (p *ProjectClient) SavedStates(ctx context.Context) ([]apiv0.SavedStateResponse, error) {
+	var resp apiv0.GetSavedStatesResponse
+	err := p.do(ctx, http.MethodGet, apiv0.SavedStatePath, nil, http.StatusOK, &resp)
+	return resp.SavedStates, err
 }
 
-// Commit returns one saved state. A number the Project does not have matches
+// SavedState returns one saved state. A number the Project does not have matches
 // ErrNotFound.
-func (p *ProjectClient) Commit(ctx context.Context, number int) (apiv0.CommitResponse, error) {
-	var resp apiv0.CommitResponse
-	err := p.do(ctx, http.MethodGet, apiv0.CommitPathOf(number), nil, http.StatusOK, &resp)
+func (p *ProjectClient) SavedState(ctx context.Context, number int) (apiv0.SavedStateResponse, error) {
+	var resp apiv0.SavedStateResponse
+	err := p.do(ctx, http.MethodGet, apiv0.SavedStatePathOf(number), nil, http.StatusOK, &resp)
 	return resp, err
 }
 
-// RenameCommit changes a saved state's title. It states no Draft Version.
-func (p *ProjectClient) RenameCommit(ctx context.Context, number int, req apiv0.RenameCommitRequest) (apiv0.CommitResponse, error) {
-	var resp apiv0.CommitResponse
-	err := p.do(ctx, http.MethodPatch, apiv0.CommitPathOf(number), req, http.StatusOK, &resp)
+// RenameSavedState changes a saved state's title. It states no Draft Version.
+func (p *ProjectClient) RenameSavedState(ctx context.Context, number int, req apiv0.RenameSavedStateRequest) (apiv0.SavedStateResponse, error) {
+	var resp apiv0.SavedStateResponse
+	err := p.do(ctx, http.MethodPatch, apiv0.SavedStatePathOf(number), req, http.StatusOK, &resp)
 	return resp, err
 }
 
-// CommitsByLabel returns the Project's saved state history narrowed to the
+// SavedStatesByLabel returns the Project's saved state history narrowed to the
 // saved states the label marks, newest first (task 85_3; ADR 0025).
-func (p *ProjectClient) CommitsByLabel(ctx context.Context, labelID uuid.UUID) ([]apiv0.CommitResponse, error) {
-	var resp apiv0.GetCommitsResponse
+func (p *ProjectClient) SavedStatesByLabel(ctx context.Context, labelID uuid.UUID) ([]apiv0.SavedStateResponse, error) {
+	var resp apiv0.GetSavedStatesResponse
 	err := p.do(ctx, http.MethodGet,
-		apiv0.CommitPath+"?"+apiv0.CommitsQueryLabel+"="+labelID.String(), nil, http.StatusOK, &resp)
-	return resp.Commits, err
+		apiv0.SavedStatePath+"?"+apiv0.SavedStatesQueryLabel+"="+labelID.String(), nil, http.StatusOK, &resp)
+	return resp.SavedStates, err
 }
 
 // AssignLabel marks the saved state number with the label and returns every
@@ -851,92 +851,92 @@ func (p *ProjectClient) CommitsByLabel(ctx context.Context, labelID uuid.UUID) (
 // Draft Version. The error matches ErrNotFound for a saved state or a label
 // this server does not have (task 85_3; ADR 0025).
 func (p *ProjectClient) AssignLabel(ctx context.Context, number int, labelID uuid.UUID) ([]apiv0.LabelResponse, error) {
-	return p.commitLabel(ctx, http.MethodPut, number, labelID)
+	return p.savedStateLabel(ctx, http.MethodPut, number, labelID)
 }
 
 // UnassignLabel takes the label off the saved state number, idempotently, and
 // returns the labels it still carries.
 func (p *ProjectClient) UnassignLabel(ctx context.Context, number int, labelID uuid.UUID) ([]apiv0.LabelResponse, error) {
-	return p.commitLabel(ctx, http.MethodDelete, number, labelID)
+	return p.savedStateLabel(ctx, http.MethodDelete, number, labelID)
 }
 
-func (p *ProjectClient) commitLabel(ctx context.Context, method string, number int, labelID uuid.UUID) ([]apiv0.LabelResponse, error) {
-	var resp apiv0.CommitLabelsResponse
-	err := p.do(ctx, method, apiv0.CommitLabelPathOf(number, labelID.String()), nil, http.StatusOK, &resp)
+func (p *ProjectClient) savedStateLabel(ctx context.Context, method string, number int, labelID uuid.UUID) ([]apiv0.LabelResponse, error) {
+	var resp apiv0.SavedStateLabelsResponse
+	err := p.do(ctx, method, apiv0.SavedStateLabelPathOf(number, labelID.String()), nil, http.StatusOK, &resp)
 	return resp.Labels, err
 }
 
-// CommitProjectFile returns the ProjectFile a saved state fixed, as a download.
+// SavedStateProjectFile returns the ProjectFile a saved state fixed, as a download.
 // The error matches ErrNotFound for a number the Project does not have.
-func (p *ProjectClient) CommitProjectFile(ctx context.Context, number int) (ProjectFileDownload, error) {
-	return p.downloadProjectFile(ctx, apiv0.CommitPathOf(number)+"/projectfile")
+func (p *ProjectClient) SavedStateProjectFile(ctx context.Context, number int) (ProjectFileDownload, error) {
+	return p.downloadProjectFile(ctx, apiv0.SavedStatePathOf(number)+"/projectfile")
 }
 
-// LoadCommit makes the Draft the content of a saved state (task 84): the saved
+// LoadSavedState makes the Draft the content of a saved state (task 84): the saved
 // state becomes what is edited, the DraftChange stack is cleared and the
 // Draft's Version raised. It states no Version — it is a reset, not a content
 // write. The error matches ErrNotFound for a number the Project does not have.
-func (p *ProjectClient) LoadCommit(ctx context.Context, number int) (apiv0.LoadCommitResponse, error) {
-	var resp apiv0.LoadCommitResponse
-	err := p.do(ctx, http.MethodPost, apiv0.CommitLoadPathOf(number), nil, http.StatusOK, &resp)
+func (p *ProjectClient) LoadSavedState(ctx context.Context, number int) (apiv0.LoadSavedStateResponse, error) {
+	var resp apiv0.LoadSavedStateResponse
+	err := p.do(ctx, http.MethodPost, apiv0.SavedStateLoadPathOf(number), nil, http.StatusOK, &resp)
 	return resp, err
 }
 
-// SaveCommit fixes the Library's Draft as a saved state at the stated Version
+// SaveSavedState fixes the Library's Draft as a saved state at the stated Version
 // (task 72_2; ADR 0021).
-func (l *LibraryClient) SaveCommit(ctx context.Context, req apiv0.CreateCommitRequest) (apiv0.CommitResponse, error) {
-	var resp apiv0.CommitResponse
-	err := l.do(ctx, http.MethodPost, apiv0.CommitPath, req, http.StatusCreated, &resp)
+func (l *LibraryClient) SaveSavedState(ctx context.Context, req apiv0.CreateSavedStateRequest) (apiv0.SavedStateResponse, error) {
+	var resp apiv0.SavedStateResponse
+	err := l.do(ctx, http.MethodPost, apiv0.SavedStatePath, req, http.StatusCreated, &resp)
 	return resp, err
 }
 
-// Commits returns the Library's saved state history, newest first, without
+// SavedStates returns the Library's saved state history, newest first, without
 // content.
-func (l *LibraryClient) Commits(ctx context.Context) ([]apiv0.CommitResponse, error) {
-	var resp apiv0.GetCommitsResponse
-	err := l.do(ctx, http.MethodGet, apiv0.CommitPath, nil, http.StatusOK, &resp)
-	return resp.Commits, err
+func (l *LibraryClient) SavedStates(ctx context.Context) ([]apiv0.SavedStateResponse, error) {
+	var resp apiv0.GetSavedStatesResponse
+	err := l.do(ctx, http.MethodGet, apiv0.SavedStatePath, nil, http.StatusOK, &resp)
+	return resp.SavedStates, err
 }
 
-// Commit returns one saved state, with the WidgetTypes of its snapshot.
-func (l *LibraryClient) Commit(ctx context.Context, number int) (apiv0.CommitResponse, error) {
-	var resp apiv0.CommitResponse
-	err := l.do(ctx, http.MethodGet, apiv0.CommitPathOf(number), nil, http.StatusOK, &resp)
+// SavedState returns one saved state, with the WidgetTypes of its snapshot.
+func (l *LibraryClient) SavedState(ctx context.Context, number int) (apiv0.SavedStateResponse, error) {
+	var resp apiv0.SavedStateResponse
+	err := l.do(ctx, http.MethodGet, apiv0.SavedStatePathOf(number), nil, http.StatusOK, &resp)
 	return resp, err
 }
 
-// RenameCommit changes a saved state's title. It states no Draft Version.
-func (l *LibraryClient) RenameCommit(ctx context.Context, number int, req apiv0.RenameCommitRequest) (apiv0.CommitResponse, error) {
-	var resp apiv0.CommitResponse
-	err := l.do(ctx, http.MethodPatch, apiv0.CommitPathOf(number), req, http.StatusOK, &resp)
+// RenameSavedState changes a saved state's title. It states no Draft Version.
+func (l *LibraryClient) RenameSavedState(ctx context.Context, number int, req apiv0.RenameSavedStateRequest) (apiv0.SavedStateResponse, error) {
+	var resp apiv0.SavedStateResponse
+	err := l.do(ctx, http.MethodPatch, apiv0.SavedStatePathOf(number), req, http.StatusOK, &resp)
 	return resp, err
 }
 
-// CommitsByLabel returns the Library's saved state history narrowed to the
+// SavedStatesByLabel returns the Library's saved state history narrowed to the
 // saved states the label marks, newest first (task 85_3; ADR 0025).
-func (l *LibraryClient) CommitsByLabel(ctx context.Context, labelID uuid.UUID) ([]apiv0.CommitResponse, error) {
-	var resp apiv0.GetCommitsResponse
+func (l *LibraryClient) SavedStatesByLabel(ctx context.Context, labelID uuid.UUID) ([]apiv0.SavedStateResponse, error) {
+	var resp apiv0.GetSavedStatesResponse
 	err := l.do(ctx, http.MethodGet,
-		apiv0.CommitPath+"?"+apiv0.CommitsQueryLabel+"="+labelID.String(), nil, http.StatusOK, &resp)
-	return resp.Commits, err
+		apiv0.SavedStatePath+"?"+apiv0.SavedStatesQueryLabel+"="+labelID.String(), nil, http.StatusOK, &resp)
+	return resp.SavedStates, err
 }
 
 // AssignLabel marks the saved state number with the label and returns every
 // label the saved state carries afterwards; the error matches ErrNotFound for
 // a saved state or a label this server does not have (task 85_3; ADR 0025).
 func (l *LibraryClient) AssignLabel(ctx context.Context, number int, labelID uuid.UUID) ([]apiv0.LabelResponse, error) {
-	return l.commitLabel(ctx, http.MethodPut, number, labelID)
+	return l.savedStateLabel(ctx, http.MethodPut, number, labelID)
 }
 
 // UnassignLabel takes the label off the saved state number, idempotently, and
 // returns the labels it still carries.
 func (l *LibraryClient) UnassignLabel(ctx context.Context, number int, labelID uuid.UUID) ([]apiv0.LabelResponse, error) {
-	return l.commitLabel(ctx, http.MethodDelete, number, labelID)
+	return l.savedStateLabel(ctx, http.MethodDelete, number, labelID)
 }
 
-func (l *LibraryClient) commitLabel(ctx context.Context, method string, number int, labelID uuid.UUID) ([]apiv0.LabelResponse, error) {
-	var resp apiv0.CommitLabelsResponse
-	err := l.do(ctx, method, apiv0.CommitLabelPathOf(number, labelID.String()), nil, http.StatusOK, &resp)
+func (l *LibraryClient) savedStateLabel(ctx context.Context, method string, number int, labelID uuid.UUID) ([]apiv0.LabelResponse, error) {
+	var resp apiv0.SavedStateLabelsResponse
+	err := l.do(ctx, method, apiv0.SavedStateLabelPathOf(number, labelID.String()), nil, http.StatusOK, &resp)
 	return resp.Labels, err
 }
 
@@ -949,10 +949,10 @@ func (l *LibraryClient) commitLabel(ctx context.Context, method string, number i
 type DeploymentState struct {
 	Deployment apiv0.DeploymentResponse
 	Deployed   bool
-	// CommitNumber is the saved state the running Deployment came from; nil
+	// SavedStateNumber is the saved state the running Deployment came from; nil
 	// for a Deployment from a file or one made before saved states were
 	// deployed (task 85_4).
-	CommitNumber *int
+	SavedStateNumber *int
 }
 
 // Deployment returns the Deployment the project runs. Deployed is false when the
@@ -964,7 +964,7 @@ func (p *ProjectClient) Deployment(ctx context.Context) (DeploymentState, error)
 	if errors.Is(err, ErrNotFound) {
 		return DeploymentState{}, nil
 	}
-	return DeploymentState{Deployment: resp, Deployed: err == nil, CommitNumber: resp.CommitNumber}, err
+	return DeploymentState{Deployment: resp, Deployed: err == nil, SavedStateNumber: resp.SavedStateNumber}, err
 }
 
 // TagStates returns the states of the Tags of the running Deployment, by Tag ID:
@@ -1014,12 +1014,12 @@ func (p *ProjectClient) Journal(ctx context.Context, from int64, limit int) ([]r
 	return resp.Entries, err
 }
 
-// DeployCommit makes saved state number the Project's running Deployment (task
+// DeploySavedState makes saved state number the Project's running Deployment (task
 // 85_4). The error matches ErrConflict if that saved state runs already and
 // ErrNotFound for a saved state the Project does not have.
-func (p *ProjectClient) DeployCommit(ctx context.Context, number int) (apiv0.DeployResponse, error) {
+func (p *ProjectClient) DeploySavedState(ctx context.Context, number int) (apiv0.DeployResponse, error) {
 	var resp apiv0.DeployResponse
-	err := p.do(ctx, http.MethodPost, apiv0.CommitDeployPathOf(number), nil, http.StatusCreated, &resp)
+	err := p.do(ctx, http.MethodPost, apiv0.SavedStateDeployPathOf(number), nil, http.StatusCreated, &resp)
 	return resp, err
 }
 

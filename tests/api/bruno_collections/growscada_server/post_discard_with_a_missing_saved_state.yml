@@ -13,7 +13,7 @@ docs: |
   WidgetType and answers `200` with the Draft's new Version and a warning naming
   the import and the widgets it took (task 71; task 85_6). The Draft is left consistent and
   writable, which the next request shows. A Discard would fall back to the last
-  Commit instead.
+  saved state instead.
 
 runtime:
   scripts:
@@ -29,7 +29,7 @@ runtime:
     - expression: 'res.body.warnings[0].library_id'
       operator: eq
       value: '"d0000000-0000-4000-8000-0000000000ff"'
-    - expression: 'res.body.warnings[0].commit'
+    - expression: 'res.body.warnings[0].saved_state'
       operator: eq
       value: '1'
     - expression: 'res.body.warnings[0].dropped_widgets'

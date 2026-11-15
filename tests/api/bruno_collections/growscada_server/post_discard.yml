@@ -1,5 +1,5 @@
 info:
-  name: post discard to the last commit
+  name: post discard to the last saved state
   type: http
   seq: 74
 http:
@@ -8,9 +8,9 @@ http:
   auth: inherit
 
 docs: |
-  Discard resets the whole Draft to its last Commit — the unsaved changes go —
+  Discard resets the whole Draft to its last saved state — the unsaved changes go —
   in one transaction (task 72_4; ADR 0016): the answer is `200` with the
-  Draft's new `version`. A project with no Commit answers `409`
+  Draft's new `version`. A project with no saved state answers `409`
   `nothing_to_discard`; its Revert-to-deployed restores the running
   Deployment.
 

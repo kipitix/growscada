@@ -49,7 +49,7 @@ func (h LibraryImportsHandlers) PutLibraryImport(w http.ResponseWriter, r *http.
 	if !decodeRequest(w, r, &request) {
 		return
 	}
-	saved, created, err := h.service.PutLibraryImport(r.Context(), projectID, libraryID, request.Commit, request.Version)
+	saved, created, err := h.service.PutLibraryImport(r.Context(), projectID, libraryID, request.SavedState, request.Version)
 	if err != nil {
 		sendError(w, r, err)
 		return
@@ -87,7 +87,7 @@ func (h LibraryImportsHandlers) DeleteLibraryImport(w http.ResponseWriter, r *ht
 }
 
 // GetLibraryImportImpact handles GET
-// /projects/{project_id}/library-imports/{library_id}/impact?commit=<n>: the
+// /projects/{project_id}/library-imports/{library_id}/impact?saved_state=<n>: the
 // preview of importing the saved state n, or of removing the import when the
 // parameter is absent.
 func (h LibraryImportsHandlers) GetLibraryImportImpact(w http.ResponseWriter, r *http.Request) {
@@ -99,17 +99,17 @@ func (h LibraryImportsHandlers) GetLibraryImportImpact(w http.ResponseWriter, r 
 	if !ok {
 		return
 	}
-	var commit *int
-	if query := r.URL.Query(); query.Has(apiv0.LibraryImportImpactQueryCommit) {
-		raw := query.Get(apiv0.LibraryImportImpactQueryCommit)
+	var savedState *int
+	if query := r.URL.Query(); query.Has(apiv0.LibraryImportImpactQuerySavedState) {
+		raw := query.Get(apiv0.LibraryImportImpactQuerySavedState)
 		number, err := strconv.Atoi(raw)
 		if err != nil || number < 1 {
-			sendProblem(w, NewBadRequest(apiv0.LibraryImportImpactQueryCommit+": '"+raw+"' is not a saved state number", r.URL.Path))
+			sendProblem(w, NewBadRequest(apiv0.LibraryImportImpactQuerySavedState+": '"+raw+"' is not a saved state number", r.URL.Path))
 			return
 		}
-		commit = &number
+		savedState = &number
 	}
-	impact, err := h.service.ImportImpact(r.Context(), projectID, libraryID, commit)
+	impact, err := h.service.ImportImpact(r.Context(), projectID, libraryID, savedState)
 	if err != nil {
 		sendError(w, r, err)
 		return

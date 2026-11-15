@@ -53,8 +53,8 @@ var (
 	deploymentResource = resource{name: "Deployment", pathParam: "deployment_number"}
 	// A saved state is named by its number within its Draft. The name is what a
 	// person reads in a 404 and in a 409's title, so it says "Saved state", the
-	// UI's word for it (task 84); the path and the DTOs keep Commit.
-	commitResource = resource{name: "Saved state", pathParam: "commit_number"}
+	// UI's word for it (task 84); the path and the DTOs name it too (task 88_2).
+	savedStateResource = resource{name: "Saved state", pathParam: "saved_state_number"}
 	// The per-user settings of the server are named by no path at all: the
 	// person they belong to never is (task 81).
 	userSettingsResource = resource{name: "UserSettings"}
@@ -88,7 +88,7 @@ var errorMappings = []errorMapping{
 		"Nothing to undo: the Draft has no change at the stack's position"},
 	{draft.ErrNothingToRedo, http.StatusConflict, projectResource,
 		"Nothing to redo: nothing was undone, or a new change replaced the redo tail"},
-	{application.ErrNothingToDeploy, http.StatusConflict, commitResource,
+	{application.ErrNothingToDeploy, http.StatusConflict, savedStateResource,
 		"Nothing to deploy: this saved state is the deployment the project runs"},
 	{application.ErrNoDeploymentToDiscard, http.StatusConflict, projectResource,
 		"Nothing to revert: the project runs no deployment"},
@@ -100,11 +100,11 @@ var errorMappings = []errorMapping{
 		"The Draft cannot be exported: it is not deployable; repair the Draft first"},
 	{application.ErrDeploymentNotDiscardable, http.StatusConflict, deploymentResource,
 		"The Deployment names saved states of Libraries this server does not have; the Draft is left as it is"},
-	{draft.ErrNothingToSave, http.StatusConflict, commitResource,
+	{draft.ErrNothingToSave, http.StatusConflict, savedStateResource,
 		"Nothing to save: the draft has not changed since the last save"},
-	{application.ErrDraftNotSaveable, http.StatusConflict, commitResource,
+	{application.ErrDraftNotSaveable, http.StatusConflict, savedStateResource,
 		"The Draft cannot be saved: it cannot be assembled; repair the Draft first"},
-	{draft.ErrSavedStateNotFound, http.StatusNotFound, commitResource, ""},
+	{draft.ErrSavedStateNotFound, http.StatusNotFound, savedStateResource, ""},
 	{runtimeapp.ErrNothingToRollback, http.StatusConflict, deploymentResource,
 		"Nothing to rollback: the deployment holds the document the project runs"},
 	{runtimeapp.ErrDeploymentNotFound, http.StatusNotFound, deploymentResource, ""},
@@ -179,7 +179,7 @@ func sendError(w http.ResponseWriter, r *http.Request, err error) {
 	// A Draft the builder refuses to save names its reason too.
 	var notSaveable application.DraftNotSaveableError
 	if errors.As(err, &notSaveable) {
-		sendProblem(w, NewConflict(commitResource.name, notSaveable.Reason, r.URL.Path))
+		sendProblem(w, NewConflict(savedStateResource.name, notSaveable.Reason, r.URL.Path))
 		return
 	}
 	// A Discard refused for foreign imports names the missing ones as file_issues.
@@ -193,9 +193,9 @@ func sendError(w http.ResponseWriter, r *http.Request, err error) {
 	}
 	// A saved state named by the request body rather than the path: the 404
 	// names the number the request stated (task 85_6).
-	var missingCommit application.MissingSavedStateError
-	if errors.As(err, &missingCommit) {
-		sendProblem(w, NewNotFound(commitResource.name, strconv.Itoa(missingCommit.Number), r.URL.Path))
+	var missingSavedState application.MissingSavedStateError
+	if errors.As(err, &missingSavedState) {
+		sendProblem(w, NewNotFound(savedStateResource.name, strconv.Itoa(missingSavedState.Number), r.URL.Path))
 		return
 	}
 	if errors.Is(err, application.ErrInvalidInput) || errors.Is(err, runtimeapp.ErrInvalidInput) {

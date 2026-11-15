@@ -172,6 +172,20 @@ func TestProjectFiles_OpenRefusals(t *testing.T) {
 		t.Errorf("the unknown field is not listed: %+v", problem)
 	}
 
+	// A file of before task 88_2 names the saved state of an import "commit":
+	// the strict decode refuses it with file_issues, so an old document is
+	// never read with the import lost (ADR 0026).
+	oldImport := []byte(`{"schema_version":"0.3","project_id":"` + mainProject.String() +
+		`","library_imports":[{"library_id":"` + uuid.NewString() + `","commit":1}]}`)
+	rec = serveRaw(router, http.MethodPost, mainPath+"/projectfile?version="+strconv.Itoa(version), oldImport)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("a file naming library_imports[].commit: %d %s", rec.Code, rec.Body)
+	}
+	problem = decodeBody[apiv0.Problem](t, rec)
+	if len(problem.FileIssues) == 0 || problem.FileIssues[0].Path != "commit" {
+		t.Errorf("the old import field is not named: %+v", problem.FileIssues)
+	}
+
 	if rec := serveRaw(router, http.MethodPost, mainPath+"/projectfile", unknown); rec.Code != http.StatusBadRequest {
 		t.Errorf("a POST without a version: %d, want 400", rec.Code)
 	}
@@ -211,7 +225,7 @@ func TestProjectFiles_DeployFromFileAndRevert(t *testing.T) {
 			TypeID: foreignType.ID,
 		}},
 	})
-	file.LibraryImports = append(file.LibraryImports, projectv0.LibraryImport{LibraryID: foreignLibrary, Commit: 1})
+	file.LibraryImports = append(file.LibraryImports, projectv0.LibraryImport{LibraryID: foreignLibrary, SavedState: 1})
 
 	rec = serve(router, http.MethodPost, mainPath+"/projectfile/deploy", file)
 	if rec.Code != http.StatusCreated {
@@ -228,7 +242,7 @@ func TestProjectFiles_DeployFromFileAndRevert(t *testing.T) {
 	rec = serve(router, http.MethodGet, mainPath+"/deployments", nil)
 	list := decodeBody[apiv0.ListDeploymentsResponse](t, rec)
 	if len(list.Deployments) != 1 || list.Deployments[0].Cause != apiv0.DeploymentCauseFile ||
-		list.Deployments[0].CommitNumber != nil {
+		list.Deployments[0].SavedStateNumber != nil {
 		t.Errorf("the history after a file deploy: %+v", list.Deployments)
 	}
 
@@ -240,7 +254,7 @@ func TestProjectFiles_DeployFromFileAndRevert(t *testing.T) {
 	}
 	discarded := decodeBody[apiv0.DiscardProjectResponse](t, rec)
 	if len(discarded.Warnings) != 1 || discarded.Warnings[0].LibraryID != foreignLibrary ||
-		discarded.Warnings[0].Commit != 1 || discarded.Warnings[0].DroppedWidgets != 1 {
+		discarded.Warnings[0].SavedState != 1 || discarded.Warnings[0].DroppedWidgets != 1 {
 		t.Errorf("the revert's warnings: %+v", discarded.Warnings)
 	}
 	if discarded.Version != before+1 {

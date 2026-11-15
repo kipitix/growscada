@@ -49,11 +49,11 @@ func deployDraft(t *testing.T, project *apiclient.ProjectClient) apiv0.DeployRes
 	if err != nil {
 		t.Fatalf("draft state: %v", err)
 	}
-	commit, err := project.SaveCommit(ctx, apiv0.CreateCommitRequest{Version: state.Version, Title: "Save", Author: "Ada"})
+	commit, err := project.SaveSavedState(ctx, apiv0.CreateSavedStateRequest{Version: state.Version, Title: "Save", Author: "Ada"})
 	if err != nil {
 		t.Fatalf("save commit: %v", err)
 	}
-	deployed, err := project.DeployCommit(ctx, commit.Number)
+	deployed, err := project.DeploySavedState(ctx, commit.Number)
 	if err != nil {
 		t.Fatalf("deploy saved state: %v", err)
 	}

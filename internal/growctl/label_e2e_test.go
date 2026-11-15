@@ -126,10 +126,10 @@ func TestLabelAssign_ProjectAndLibrary(t *testing.T) {
 	if err != nil {
 		t.Fatalf("DraftState: %v", err)
 	}
-	if _, err := libraryClient.SaveCommit(ctx, apiv0.CreateCommitRequest{
+	if _, err := libraryClient.SaveSavedState(ctx, apiv0.CreateSavedStateRequest{
 		Version: state.Version, Title: "First", Author: "Ada",
 	}); err != nil {
-		t.Fatalf("SaveCommit: %v", err)
+		t.Fatalf("SaveSavedState: %v", err)
 	}
 
 	out, _, err = execGrowctl(t, srv, "", "label", "assign", libraryName, "--commit", "1", "--label", name, "--library")

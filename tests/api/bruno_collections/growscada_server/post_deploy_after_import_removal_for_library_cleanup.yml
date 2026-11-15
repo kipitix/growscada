@@ -4,7 +4,7 @@ info:
   seq: 1997
 http:
   method: POST
-  url: http://{{API_SERVER}}/api/v0/projects/{{CLEANUP_PROJECT_ID}}/commits/{{CLEANUP_COMMIT_NUMBER}}/deploy
+  url: http://{{API_SERVER}}/api/v0/projects/{{CLEANUP_PROJECT_ID}}/saved-states/{{CLEANUP_SAVED_STATE_NUMBER}}/deploy
   auth: inherit
 
 docs: |

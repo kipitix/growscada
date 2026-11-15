@@ -13,12 +13,12 @@ import (
 // Deployment: the order a Deploy takes since task 85_4.
 func saveCommitDeploy(t *testing.T, router testRouter, version, commitNumber int) apiv0.DeployResponse {
 	t.Helper()
-	rec := serve(router, http.MethodPost, mainPath+"/commits",
-		apiv0.CreateCommitRequest{Version: version, Title: "Save", Author: "Ada"})
+	rec := serve(router, http.MethodPost, mainPath+"/saved-states",
+		apiv0.CreateSavedStateRequest{Version: version, Title: "Save", Author: "Ada"})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("POST commit: %d %s", rec.Code, rec.Body)
 	}
-	rec = serve(router, http.MethodPost, mainPath+"/commits/"+strconv.Itoa(commitNumber)+"/deploy", nil)
+	rec = serve(router, http.MethodPost, mainPath+"/saved-states/"+strconv.Itoa(commitNumber)+"/deploy", nil)
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("POST commit deploy: %d %s", rec.Code, rec.Body)
 	}
@@ -58,8 +58,8 @@ func TestDeployCommit_DeploymentAndTagStates(t *testing.T) {
 	if deployment.Number != 1 || deployment.DeployedAt == "" || deployment.Content.ProjectID != mainProject {
 		t.Errorf("GET deployment: %+v", deployment)
 	}
-	if deployment.CommitNumber == nil || *deployment.CommitNumber != 1 {
-		t.Errorf("the Deployment names saved state %v, want 1", deployment.CommitNumber)
+	if deployment.SavedStateNumber == nil || *deployment.SavedStateNumber != 1 {
+		t.Errorf("the Deployment names saved state %v, want 1", deployment.SavedStateNumber)
 	}
 	if len(deployment.Content.Tags) == 0 {
 		t.Errorf("the Deployment holds no Tag definitions: %+v", deployment.Content)
@@ -77,13 +77,13 @@ func TestDeployCommit_DeploymentAndTagStates(t *testing.T) {
 		t.Errorf("the initial state of the new Tag: %+v, %v", state, ok)
 	}
 
-	if rec := serve(router, http.MethodPost, mainPath+"/commits/1/deploy", nil); rec.Code != http.StatusConflict {
+	if rec := serve(router, http.MethodPost, mainPath+"/saved-states/1/deploy", nil); rec.Code != http.StatusConflict {
 		t.Errorf("a second Deploy of the same saved state: %d, want 409", rec.Code)
 	}
-	if rec := serve(router, http.MethodPost, mainPath+"/commits/9/deploy", nil); rec.Code != http.StatusNotFound {
+	if rec := serve(router, http.MethodPost, mainPath+"/saved-states/9/deploy", nil); rec.Code != http.StatusNotFound {
 		t.Errorf("a Deploy of a missing saved state: %d, want 404", rec.Code)
 	}
-	if rec := serve(router, http.MethodPost, mainPath+"/commits/abc/deploy", nil); rec.Code != http.StatusBadRequest {
+	if rec := serve(router, http.MethodPost, mainPath+"/saved-states/abc/deploy", nil); rec.Code != http.StatusBadRequest {
 		t.Errorf("a Deploy of a saved state number that is not a number: %d, want 400", rec.Code)
 	}
 	// The Release routes are gone with the Releases: they answer 404, not 410.
@@ -138,8 +138,8 @@ func TestDeployments_ListDetailRollback(t *testing.T) {
 	if list.Deployments[0].RolledBackFrom != nil {
 		t.Errorf("a Deploy names a Deployment it copied: %v", list.Deployments[0].RolledBackFrom)
 	}
-	if list.Deployments[0].CommitNumber == nil || *list.Deployments[0].CommitNumber != 1 {
-		t.Errorf("the Deployment names saved state %v, want 1", list.Deployments[0].CommitNumber)
+	if list.Deployments[0].SavedStateNumber == nil || *list.Deployments[0].SavedStateNumber != 1 {
+		t.Errorf("the Deployment names saved state %v, want 1", list.Deployments[0].SavedStateNumber)
 	}
 
 	if rec := serve(router, http.MethodGet, mainPath+"/deployments/abc", nil); rec.Code != http.StatusBadRequest {
@@ -184,8 +184,8 @@ func TestDeployments_ListDetailRollback(t *testing.T) {
 	if rolled.RolledBackFrom == nil || *rolled.RolledBackFrom != 1 {
 		t.Errorf("the rollback names %v, want deployment 1", rolled.RolledBackFrom)
 	}
-	if rolled.CommitNumber == nil || *rolled.CommitNumber != 1 {
-		t.Errorf("the rollback names saved state %v, want 1", rolled.CommitNumber)
+	if rolled.SavedStateNumber == nil || *rolled.SavedStateNumber != 1 {
+		t.Errorf("the rollback names saved state %v, want 1", rolled.SavedStateNumber)
 	}
 
 	rec = serve(router, http.MethodGet, mainPath+"/deployment", nil)
@@ -239,7 +239,7 @@ func TestDiscardAndRevert(t *testing.T) {
 	router := services.router()
 
 	if rec := serve(router, http.MethodPost, mainPath+"/discard", nil); rec.Code != http.StatusConflict {
-		t.Fatalf("POST discard without a Commit: %d, want 409", rec.Code)
+		t.Fatalf("POST discard without a SavedState: %d, want 409", rec.Code)
 	}
 	if rec := serve(router, http.MethodPost, mainPath+"/revert-to-deployed", nil); rec.Code != http.StatusConflict {
 		t.Fatalf("POST revert without a Deployment: %d, want 409", rec.Code)

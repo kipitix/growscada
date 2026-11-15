@@ -8,7 +8,7 @@ import (
 )
 
 // SavedStateEvent - base interface for the events a saved state records:
-// commit_created and commit_title_updated. It names the Draft's Scope and the
+// saved_state_created and saved_state_title_updated. It names the Draft's Scope and the
 // saved state's number; a Project's saved state event also implements
 // project.ContentEvent, so the event stream routes it to that Project's
 // clients, while a Library's goes to the server's stream like the Library's
@@ -74,13 +74,13 @@ func (librarySavedStateEventImpl) savedStateEvent()        {}
 // Project's.
 func (e librarySavedStateEventImpl) LibraryID() id.ID[library.Library] { return e.libraryID }
 
-// NewSavedStateCreatedEvent returns the commit_created event of the saved state
+// NewSavedStateCreatedEvent returns the saved_state_created event of the saved state
 // number of scope.
 func NewSavedStateCreatedEvent(scope Scope, number int, opts ...event.EventOption) SavedStateCreatedEvent {
 	return newSavedStateEvent(event.EventTypeSavedStateCreated, scope, number, opts...).(SavedStateCreatedEvent)
 }
 
-// NewSavedStateTitleUpdatedEvent returns the commit_title_updated event of the
+// NewSavedStateTitleUpdatedEvent returns the saved_state_title_updated event of the
 // saved state number of scope.
 func NewSavedStateTitleUpdatedEvent(scope Scope, number int, opts ...event.EventOption) SavedStateTitleUpdatedEvent {
 	return newSavedStateEvent(event.EventTypeSavedStateTitleUpdated, scope, number, opts...).(SavedStateTitleUpdatedEvent)

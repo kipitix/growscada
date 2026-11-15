@@ -53,7 +53,7 @@ type Project struct {
 	// it has one; deploymentLoaded is false until the first answer, and
 	// deploymentFailed tells a failed read (the running saved state is then
 	// unknown, not "not deployed"). The saved state it runs is
-	// deployment.CommitNumber (task 85_4).
+	// deployment.SavedStateNumber (task 85_4).
 	deployment       apiv0.DeploymentResponse
 	deployed         bool
 	deploymentLoaded bool
@@ -98,7 +98,7 @@ type Project struct {
 	// false until its first answer. saveDialog is true while the Save dialog
 	// is open, saveTitle and saveAuthor its fields; savingCommit marks the
 	// request in flight.
-	commits         []apiv0.CommitResponse
+	commits         []apiv0.SavedStateResponse
 	commitsLoaded   bool
 	commitsReloader uiutil.Reloader
 	saveDialog      bool
@@ -150,7 +150,7 @@ type Project struct {
 	// importCommitsLoaded is false until its first answer.
 	importDialog          bool
 	importLibraryID       uuid.UUID
-	importCommits         []apiv0.CommitResponse
+	importCommits         []apiv0.SavedStateResponse
 	importCommitsLoaded   bool
 	importCommitsReloader uiutil.Reloader
 	importLabel           uuid.UUID
@@ -165,7 +165,7 @@ type Project struct {
 	// is false until its first answer. A Deploy makes a saved state the running
 	// Deployment (task 85_4).
 	deployDialog          bool
-	deployCommits         []apiv0.CommitResponse
+	deployCommits         []apiv0.SavedStateResponse
 	deployCommitsLoaded   bool
 	deployCommitsReloader uiutil.Reloader
 	deployLabel           uuid.UUID

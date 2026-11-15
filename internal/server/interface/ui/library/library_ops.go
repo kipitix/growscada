@@ -49,9 +49,9 @@ func (l *Library) doLoadSavedState(ctx app.Context, number int) {
 		return
 	}
 	l.loadingSavedState = number
-	callDraft(l, func(c context.Context, draft *apiclient.LibraryClient) (apiv0.LoadCommitResponse, error) {
-		return draft.LoadCommit(c, number)
-	}, func(ctx app.Context, loaded apiv0.LoadCommitResponse) {
+	callDraft(l, func(c context.Context, draft *apiclient.LibraryClient) (apiv0.LoadSavedStateResponse, error) {
+		return draft.LoadSavedState(c, number)
+	}, func(ctx app.Context, loaded apiv0.LoadSavedStateResponse) {
 		l.loadingSavedState = 0
 		l.draftVersions.Forget()
 		l.observeDraftVersion(l.markDraft(), loaded.Version)

@@ -100,12 +100,12 @@ func TestWidgetTypes_RoundTrip(t *testing.T) {
 		t.Fatalf("ListWidgetTypes: %+v, %v", list, err)
 	}
 
-	commit, err := lib.SaveCommit(ctx, apiv0.CreateCommitRequest{Version: updated.Version, Title: "First", Author: "Ada"})
+	commit, err := lib.SaveSavedState(ctx, apiv0.CreateSavedStateRequest{Version: updated.Version, Title: "First", Author: "Ada"})
 	if err != nil {
-		t.Fatalf("SaveCommit: %v", err)
+		t.Fatalf("SaveSavedState: %v", err)
 	}
 	project := client.Project(servertest.MainProject)
-	if _, err := project.ImportLibrary(ctx, lib.ID(), apiv0.PutLibraryImportRequest{Commit: commit.Number}); err != nil {
+	if _, err := project.ImportLibrary(ctx, lib.ID(), apiv0.PutLibraryImportRequest{SavedState: commit.Number}); err != nil {
 		t.Fatalf("ImportLibrary: %v", err)
 	}
 	palette, err := project.ImportedWidgetTypes(ctx)
@@ -156,7 +156,7 @@ func pinnedType(t *testing.T, client *apiclient.Client, req apiv0.CreateWidgetTy
 	if err != nil {
 		t.Fatalf("CreateWidgetType: %v", err)
 	}
-	if _, err := client.Project(servertest.MainProject).ImportLibrary(ctx, lib.ID(), apiv0.PutLibraryImportRequest{Commit: commitOf(t, lib, wt.Version)}); err != nil {
+	if _, err := client.Project(servertest.MainProject).ImportLibrary(ctx, lib.ID(), apiv0.PutLibraryImportRequest{SavedState: commitOf(t, lib, wt.Version)}); err != nil {
 		t.Fatalf("ImportLibrary: %v", err)
 	}
 	return wt
@@ -166,9 +166,9 @@ func pinnedType(t *testing.T, client *apiclient.Client, req apiv0.CreateWidgetTy
 // number.
 func commitOf(t *testing.T, lib *apiclient.LibraryClient, version int) int {
 	t.Helper()
-	commit, err := lib.SaveCommit(context.Background(), apiv0.CreateCommitRequest{Version: version, Title: "Save", Author: "Ada"})
+	commit, err := lib.SaveSavedState(context.Background(), apiv0.CreateSavedStateRequest{Version: version, Title: "Save", Author: "Ada"})
 	if err != nil {
-		t.Fatalf("SaveCommit: %v", err)
+		t.Fatalf("SaveSavedState: %v", err)
 	}
 	return commit.Number
 }
@@ -255,24 +255,24 @@ func TestCommitLabels_ClientRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("DraftState: %v", err)
 	}
-	commit, err := project.SaveCommit(ctx, apiv0.CreateCommitRequest{Version: state.Version, Title: "First", Author: "Ada"})
+	commit, err := project.SaveSavedState(ctx, apiv0.CreateSavedStateRequest{Version: state.Version, Title: "First", Author: "Ada"})
 	if err != nil {
-		t.Fatalf("SaveCommit: %v", err)
+		t.Fatalf("SaveSavedState: %v", err)
 	}
 
 	marks, err := project.AssignLabel(ctx, commit.Number, label.ID)
 	if err != nil || len(marks) != 1 || marks[0].ID != label.ID {
 		t.Fatalf("AssignLabel: %+v, %v", marks, err)
 	}
-	filtered, err := project.CommitsByLabel(ctx, label.ID)
+	filtered, err := project.SavedStatesByLabel(ctx, label.ID)
 	if err != nil || len(filtered) != 1 || filtered[0].Number != commit.Number || len(filtered[0].Labels) != 1 {
-		t.Fatalf("CommitsByLabel: %+v, %v", filtered, err)
+		t.Fatalf("SavedStatesByLabel: %+v, %v", filtered, err)
 	}
 	if left, err := project.UnassignLabel(ctx, commit.Number, label.ID); err != nil || len(left) != 0 {
 		t.Errorf("UnassignLabel: %+v, %v", left, err)
 	}
-	if filtered, err := project.CommitsByLabel(ctx, label.ID); err != nil || len(filtered) != 0 {
-		t.Errorf("CommitsByLabel after the unassignment: %+v, %v", filtered, err)
+	if filtered, err := project.SavedStatesByLabel(ctx, label.ID); err != nil || len(filtered) != 0 {
+		t.Errorf("SavedStatesByLabel after the unassignment: %+v, %v", filtered, err)
 	}
 	if _, err := project.AssignLabel(ctx, commit.Number+1, label.ID); !errors.Is(err, apiclient.ErrNotFound) {
 		t.Errorf("AssignLabel of a missing saved state: %v, want ErrNotFound", err)
@@ -290,17 +290,17 @@ func TestCommitLabels_ClientRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("the library's DraftState: %v", err)
 	}
-	saved, err := lib.SaveCommit(ctx, apiv0.CreateCommitRequest{Version: libraryState.Version, Title: "First", Author: "Ada"})
+	saved, err := lib.SaveSavedState(ctx, apiv0.CreateSavedStateRequest{Version: libraryState.Version, Title: "First", Author: "Ada"})
 	if err != nil {
-		t.Fatalf("the library's SaveCommit: %v", err)
+		t.Fatalf("the library's SaveSavedState: %v", err)
 	}
 	if marks, err := lib.AssignLabel(ctx, saved.Number, label.ID); err != nil || len(marks) != 1 {
 		t.Fatalf("the library's AssignLabel: %+v, %v", marks, err)
 	}
-	if filtered, err := lib.CommitsByLabel(ctx, label.ID); err != nil || len(filtered) != 1 || filtered[0].Number != saved.Number {
-		t.Errorf("the library's CommitsByLabel: %+v, %v", filtered, err)
+	if filtered, err := lib.SavedStatesByLabel(ctx, label.ID); err != nil || len(filtered) != 1 || filtered[0].Number != saved.Number {
+		t.Errorf("the library's SavedStatesByLabel: %+v, %v", filtered, err)
 	}
-	if all, err := project.Commits(ctx); err != nil || len(all) != 1 || len(all[0].Labels) != 0 {
+	if all, err := project.SavedStates(ctx); err != nil || len(all) != 1 || len(all[0].Labels) != 0 {
 		t.Errorf("the project's history after the library's mark: %+v, %v", all, err)
 	}
 }

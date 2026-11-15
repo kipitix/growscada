@@ -12,7 +12,7 @@ import (
 
 // SchemaVersion is the version of the project format this package describes.
 // A function rather than a variable, so no importer can change it.
-func SchemaVersion() contract.SchemaVersion { return contract.SchemaVersion{Major: 0, Minor: 3} }
+func SchemaVersion() contract.SchemaVersion { return contract.SchemaVersion{Major: 0, Minor: 4} }
 
 // Header is the root of every project document: the SchemaVersion the rest
 // of the document follows, and the Project the document configures. A reader
@@ -175,6 +175,6 @@ type InputPort struct {
 // number: the provenance from which Discard restores the Project's imports, and
 // the saved states the copies of the WidgetTypes come from (task 85_6).
 type LibraryImport struct {
-	LibraryID uuid.UUID `json:"library_id"`
-	Commit    int       `json:"commit"`
+	LibraryID  uuid.UUID `json:"library_id"`
+	SavedState int       `json:"saved_state"`
 }

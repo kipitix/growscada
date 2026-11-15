@@ -130,9 +130,9 @@ func TestNewAPIEvent_TranslatesEveryEventType(t *testing.T) {
 		}, ts),
 			apiv0.Event{Type: "deployment_created", ID: projectID.String(), Deployment: 3, DeployedAt: timestamp}},
 		event.EventTypeSavedStateCreated: {draft.NewSavedStateCreatedEvent(draft.ProjectScope(projectID), 2, ts),
-			apiv0.Event{Type: "commit_created", ID: projectID.String(), Commit: 2}},
+			apiv0.Event{Type: "saved_state_created", ID: projectID.String(), SavedState: 2}},
 		event.EventTypeSavedStateTitleUpdated: {draft.NewSavedStateTitleUpdatedEvent(draft.LibraryScope(libraryID), 3, ts),
-			apiv0.Event{Type: "commit_title_updated", ID: libraryID.String(), Commit: 3}},
+			apiv0.Event{Type: "saved_state_title_updated", ID: libraryID.String(), SavedState: 3}},
 		event.EventTypeLabelCreated: {label.NewLabelCreatedEvent(labelID, ts),
 			apiv0.Event{Type: "label_created", ID: labelID.String()}},
 		event.EventTypeLabelUpdated: {label.NewLabelUpdatedEvent(labelID, ts),
@@ -140,9 +140,9 @@ func TestNewAPIEvent_TranslatesEveryEventType(t *testing.T) {
 		event.EventTypeLabelDeleted: {label.NewLabelDeletedEvent(labelID, ts),
 			apiv0.Event{Type: "label_deleted", ID: labelID.String()}},
 		event.EventTypeLabelAssigned: {label.NewLabelAssignedEvent(labelID, draft.ProjectScope(projectID), 4, ts),
-			apiv0.Event{Type: "label_assigned", ID: projectID.String(), Commit: 4, Label: labelID.String()}},
+			apiv0.Event{Type: "label_assigned", ID: projectID.String(), SavedState: 4, Label: labelID.String()}},
 		event.EventTypeLabelUnassigned: {label.NewLabelUnassignedEvent(labelID, draft.LibraryScope(libraryID), 5, ts),
-			apiv0.Event{Type: "label_unassigned", ID: libraryID.String(), Commit: 5, Label: labelID.String()}},
+			apiv0.Event{Type: "label_unassigned", ID: libraryID.String(), SavedState: 5, Label: labelID.String()}},
 	}
 
 	for _, et := range event.AllEventTypes() {

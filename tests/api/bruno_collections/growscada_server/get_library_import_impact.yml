@@ -5,11 +5,11 @@ info:
 
 http:
   method: GET
-  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/library-imports/{{LIBRARY_ID}}/impact?commit=1
+  url: http://{{API_SERVER}}/api/v0/projects/{{PROJECT_ID}}/library-imports/{{LIBRARY_ID}}/impact?saved_state=1
   auth: inherit
 
 docs: |
-  The preview of importing saved state `?commit=` of the library (without it: of
+  The preview of importing saved state `?saved_state=` of the library (without it: of
   removing the import, `404` if the project does not import the library). `orphaned_widgets` would be left without their
   WidgetType and refuse the change (`409`); `broken_bindings` would be removed
   after it.

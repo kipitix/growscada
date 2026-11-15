@@ -18,7 +18,7 @@ import (
 // and raises no Version, because it changes no content.
 //
 // A saved state is immutable: renaming its title returns a new one and records
-// commit_title_updated; its content never changes. A Save that finds the Draft
+// saved_state_title_updated; its content never changes. A Save that finds the Draft
 // at its Clean Version is refused (ErrNothingToSave).
 type SavedState interface {
 	ID() id.ID[SavedState]
@@ -36,7 +36,7 @@ type SavedState interface {
 	Content() SavedStateContent
 
 	// WithTitle returns the saved state with its title changed, recording
-	// commit_title_updated. The content is untouched.
+	// saved_state_title_updated. The content is untouched.
 	WithTitle(aTitle SavedStateTitle) SavedState
 
 	event.Recorder
@@ -59,7 +59,7 @@ var _ SavedState = (*savedStateImpl)(nil)
 
 // NewSavedState returns the saved state of scope at anID, numbered number,
 // saving the Draft at draftVersion with the given content, and records
-// commit_created. Returns an error if the number is not positive or the
+// saved_state_created. Returns an error if the number is not positive or the
 // content does not belong to the scope.
 func NewSavedState(
 	scope Scope,

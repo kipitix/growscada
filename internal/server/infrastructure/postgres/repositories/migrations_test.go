@@ -1071,7 +1071,7 @@ func TestMigrationDeploymentCommitNumber_ReadsTheSavedStatesBack(t *testing.T) {
 		t.Fatalf("migrate the saved state of a Deployment down: %v", err)
 	}
 	// A file Deployment named a Release made from a file, and a file Release
-	// names no Commit: the down restores the commit-backed ones alone (the
+	// names no SavedState: the down restores the commit-backed ones alone (the
 	// file Deploy of task 85_4 leaves no Release to name).
 	for number, want := range map[int]sql.NullInt64{1: {Int64: 1, Valid: true}, 2: {}, 3: {}} {
 		var got sql.NullInt64
@@ -1415,5 +1415,148 @@ func TestMigrationSavedStates_RenamesCommitsAndColumns(t *testing.T) {
 	if err := db.QueryRowContext(ctx,
 		`SELECT commit_number FROM runtime.deployments WHERE project_id = $1`, main).Scan(&deployed); err != nil || deployed != 1 {
 		t.Errorf("the Deployment after the down: commit %d, %v; want 1", deployed, err)
+	}
+}
+
+// TestMigrationSavedStateDocuments_RenamesTheSavedStateKeys: the documents a
+// saved state, a Deployment, the Journal and the Checkpoints store name the
+// saved state of a Library "saved_state", not "commit", and the record names
+// "saved_state_number", not "commit_number" (task 88_2; ADR 0026). Nothing but
+// the names moves: the numbers, the schema versions of the shapes that changed
+// and every other member stay, and the Down puts the old names back over the
+// same rows.
+func TestMigrationSavedStateDocuments_RenamesTheSavedStateKeys(t *testing.T) {
+	ctx := context.Background()
+	db, dir := migrationDB(t)
+	const (
+		main      = "b0000000-0000-4000-8000-0000000000e1"
+		libraryID = "b0000000-0000-4000-8000-0000000000aa"
+	)
+	if err := goose.UpToContext(ctx, db, dir, rolesBaseline); err != nil {
+		t.Fatalf("migrate public: %v", err)
+	}
+	engineering, err := goose.NewProvider(goose.DialectPostgres, db, os.DirFS(filepath.Join(dir, "..", "engineering")),
+		goose.WithTableName("engineering.goose_db_version"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := engineering.UpTo(ctx, 20261114000002); err != nil {
+		t.Fatalf("migrate engineering to the saved states: %v", err)
+	}
+	deployments, err := goose.NewProvider(goose.DialectPostgres, db, os.DirFS(filepath.Join(dir, "..", "runtime")),
+		goose.WithTableName("runtime.goose_db_version"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := deployments.UpTo(ctx, 20261115000000); err != nil {
+		t.Fatalf("migrate runtime to the saved states: %v", err)
+	}
+	mustExec := func(query string, args ...any) {
+		t.Helper()
+		if _, err := db.ExecContext(ctx, query, args...); err != nil {
+			t.Fatalf("%s: %v", query, err)
+		}
+	}
+	mustExec(`INSERT INTO projects (id, organization_id, name)
+	          SELECT $1, id, 'Saved State Documents' FROM organizations`, main)
+	draftID, savedStateID := uuid.New(), uuid.New()
+	mustExec(`INSERT INTO engineering.drafts (id, project_id, version) VALUES ($1, $2, 1)`, draftID, main)
+	mustExec(`INSERT INTO engineering.commits (id, draft_id, number, title, author, created_at, draft_version, content)
+	          VALUES ($1, $2, 1, 'Save', 'Ada', now(), 1,
+	                  '{"format": 1, "kind": "project", "project_file": {"schema_version": "0.3", "project_id": "`+main+`", "library_imports": [{"library_id": "`+libraryID+`", "commit": 1}]}}'::jsonb)`,
+		savedStateID, draftID)
+	mustExec(`INSERT INTO runtime.deployments (project_id, number, deployed_at, cause, commit_number, config)
+	          VALUES ($1, 1, now(), 'deploy', 1,
+	                  '{"schema_version": "0.3", "project_id": "`+main+`", "library_imports": [{"library_id": "`+libraryID+`", "commit": 1}]}'::jsonb)`, main)
+	mustExec(`INSERT INTO runtime.journal (project_id, ts, type, payload, schema_version)
+	          VALUES ($1, now(), 'deployment', '{"number": 1, "cause": "deploy", "commit_number": 1}', '0.6'),
+	                 ($1, now(), 'deployment', '{"number": 2, "cause": "file"}', '0.6')`, main)
+	mustExec(`INSERT INTO runtime.checkpoints (project_id, seq, taken_at, schema_version, payload)
+	          VALUES ($1, 1, now(), '0.6', '{"deployment": {"number": 1, "cause": "deploy", "commit_number": 1}, "tag_states": []}'),
+	                 ($1, 2, now(), '0.6', '{"deployment": {"number": 2, "cause": "file"}, "tag_states": []}')`, main)
+
+	if _, err := engineering.UpTo(ctx, 20261116000001); err != nil {
+		t.Fatalf("migrate the saved state documents: %v", err)
+	}
+	if _, err := deployments.UpTo(ctx, 20261116000001); err != nil {
+		t.Fatalf("migrate the saved state documents of the runtime: %v", err)
+	}
+
+	var content, config, journal, checkpoints string
+	if err := db.QueryRowContext(ctx, `SELECT content::text FROM engineering.saved_states WHERE id = $1`, savedStateID).Scan(&content); err != nil {
+		t.Fatalf("read the saved state: %v", err)
+	}
+	if err := db.QueryRowContext(ctx, `SELECT config::text FROM runtime.deployments WHERE project_id = $1`, main).Scan(&config); err != nil {
+		t.Fatalf("read the deployment: %v", err)
+	}
+	if err := db.QueryRowContext(ctx,
+		`SELECT string_agg(payload::text, ' ' ORDER BY seq) FROM runtime.journal WHERE project_id = $1`, main).Scan(&journal); err != nil {
+		t.Fatalf("read the journal: %v", err)
+	}
+	if err := db.QueryRowContext(ctx,
+		`SELECT string_agg(payload::text, ' ' ORDER BY seq) FROM runtime.checkpoints WHERE project_id = $1`, main).Scan(&checkpoints); err != nil {
+		t.Fatalf("read the checkpoints: %v", err)
+	}
+	for what, document := range map[string]string{"the saved state": content, "the deployment": config} {
+		if !strings.Contains(document, `"saved_state"`) {
+			t.Errorf("%s does not name the saved state of the import: %s", what, document)
+		}
+		if strings.Contains(document, `"commit"`) {
+			t.Errorf("%s still names a commit: %s", what, document)
+		}
+	}
+	for what, document := range map[string]string{"the saved state": content, "the deployment": config} {
+		if !strings.Contains(document, `"schema_version": "0.4"`) {
+			t.Errorf("%s does not carry the project's 0.4: %s", what, document)
+		}
+	}
+	if strings.Contains(journal, `"commit_number"`) || !strings.Contains(journal, `"saved_state_number": 1`) {
+		t.Errorf("the journal does not name saved_state_number: %s", journal)
+	}
+	if strings.Contains(checkpoints, `"commit_number"`) || !strings.Contains(checkpoints, `"saved_state_number": 1`) {
+		t.Errorf("the checkpoints do not name saved_state_number: %s", checkpoints)
+	}
+	var journalVersions, checkpointVersions string
+	if err := db.QueryRowContext(ctx,
+		`SELECT string_agg(schema_version, ' ' ORDER BY seq) FROM runtime.journal WHERE project_id = $1`, main).Scan(&journalVersions); err != nil {
+		t.Fatalf("read the journal versions: %v", err)
+	}
+	if journalVersions != "0.7 0.6" {
+		t.Errorf("the journal versions %q, want the changed entry at 0.7 and the file Deployment's at 0.6", journalVersions)
+	}
+	if err := db.QueryRowContext(ctx,
+		`SELECT string_agg(schema_version, ' ' ORDER BY seq) FROM runtime.checkpoints WHERE project_id = $1`, main).Scan(&checkpointVersions); err != nil {
+		t.Fatalf("read the checkpoint versions: %v", err)
+	}
+	if checkpointVersions != "0.7 0.6" {
+		t.Errorf("the checkpoint versions %q, want the changed one at 0.7 and the file Deployment's at 0.6", checkpointVersions)
+	}
+
+	// Down: the old names come back over the same rows.
+	if _, err := deployments.DownTo(ctx, 20261116000000); err != nil {
+		t.Fatalf("down the saved state documents of the runtime: %v", err)
+	}
+	if _, err := engineering.DownTo(ctx, 20261116000000); err != nil {
+		t.Fatalf("down the saved state documents: %v", err)
+	}
+	if err := db.QueryRowContext(ctx, `SELECT content::text FROM engineering.saved_states WHERE id = $1`, savedStateID).Scan(&content); err != nil {
+		t.Fatalf("read the saved state after the down: %v", err)
+	}
+	if err := db.QueryRowContext(ctx, `SELECT config::text FROM runtime.deployments WHERE project_id = $1`, main).Scan(&config); err != nil {
+		t.Fatalf("read the deployment after the down: %v", err)
+	}
+	if err := db.QueryRowContext(ctx,
+		`SELECT string_agg(payload::text, ' ' ORDER BY seq) FROM runtime.journal WHERE project_id = $1`, main).Scan(&journal); err != nil {
+		t.Fatalf("read the journal after the down: %v", err)
+	}
+	for what, document := range map[string]string{
+		"the saved state": content, "the deployment": config, "the journal": journal,
+	} {
+		if !strings.Contains(document, `"commit"`) && !strings.Contains(document, `"commit_number"`) {
+			t.Errorf("%s after the down names no commit: %s", what, document)
+		}
+		if strings.Contains(document, `"saved_state"`) {
+			t.Errorf("%s after the down still names a saved state: %s", what, document)
+		}
 	}
 }

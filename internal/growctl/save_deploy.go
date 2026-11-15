@@ -86,24 +86,24 @@ func (t workflowTarget) draftVersion(ctx context.Context) (int, error) {
 }
 
 // save fixes the target's Draft as the next saved state under title and author.
-func (t workflowTarget) save(ctx context.Context, title, author string) (apiv0.CommitResponse, error) {
+func (t workflowTarget) save(ctx context.Context, title, author string) (apiv0.SavedStateResponse, error) {
 	version, err := t.draftVersion(ctx)
 	if err != nil {
-		return apiv0.CommitResponse{}, err
+		return apiv0.SavedStateResponse{}, err
 	}
-	req := apiv0.CreateCommitRequest{Version: version, Title: title, Author: author}
+	req := apiv0.CreateSavedStateRequest{Version: version, Title: title, Author: author}
 	if t.kind == "project" {
-		return t.project.SaveCommit(ctx, req)
+		return t.project.SaveSavedState(ctx, req)
 	}
-	return t.library.SaveCommit(ctx, req)
+	return t.library.SaveSavedState(ctx, req)
 }
 
 // commits returns the target's saved state history, newest first.
-func (t workflowTarget) commits(ctx context.Context) ([]apiv0.CommitResponse, error) {
+func (t workflowTarget) commits(ctx context.Context) ([]apiv0.SavedStateResponse, error) {
 	if t.kind == "project" {
-		return t.project.Commits(ctx)
+		return t.project.SavedStates(ctx)
 	}
-	return t.library.Commits(ctx)
+	return t.library.SavedStates(ctx)
 }
 
 // resolveAuthor returns the author a Save records: --author, else
@@ -190,7 +190,7 @@ func newDeployCommand(s *settings) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			deployed, err := target.project.DeployCommit(cmd.Context(), commit)
+			deployed, err := target.project.DeploySavedState(cmd.Context(), commit)
 			if err != nil {
 				return fmt.Errorf("%s: %w", target.ref(), err)
 			}

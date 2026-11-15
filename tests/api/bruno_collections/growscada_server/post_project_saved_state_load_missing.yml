@@ -1,0 +1,28 @@
+info:
+  name: load a saved state the project does not have
+  type: http
+  seq: 2005
+
+http:
+  method: POST
+  url: http://{{API_SERVER}}/api/v0/projects/{{CLEANUP_PROJECT_ID}}/saved-states/999/load
+  auth: inherit
+
+docs: |
+  A number the Draft does not have is 404 saved_state_not_found, as a read of it is
+  (task 84): nothing of the Draft changes.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '404'
+    - expression: 'res.headers["content-type"]'
+      operator: eq
+      value: '"application/problem+json"'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

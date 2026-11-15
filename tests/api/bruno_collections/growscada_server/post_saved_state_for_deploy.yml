@@ -1,0 +1,43 @@
+info:
+  name: save the draft as a saved state before the deploy
+  type: http
+  seq: 41
+
+http:
+  method: POST
+  url: http://{{API_SERVER}}/api/v0/projects/{{OTHER_PROJECT_ID}}/saved-states
+  body:
+    type: json
+    data: |-
+      {
+        "version": {{OTHER_DRAFT_VERSION}},
+        "title": "Before the deploy",
+        "author": "Ada"
+      }
+  auth: inherit
+
+docs: |
+  A Deploy takes a saved state — a saved state (task 85_4;
+  ADR 0021): this Save fixes the Draft as saved state 1.
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '201'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.number'
+      operator: eq
+      value: '1'
+
+  scripts:
+    - type: after-response
+      code: |-
+        bru.setVar("OTHER_SAVED_STATE_NUMBER", res.body.number)
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

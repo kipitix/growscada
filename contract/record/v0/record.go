@@ -14,7 +14,7 @@ import (
 // SchemaVersion is the version of the operational record format this package
 // describes.
 // A function rather than a variable, so no importer can change it.
-func SchemaVersion() contract.SchemaVersion { return contract.SchemaVersion{Major: 0, Minor: 6} }
+func SchemaVersion() contract.SchemaVersion { return contract.SchemaVersion{Major: 0, Minor: 7} }
 
 // Header is the root of every record document: the SchemaVersion the rest of
 // the document follows. A reader checks it before anything else.
@@ -113,14 +113,44 @@ type TagState struct {
 
 // Deployment is the payload of a deployment entry: the Deployment that appeared.
 // The document itself is not part of the record — it is immutable in the
-// Runtime node's store, and the number addresses it (ADR 0014). CommitNumber is
-// the saved state the Deployment made running (task 85_4); absent for a
-// Deployment from a file or one made before saved states were deployed.
+// Runtime node's store, and the number addresses it (ADR 0014).
+// SavedStateNumber is the saved state the Deployment made running (task 85_4);
+// absent for a Deployment from a file or one made before saved states were
+// deployed.
 type Deployment struct {
-	Number         int             `json:"number"`
-	Cause          DeploymentCause `json:"cause"`
-	RolledBackFrom *int            `json:"rolled_back_from,omitempty"`
-	CommitNumber   *int            `json:"commit_number,omitempty"`
+	Number           int             `json:"number"`
+	Cause            DeploymentCause `json:"cause"`
+	RolledBackFrom   *int            `json:"rolled_back_from,omitempty"`
+	SavedStateNumber *int            `json:"saved_state_number,omitempty"`
+}
+
+// UnmarshalJSON reads a Deployment as it is, accepting the name its saved state
+// number had before task 88_2: a member "commit_number" is read as
+// SavedStateNumber, so a Journal row or a Checkpoint written before the rename
+// still reads. A Deployment written now carries only "saved_state_number".
+func (d *Deployment) UnmarshalJSON(data []byte) error {
+	type deploymentJSON struct {
+		Number           int             `json:"number"`
+		Cause            DeploymentCause `json:"cause"`
+		RolledBackFrom   *int            `json:"rolled_back_from,omitempty"`
+		SavedStateNumber *int            `json:"saved_state_number,omitempty"`
+		LegacyNumber     *int            `json:"commit_number,omitempty"`
+	}
+	var raw deploymentJSON
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	number := raw.SavedStateNumber
+	if number == nil {
+		number = raw.LegacyNumber
+	}
+	*d = Deployment{
+		Number:           raw.Number,
+		Cause:            raw.Cause,
+		RolledBackFrom:   raw.RolledBackFrom,
+		SavedStateNumber: number,
+	}
+	return nil
 }
 
 // Checkpoint is an immutable snapshot of a Project's operational state at a

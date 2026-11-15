@@ -288,7 +288,7 @@ func StartAPI(t *testing.T, db *sql.DB) (*httptest.Server, application.TagServic
 		DraftChanges:   application.NewDraftChangesService(content, libraryContent),
 		Discard:        application.NewDiscardService(content, runtimeNode, libraries),
 		ProjectFiles:   application.NewProjectFileService(content, application.NewProjectFileBuilder(content), runtimeNode, libraries),
-		Commits:        application.NewSavedStateService(content, libraryContent, application.NewProjectFileBuilder(content), widgetTypes, labelService),
+		SavedStates:    application.NewSavedStateService(content, libraryContent, application.NewProjectFileBuilder(content), widgetTypes, labelService),
 		Settings:       application.NewSettingsService(repositories.NewUserSettingsRepositoryPostgres(db), settings.SingleUser(), orgID),
 		Labels:         labelService,
 		Deploy:         application.NewDeployService(content, runtimeNode),

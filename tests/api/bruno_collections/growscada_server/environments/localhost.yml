@@ -53,20 +53,20 @@ variables:
   # The Draft Versions the Save requests state (task 72_2): the requests set
   # them from the draft reads that precede them; the values here are what the
   # static check substitutes.
-  - name: PROJECT_COMMIT_VERSION
+  - name: PROJECT_SAVED_STATE_VERSION
     value: '1'
-  - name: LIBRARY_COMMIT_VERSION
+  - name: LIBRARY_SAVED_STATE_VERSION
     value: '1'
-  # The Commit the library import flow names (task 85_6): the request sets it
-  # from the Commit's response.
-  - name: LIBRARY_IMPORT_COMMIT
+  # The saved state the library import flow names (task 85_6): the request sets it
+  # from the saved state's response.
+  - name: LIBRARY_IMPORT_SAVED_STATE
     value: '1'
-  # The Draft Versions and Commit numbers of the Deploy flows (task 85_4): the
+  # The Draft Versions and saved state numbers of the Deploy flows (task 85_4): the
   # requests set them from their responses; the values here are what the static
   # check substitutes.
   - name: OTHER_DRAFT_VERSION
     value: '1'
-  - name: OTHER_COMMIT_NUMBER
+  - name: OTHER_SAVED_STATE_NUMBER
     value: '1'
   # The Project, Library and Draft Version of the library-cleanup flow
   # (task 71): the requests set them from their responses; the values here are
@@ -77,13 +77,13 @@ variables:
     value: d0000000-0000-4000-8000-0000000000f4
   - name: CLEANUP_DRAFT_VERSION
     value: '3'
-  - name: CLEANUP_COMMIT_NUMBER
+  - name: CLEANUP_SAVED_STATE_NUMBER
     value: '1'
-  # The cleanup library's Draft Version and the Commit its import names
+  # The cleanup library's Draft Version and the saved state its import names
   # (task 85_6): the requests set them from their responses.
   - name: CLEANUP_LIBRARY_DRAFT_VERSION
     value: '2'
-  - name: CLEANUP_LIBRARY_COMMIT
+  - name: CLEANUP_LIBRARY_SAVED_STATE
     value: '1'
   # The label the labels flow creates (task 85_2): post_label sets it from its
   # response; the value here is what the static check substitutes.

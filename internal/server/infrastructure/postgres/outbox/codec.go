@@ -53,14 +53,25 @@ type payload struct {
 	EnvironmentID *uuid.UUID `json:"environment_id,omitempty"`
 	DeviceID      *uuid.UUID `json:"device_id,omitempty"`
 	// SavedState is the number of the saved state of the created and the
-	// renamed saved state events. The stored name of the field stays "commit"
-	// (task 88_1): a row written before the rename may still be in the outbox,
-	// and it changes with the event types (task 88_2).
-	SavedState int `json:"commit,omitempty"`
+	// renamed saved state events, and of the label assignments.
+	SavedState int `json:"saved_state,omitempty"`
+	// LegacySavedState is the name the field had before task 88_2: a row
+	// written before the rename may still be in the outbox, and it keeps
+	// decoding the previous form until the outbox has drained.
+	LegacySavedState int `json:"commit,omitempty"`
 	// LabelID is the label of a label_assigned or label_unassigned event: its
 	// ID is the scope's (a Project's or a Library's), so the label is named
 	// beside it (task 85_3).
 	LabelID *uuid.UUID `json:"label_id,omitempty"`
+}
+
+// savedStateNumber is the saved state the payload names, under either stored
+// name the outbox has used.
+func (p payload) savedStateNumber() int {
+	if p.SavedState != 0 {
+		return p.SavedState
+	}
+	return p.LegacySavedState
 }
 
 // Encode returns the stored form of a domain event. Events of delivery
@@ -171,9 +182,9 @@ func Decode(eventType event.EventType, data []byte) (event.Event, error) {
 			return nil, fmt.Errorf("cannot decode %s payload: no project_id or library_id", eventType)
 		}
 		if eventType == event.EventTypeSavedStateCreated {
-			return draft.NewSavedStateCreatedEvent(scope, p.SavedState, ts), nil
+			return draft.NewSavedStateCreatedEvent(scope, p.savedStateNumber(), ts), nil
 		}
-		return draft.NewSavedStateTitleUpdatedEvent(scope, p.SavedState, ts), nil
+		return draft.NewSavedStateTitleUpdatedEvent(scope, p.savedStateNumber(), ts), nil
 	case event.EventTypeWidgetTypeCreated, event.EventTypeWidgetTypeUpdated, event.EventTypeWidgetTypeDeleted:
 		if p.LibraryID == nil {
 			return nil, fmt.Errorf("cannot decode %s payload: no library_id", eventType)
@@ -224,9 +235,9 @@ func Decode(eventType event.EventType, data []byte) (event.Event, error) {
 			return nil, fmt.Errorf("cannot decode %s payload: no project_id or library_id", eventType)
 		}
 		if eventType == event.EventTypeLabelAssigned {
-			return label.NewLabelAssignedEvent(labelOfEvent, scope, p.SavedState, ts), nil
+			return label.NewLabelAssignedEvent(labelOfEvent, scope, p.savedStateNumber(), ts), nil
 		}
-		return label.NewLabelUnassignedEvent(labelOfEvent, scope, p.SavedState, ts), nil
+		return label.NewLabelUnassignedEvent(labelOfEvent, scope, p.savedStateNumber(), ts), nil
 	}
 
 	// Events of a Project's content: the Project is stored beside them.

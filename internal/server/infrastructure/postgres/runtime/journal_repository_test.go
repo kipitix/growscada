@@ -283,9 +283,9 @@ func TestCreateDeployment_RecordsADeploymentEntry(t *testing.T) {
 			(payload.RolledBackFrom != nil && *payload.RolledBackFrom != *want.from) {
 			t.Errorf("entry %d: rolled back from %v, want %v", i, payload.RolledBackFrom, want.from)
 		}
-		if (payload.CommitNumber == nil) != (want.savedState == nil) ||
-			(payload.CommitNumber != nil && *payload.CommitNumber != *want.savedState) {
-			t.Errorf("entry %d: release %v, want %v", i, payload.CommitNumber, want.savedState)
+		if (payload.SavedStateNumber == nil) != (want.savedState == nil) ||
+			(payload.SavedStateNumber != nil && *payload.SavedStateNumber != *want.savedState) {
+			t.Errorf("entry %d: release %v, want %v", i, payload.SavedStateNumber, want.savedState)
 		}
 		if got := entry.Timestamp.UTC(); !got.Equal(want.at) {
 			t.Errorf("entry %d at %s, want the Deployment's %s", i, got, want.at)

@@ -65,7 +65,7 @@ func isProjectContent(ev apiv0.Event) bool {
 		apiv0.EventEnvironmentCreated, apiv0.EventEnvironmentUpdated, apiv0.EventEnvironmentDeleted,
 		apiv0.EventEnvironmentDeviceCreated, apiv0.EventEnvironmentDeviceUpdated, apiv0.EventEnvironmentDeviceDeleted,
 		apiv0.EventDeploymentCreated,
-		apiv0.EventCommitCreated, apiv0.EventCommitTitleUpdated:
+		apiv0.EventSavedStateCreated, apiv0.EventSavedStateTitleUpdated:
 		return true
 	}
 	switch eventTypeInfoByType[ev.Type].category {
@@ -130,8 +130,8 @@ var eventTypeInfoByType = map[string]eventTypeInfo{
 
 	apiv0.EventDeploymentCreated: {categoryProject, "Project deployed"},
 
-	apiv0.EventCommitCreated:      {categoryProject, "Saved state %s saved"},
-	apiv0.EventCommitTitleUpdated: {categoryProject, "Saved state %s retitled"},
+	apiv0.EventSavedStateCreated:      {categoryProject, "Saved state %s saved"},
+	apiv0.EventSavedStateTitleUpdated: {categoryProject, "Saved state %s retitled"},
 
 	// The labels are the Organization's, never content of a project (task 85_2;
 	// ADR 0025).

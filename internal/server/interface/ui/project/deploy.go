@@ -127,7 +127,7 @@ func (p *Project) loadDeploy(ctx app.Context) {
 //
 // The window lists the saved states of the Draft, newest first, and makes one
 // of them the running Deployment. The label filter is the server's:
-// GET …/commits?label=<id>, so the same filter serves growctl and Bruno.
+// GET …/saved-states?label=<id>, so the same filter serves growctl and Bruno.
 
 // openDeployDialog shows the saved states, read afresh, with the labels the
 // filter offers: the window is the only place a Deploy is chosen from.
@@ -157,16 +157,16 @@ func (p *Project) loadDeployCommits(ctx app.Context) {
 	}
 	uiutil.LoadForGone(ctx, &p.deployCommitsReloader,
 		func() deployListKey { return deployListKey{content: p.content, label: p.deployLabel} },
-		func(c context.Context, k deployListKey) ([]apiv0.CommitResponse, error) {
+		func(c context.Context, k deployListKey) ([]apiv0.SavedStateResponse, error) {
 			if k.content == nil {
 				return nil, nil
 			}
 			if k.label == uuid.Nil {
-				return k.content.Commits(c)
+				return k.content.SavedStates(c)
 			}
-			return k.content.CommitsByLabel(c, k.label)
+			return k.content.SavedStatesByLabel(c, k.label)
 		},
-		func(ctx app.Context, _ deployListKey, commits []apiv0.CommitResponse) {
+		func(ctx app.Context, _ deployListKey, commits []apiv0.SavedStateResponse) {
 			p.deployCommits, p.deployCommitsLoaded = commits, true
 		},
 		func(ctx app.Context, k deployListKey) {
@@ -210,8 +210,8 @@ func (p *Project) resetDeployLabelIfGone(ctx app.Context) {
 // while the Deployment cannot be read: the window says so rather than mark a
 // row from a stale answer (task 85_5).
 func (p *Project) isRunningSavedState(number int) bool {
-	return !p.deploymentFailed && p.deployed && p.deployment.CommitNumber != nil &&
-		*p.deployment.CommitNumber == number
+	return !p.deploymentFailed && p.deployed && p.deployment.SavedStateNumber != nil &&
+		*p.deployment.SavedStateNumber == number
 }
 
 // deploySavedState makes saved state number the running Deployment, after the
@@ -235,7 +235,7 @@ func (p *Project) doDeploySavedState(ctx app.Context, number int) {
 	}
 	p.deploying = true
 	callContent(p, func(c context.Context, pc *apiclient.ProjectClient) (apiv0.DeployResponse, error) {
-		return pc.DeployCommit(c, number)
+		return pc.DeploySavedState(c, number)
 	}, func(ctx app.Context, deployed apiv0.DeployResponse) {
 		p.deploying = false
 		ctx.NewActionWithValue(toast.ActionAdd, toast.Problem{Problem: apiv0.Problem{
@@ -278,7 +278,7 @@ func nothingToDeploy(err error) bool {
 // downloadCommitProjectFile downloads the ProjectFile a saved state fixed.
 func (p *Project) downloadCommitProjectFile(ctx app.Context, number int) {
 	callContent(p, func(c context.Context, pc *apiclient.ProjectClient) (apiclient.ProjectFileDownload, error) {
-		return pc.CommitProjectFile(c, number)
+		return pc.SavedStateProjectFile(c, number)
 	}, func(ctx app.Context, download apiclient.ProjectFileDownload) {
 		saveProjectFile(download.Filename, download.Data)
 		ctx.Update()
@@ -300,7 +300,7 @@ func (p *Project) renderDeployDialog() app.UI {
 			Style("margin", "0 0 6px").
 			Style("color", "var(--toast-warn-title)").
 			Text("The running saved state cannot be checked: the Deployment of the project cannot be read."))
-	case p.deployed && p.deployment.CommitNumber == nil:
+	case p.deployed && p.deployment.SavedStateNumber == nil:
 		rows = append(rows, app.P().
 			Attr("data-saved-state-running-deployment", "true").
 			Style("margin", "0 0 6px").
@@ -420,7 +420,7 @@ func (p *Project) renderDeployLabelFilter() app.UI {
 // renderDeployRow is one saved state of the window: its number, title, author,
 // time, counts and labels, the download of its ProjectFile and the Deploy —
 // which the running one does not offer.
-func (p *Project) renderDeployRow(saved apiv0.CommitResponse) app.UI {
+func (p *Project) renderDeployRow(saved apiv0.SavedStateResponse) app.UI {
 	number := fmt.Sprint(saved.Number)
 	body := []app.UI{
 		app.Strong().Text(fmt.Sprintf("#%d ", saved.Number)),
@@ -507,9 +507,9 @@ func (p *Project) doLoadSavedState(ctx app.Context, number int) {
 	}
 	p.loadingSavedState = number
 	mark := p.markDraft()
-	callContent(p, func(c context.Context, pc *apiclient.ProjectClient) (apiv0.LoadCommitResponse, error) {
-		return pc.LoadCommit(c, number)
-	}, func(ctx app.Context, loaded apiv0.LoadCommitResponse) {
+	callContent(p, func(c context.Context, pc *apiclient.ProjectClient) (apiv0.LoadSavedStateResponse, error) {
+		return pc.LoadSavedState(c, number)
+	}, func(ctx app.Context, loaded apiv0.LoadSavedStateResponse) {
 		p.loadingSavedState = 0
 		p.observeDraftVersion(mark, loaded.Version)
 		// The server's Draft state says whether the loaded saved state is the
@@ -560,7 +560,7 @@ func (p *Project) showLoadWarnings(ctx app.Context, warnings []apiv0.DiscardWarn
 	parts := make([]string, len(warnings))
 	for i, warning := range warnings {
 		parts[i] = fmt.Sprintf("library %s saved state %d: %d widgets dropped",
-			warning.LibraryID, warning.Commit, warning.DroppedWidgets)
+			warning.LibraryID, warning.SavedState, warning.DroppedWidgets)
 	}
 	ctx.NewActionWithValue(toast.ActionAdd, toast.Problem{Problem: apiv0.Problem{
 		Title:  "Restored without some Library Imports",
@@ -573,10 +573,10 @@ func (p *Project) showLoadWarnings(ctx app.Context, warnings []apiv0.DiscardWarn
 func (p *Project) renderDeployBar() app.UI {
 	badge := "Not deployed"
 	switch {
-	case p.deployed && p.deployment.CommitNumber != nil:
+	case p.deployed && p.deployment.SavedStateNumber != nil:
 		// The saved state is what people choose and name; the Deployment
 		// number stays in the Deployments history and the detail (task 85_4).
-		badge = fmt.Sprintf("Saved state #%d · running", *p.deployment.CommitNumber)
+		badge = fmt.Sprintf("Saved state #%d · running", *p.deployment.SavedStateNumber)
 	case p.deployed:
 		badge = fmt.Sprintf("Deployment %d · no saved state", p.deployment.Number)
 	case p.deploymentFailed:
@@ -740,12 +740,12 @@ func (p *Project) renderDeploymentRow(deployment apiv0.DeploymentSummaryResponse
 		app.Span().Text(fmt.Sprintf("#%d · %s · %s",
 			deployment.Number, formatDeployedAt(deployment.DeployedAt), deploymentCauseText(deployment.Cause, deployment.RolledBackFrom))),
 	}
-	if deployment.CommitNumber != nil {
+	if deployment.SavedStateNumber != nil {
 		body = append(body, app.Span().
 			Style("margin-left", "8px").
 			Style("font-size", "11px").
 			Style("color", "var(--text-muted)").
-			Text(fmt.Sprintf("Saved state #%d", *deployment.CommitNumber)))
+			Text(fmt.Sprintf("Saved state #%d", *deployment.SavedStateNumber)))
 	}
 	if p.isCurrentDeployment(deployment.Number) {
 		body = append(body, app.Span().
@@ -802,8 +802,8 @@ func (p *Project) renderDeploymentSummary() app.UI {
 	}
 	cause := fmt.Sprintf("Deployment %d · %s · %s",
 		detail.Number, formatDeployedAt(detail.DeployedAt), deploymentCauseText(detail.Cause, detail.RolledBackFrom))
-	if detail.CommitNumber != nil {
-		cause += fmt.Sprintf(" · Saved state #%d", *detail.CommitNumber)
+	if detail.SavedStateNumber != nil {
+		cause += fmt.Sprintf(" · Saved state #%d", *detail.SavedStateNumber)
 	}
 	return app.Div().
 		Attr("data-deployment-summary", "true").
