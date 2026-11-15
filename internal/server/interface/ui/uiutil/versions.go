@@ -24,6 +24,11 @@ import "github.com/google/uuid"
 // miss the id without meaning it was deleted — it was created or written
 // after the list was sent (KnownAfter).
 //
+// A response is behind (Behind) when it states an older version than the known
+// one, or was forgotten since it was sent: its state is not newer than what is
+// kept, so it does not replace it. A response stating the known version is not
+// behind, whatever read observed that version first.
+//
 // The zero value is empty and ready to use, on the UI goroutine only.
 type Versions struct {
 	known map[uuid.UUID]int
@@ -73,6 +78,16 @@ func (v *Versions) Advance(m Mark, id uuid.UUID, version int) bool {
 	}
 	v.known[id] = version
 	return true
+}
+
+// Behind reports whether version, stated by the response to the request sent
+// at m, is older than the known state of id or was forgotten since m: what is
+// kept along with the version is as new as the response or newer, so the
+// response does not replace it. A response stating the known version is not
+// behind — it is that very state, however a later read of it observed the
+// version first.
+func (v *Versions) Behind(m Mark, id uuid.UUID, version int) bool {
+	return v.Forgotten(m, id) || version < v.known[id]
 }
 
 // Touch records that id exists as of now: a write created it or wrote it. A

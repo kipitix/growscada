@@ -259,11 +259,17 @@ func (p *Project) setScenes(ctx app.Context, mark uiutil.Mark, replacements uint
 	// may have changed: they are read again.
 	fresh := len(scenes) > 0 && p.draftVersions.Advance(mark, p.projectID, scenes[0].Version)
 	reread := fresh || replaced
+	// The list replaces the Scenes shown unless it is behind the known state:
+	// such a list only brings the ids it names. A list stating the known
+	// Version is the server's own — another read may have stated that Version
+	// first, the Draft's state on a resync, say — and replaces what is shown;
+	// an empty list states no Version and is treated as behind.
+	merge := !replaced && (len(scenes) == 0 || p.draftVersions.Behind(mark, p.projectID, scenes[0].Version))
 
 	merged := make([]apiv0.SceneResponse, len(scenes))
 	listed := make(map[uuid.UUID]struct{}, len(scenes))
 	for i, sc := range scenes {
-		if !reread {
+		if merge {
 			// A local copy is as new as the response or newer: a Scene
 			// written since states the newer name and size.
 			if cur, ok := p.findScene(sc.ID); ok {
@@ -273,7 +279,7 @@ func (p *Project) setScenes(ctx app.Context, mark uiutil.Mark, replacements uint
 		merged[i] = sc
 		listed[sc.ID] = struct{}{}
 	}
-	if !reread {
+	if merge {
 		// A Scene the response misses was created after it was requested: it
 		// is kept, at the end, until a list that names it arrives.
 		for _, sc := range p.scenes {
@@ -373,8 +379,13 @@ func (p *Project) setWidgets(ctx app.Context, mark uiutil.Mark, sceneID uuid.UUI
 	if oldSingle {
 		old, known = p.findWidget(oldID)
 	}
-	fresh := len(widgets) > 0 && p.draftVersions.Advance(mark, p.projectID, widgets[0].Version)
-	p.widgets = p.mergedWithKnownWidgets(mark, fresh, widgets)
+	// A list behind the known state may be behind this client's Widgets too:
+	// it only brings the ids it names, while one stating the known Version is
+	// the server's own (a Scene reread or the Draft's state may have observed
+	// that Version first). An empty list states no Version and is treated as
+	// behind.
+	behind := len(widgets) == 0 || p.draftVersions.Behind(mark, p.projectID, widgets[0].Version)
+	p.widgets = p.mergedWithKnownWidgets(mark, !behind, widgets)
 
 	// Widgets carry the Draft's Version; with none, the Scene is reread for
 	// it, which also keeps an empty Scene's state in step.
@@ -402,13 +413,13 @@ func (p *Project) setWidgets(ctx app.Context, mark uiutil.Mark, sceneID uuid.UUI
 }
 
 // mergedWithKnownWidgets returns the Widgets a list requested at mark holds: a
-// fresh list replaces them, an older one only brings the IDs it names, each as
-// the local copy when there is one (a Widget written since states newer
-// geometry and name). A Widget the list misses stays when it is known to exist
-// after the list was requested; one known only from before it, or from no
-// response at all, is deleted.
-func (p *Project) mergedWithKnownWidgets(mark uiutil.Mark, fresh bool, widgets []apiv0.WidgetResponse) []apiv0.WidgetResponse {
-	if fresh {
+// list that is not behind replaces them, while one behind only brings the IDs
+// it names, each as the local copy when there is one (a Widget written since
+// states newer geometry and name). A Widget the list misses stays when it is
+// known to exist after the list was requested; one known only from before it,
+// or from no response at all, is deleted.
+func (p *Project) mergedWithKnownWidgets(mark uiutil.Mark, replace bool, widgets []apiv0.WidgetResponse) []apiv0.WidgetResponse {
+	if replace {
 		return widgets
 	}
 	merged := make([]apiv0.WidgetResponse, len(widgets))

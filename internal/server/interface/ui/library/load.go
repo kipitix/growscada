@@ -178,7 +178,8 @@ func (l *Library) loadUnsavedChanges(ctx app.Context) {
 //
 // A list older than the known state does not delete a WidgetType known to
 // exist after it was requested (uiutil.Versions.KnownAfter): one created
-// meanwhile is kept at the end, with its selection (task 61).
+// meanwhile is kept at the end, with its selection (task 61). A list stating
+// the known Version is the server's own and replaces what is shown.
 func (l *Library) setWidgetTypes(ctx app.Context, mark uiutil.Mark, replacements uint64, items []apiv0.WidgetTypeResponse) {
 	old, known := l.findItem(l.selectedID)
 	// The first list requested after the whole Draft was replaced is the truth:
@@ -187,16 +188,21 @@ func (l *Library) setWidgetTypes(ctx app.Context, mark uiutil.Mark, replacements
 	if replaced {
 		l.appliedReplacements = replacements
 	}
-	fresh := len(items) > 0 && l.draftVersions.Advance(mark, l.libraryID, items[0].Version)
 	for _, it := range items {
 		// Every DTO of the Draft carries its one Version (ADR 0016): the
 		// writes state it under the Library, not under a WidgetType.
 		l.observeDraftVersion(mark, it.Version)
 	}
-	if fresh || replaced {
-		l.widgetTypes = items
-	} else {
+	// The list replaces the WidgetTypes shown unless it is behind the known
+	// state: such a list only brings the ids it names. A list stating the known
+	// Version is the server's own — the Draft's state may have stated that
+	// Version first — and replaces what is shown; an empty list states no
+	// Version and is treated as behind.
+	behind := len(items) == 0 || l.draftVersions.Behind(mark, l.libraryID, items[0].Version)
+	if behind && !replaced {
 		l.widgetTypes = l.mergedWithKnownWidgetTypes(mark, items)
+	} else {
+		l.widgetTypes = items
 	}
 	if len(items) == 0 {
 		// No WidgetType carries the Draft's Version, so the list states none:
@@ -222,8 +228,8 @@ func (l *Library) setWidgetTypes(ctx app.Context, mark uiutil.Mark, replacements
 	}
 }
 
-// mergedWithKnownWidgetTypes returns the WidgetTypes a list requested at mark
-// holds: the IDs it names, each as the local copy when there is one (a
+// mergedWithKnownWidgetTypes returns the WidgetTypes a list behind the known
+// state holds: the IDs it names, each as the local copy when there is one (a
 // WidgetType written since states the newer name), and the IDs it misses that
 // are known to exist after the list was requested, at the end.
 func (l *Library) mergedWithKnownWidgetTypes(mark uiutil.Mark, items []apiv0.WidgetTypeResponse) []apiv0.WidgetTypeResponse {

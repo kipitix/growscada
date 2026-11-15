@@ -1,6 +1,7 @@
 package project
 
 import (
+	"context"
 	"io"
 	"net/http"
 	"slices"
@@ -9,6 +10,8 @@ import (
 	"testing"
 
 	"github.com/maxence-charriere/go-app/v11/pkg/app"
+
+	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 )
 
 // The lists a mode reloads can be overtaken by the writes it makes: a list
@@ -135,6 +138,55 @@ func TestSelectScene_ClearsTheCanvasUntilTheWidgetsAnswer(t *testing.T) {
 	}
 }
 
+// A list stating the Version this client already knows is the server's own, not
+// an older one: another read may have stated that Version first (the Draft's
+// state on a resync, a reread Scene), and the list still replaces the copies
+// shown — a change of another tab is not hidden by the read that observed it
+// (task 61).
+func TestScenesList_AtTheKnownVersion_TakesTheServersCopy(t *testing.T) {
+	url, api := newServer(t)
+	sceneID := createScene(t, api, "Main")
+	f := mount(t, url, api)
+	f.run()
+	renamed := f.scene(sceneID)
+	renamed.Name = "Renamed"
+	if _, err := api.UpdateScene(context.Background(), sceneID, apiv0.UpdateSceneRequest{
+		Name: renamed.Name, Width: renamed.Width, Height: renamed.Height,
+		BackgroundHTML: renamed.BackgroundHTML, Version: renamed.Version,
+	}); err != nil {
+		t.Fatalf("update scene: %v", err)
+	}
+	theirs := f.scene(sceneID) // the server's state, with the new Version
+	f.p.observeDraftVersion(f.p.markDraft(), theirs.Version)
+	mark := f.p.draftVersions.Mark() // a list requested after that read
+
+	f.p.setScenes(f.p.compoCtx, mark, f.p.contentReplacements, []apiv0.SceneResponse{theirs})
+
+	if got := f.p.scenes[0].Name; got != "Renamed" {
+		t.Errorf("listed name %q: a list at the known Version kept the old copy", got)
+	}
+}
+
+// The same for the Widgets: a list at the known Version is the server's own,
+// whatever read observed that Version first (task 61).
+func TestWidgetsList_AtTheKnownVersion_TakesTheServersCopy(t *testing.T) {
+	f, sceneID, widgetID := widgetFixture(t)
+	theirs := f.widget(sceneID, widgetID)
+	theirs.Name = "theirs"
+	if _, err := f.api.UpdateWidget(context.Background(), sceneID, widgetID, widgetRequest(theirs, f.scene(sceneID).Version)); err != nil {
+		t.Fatalf("update widget: %v", err)
+	}
+	mine := f.widget(sceneID, widgetID)
+	f.p.observeDraftVersion(f.p.markDraft(), mine.Version)
+	mark := f.p.draftVersions.Mark()
+
+	f.p.setWidgets(f.p.compoCtx, mark, sceneID, []apiv0.WidgetResponse{mine})
+
+	if len(f.p.widgets) != 1 || f.p.widgets[0].Name != "theirs" {
+		t.Errorf("widgets %+v: a list at the known Version kept the old copy", f.p.widgets)
+	}
+}
+
 // rendersText reports whether one of the layers shows text.
 func rendersText(layers []app.UI, text string) bool {
 	for _, layer := range layers {
@@ -156,7 +208,6 @@ type failOnceScene struct {
 	used  bool
 }
 
-// arm makes the next GET of the Scene fail; a false arm leaves the reads be.
 func (f *failOnceScene) arm() {
 	f.mu.Lock()
 	defer f.mu.Unlock()

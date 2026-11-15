@@ -152,6 +152,31 @@ func TestVersions_KnownAfter_DropsAForgottenIDsOldResponse(t *testing.T) {
 	}
 }
 
+// Behind: a response older than the known version is behind, one stating the
+// known version is not, so it replaces what is kept (task 61).
+func TestVersions_Behind(t *testing.T) {
+	id := uuid.New()
+	var v Versions
+	v.Advance(v.Mark(), id, 5)
+	m := v.Mark() // a list requested after the version was known
+
+	if !v.Behind(m, id, 4) {
+		t.Error("an older version: not behind")
+	}
+	if v.Behind(m, id, 5) {
+		t.Error("the known version: behind")
+	}
+	if v.Behind(m, id, 6) {
+		t.Error("a newer version: behind")
+	}
+
+	inFlight := v.Mark()
+	v.Forget()
+	if !v.Behind(inFlight, id, 5) {
+		t.Error("a response sent before a Forget: not behind")
+	}
+}
+
 func TestVersions_AdvanceReportsANewerState(t *testing.T) {
 	id := uuid.New()
 	var v Versions

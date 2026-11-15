@@ -1,10 +1,13 @@
 package library
 
 import (
+	"context"
 	"slices"
 	"testing"
 
 	"github.com/google/uuid"
+
+	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 )
 
 // A list requested before a WidgetType was created is older than what the
@@ -27,6 +30,32 @@ func TestCreateWidgetType_AListSentBefore_KeepsTheSelection(t *testing.T) {
 	}
 	if f.l.itemIdx(created) < 0 {
 		t.Errorf("the new WidgetType is gone from the list: %+v", f.l.widgetTypes)
+	}
+}
+
+// A list stating the Version the mode already knows is the server's own: the
+// Draft's state may have stated that Version first, and the list still replaces
+// the WidgetTypes shown — a change of another tab is not hidden by the read
+// that observed it (task 61).
+func TestWidgetTypeList_AtTheKnownVersion_TakesTheServersCopy(t *testing.T) {
+	f, id := selected(t)
+	f.run()
+	wt := f.widgetType(id)
+	if _, err := f.api.UpdateWidgetType(context.Background(), id, apiv0.UpdateWidgetTypeRequest{
+		Name: "Theirs", HtmlTemplate: wt.HtmlTemplate, Script: wt.Script, ScriptLanguage: wt.ScriptLanguage,
+		DefaultWidth: wt.DefaultWidth, DefaultHeight: wt.DefaultHeight, InputPorts: wt.InputPorts, Version: wt.Version,
+	}); err != nil {
+		t.Fatalf("update widget type: %v", err)
+	}
+	theirs := f.widgetType(id) // the server's state, with the new Version
+	f.l.observeDraftVersion(f.l.markDraft(), theirs.Version)
+	mark := f.l.markDraft() // a list requested after that read
+
+	f.l.setWidgetTypes(f.l.compoCtx, mark, f.l.contentReplacements, []apiv0.WidgetTypeResponse{theirs})
+
+	it, ok := f.l.findItem(id)
+	if !ok || it.Name != "Theirs" {
+		t.Errorf("listed WidgetType %+v: a list at the known Version kept the old copy", it)
 	}
 }
 
