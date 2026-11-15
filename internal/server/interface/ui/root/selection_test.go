@@ -219,16 +219,24 @@ func TestSelectionPage_ScreenIsStored(t *testing.T) {
 }
 
 // countingPage stands in for a selection page and counts the times Root asks
-// it to reread its list (a real picker is not mounted on the host, so its own
-// reads are not observable — see uitest).
+// it to reread its list or to follow the entity the menu opened (a real picker
+// is not mounted on the host, so its own reads are not observable — see
+// uitest).
 type countingPage struct {
 	app.Compo
 	reloads *atomic.Int32
+	selects *atomic.Int32
 }
 
-func (p countingPage) Reload(app.Context)            { p.reloads.Add(1) }
-func (p countingPage) Select(app.Context, uuid.UUID) {}
-func (p countingPage) Render() app.UI                { return app.Div() }
+func (p countingPage) Reload(app.Context) { p.reloads.Add(1) }
+
+func (p countingPage) Select(app.Context, uuid.UUID) {
+	if p.selects != nil {
+		p.selects.Add(1)
+	}
+}
+
+func (p countingPage) Render() app.UI { return app.Div() }
 
 // TestSelectionPage_ThePageIsAskedToRereadWhenShown: the page rereads its list
 // when the mode opens on it — the screen restored from LocalStorage included —

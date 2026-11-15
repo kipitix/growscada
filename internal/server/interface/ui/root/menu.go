@@ -236,6 +236,14 @@ func (r *Root) chooseEntity(ctx app.Context, mode Mode, item picker.Item) {
 		r.chooseProject(ctx, mode, item)
 		return
 	}
+	if r.selected[mode] == item.ID && !r.showList[mode] {
+		// The entity the mode already shows is chosen again: switching to it
+		// reloads nothing (task 89).
+		r.closeMenu()
+		r.SetMode(mode)
+		r.storeMode()
+		return
+	}
 	r.closeMenu()
 	r.openEntityAs(mode, item.ID, item.Name)
 	r.SetMode(mode)

@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/google/uuid"
@@ -415,5 +416,44 @@ func TestProjectGone_LeavesOperationAndHistoryWithoutAProject(t *testing.T) {
 		if got := uiutil.LoadID(s.probe.ctx, projectKey(mode)); got != uuid.Nil {
 			t.Errorf("%s still keeps %v", mode, got)
 		}
+	}
+}
+
+// TestMenu_ChoosingTheShownEntityAgainReloadsNothing: choosing the entity the
+// mode already shows closes the menu and switches to the mode, and asks
+// neither the editor nor the page for anything (task 89).
+func TestMenu_ChoosingTheShownEntityAgainReloadsNothing(t *testing.T) {
+	var reloads, selects atomic.Int32
+	id := uuid.New()
+	s := mountRoot(t, nil, func(r *Root) {
+		r.modes[0].picker = &countingPage{reloads: &reloads, selects: &selects}
+	})
+	s.settle()
+	s.SetMode(ModeLibrary)
+	s.selectEntity(ModeLibrary, id, "Main")
+	s.openEntity(ModeLibrary, id)
+	s.settle()
+
+	s.compoCtx.Dispatch(func(ctx app.Context) {
+		s.chooseEntity(ctx, ModeLibrary, picker.Item{ID: id, Name: "Main"})
+	})
+	s.settle()
+	if got := selects.Load(); got != 0 {
+		t.Errorf("the same entity was asked for %d times, want none", got)
+	}
+	if s.showList[ModeLibrary] || s.currentMode != ModeLibrary {
+		t.Errorf("the choice left mode %q, page shown %t", s.currentMode, s.showList[ModeLibrary])
+	}
+
+	other := uuid.New()
+	s.compoCtx.Dispatch(func(ctx app.Context) {
+		s.chooseEntity(ctx, ModeLibrary, picker.Item{ID: other, Name: "Other"})
+	})
+	s.settle()
+	if got := selects.Load(); got != 1 {
+		t.Errorf("another entity was asked for %d times, want once", got)
+	}
+	if s.selected[ModeLibrary] != other {
+		t.Errorf("the mode shows %v, want %v", s.selected[ModeLibrary], other)
 	}
 }

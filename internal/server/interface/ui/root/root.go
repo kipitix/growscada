@@ -222,11 +222,12 @@ func (r *Root) OnMount(ctx app.Context) {
 		if !r.menuOpen {
 			return
 		}
+		// A Save and a write of a Draft change the badge of a row, and the
+		// event does not say which list holds it: both are reread, the
+		// Reloader keeping a burst to one request each (task 89).
 		targets := eventlog.ReloadTargetsFor(ev)
-		if targets.Projects {
+		if targets.Projects || targets.Libraries || targets.SavedStates || targets.DraftChanged() {
 			r.loadMenuProjects(ctx)
-		}
-		if targets.Libraries {
 			r.loadMenuLibraries(ctx)
 		}
 	})
