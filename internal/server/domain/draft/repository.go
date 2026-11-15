@@ -62,7 +62,7 @@ type Repository interface {
 	// ClearStack drops every DraftChange of the Draft and resets its stack
 	// position: nothing is left to undo or redo, not even the changes made since
 	// the last saved state. Replace clears the stack in the write it makes, so
-	// no caller uses it since task 85_7.
+	// nothing has called it since task 85_7.
 	ClearStack(ctx context.Context, scope Scope) error
 
 	// Stack returns the state of the Draft's DraftChange stack without a

@@ -320,8 +320,8 @@ func saveConfirmLabel(saving bool) string {
 
 // renderHistoryScreen is the history of the project's saved states (task 84):
 // the screen both modes share, fed with this project's history and its labels.
-// The screen draws saved states alone: a Deploy takes one of them, and makes
-// nothing else (task 85_5, task 85_7).
+// The screen draws saved states alone: every row is one of them, and a Deploy
+// takes the row's saved state (task 85_5, task 85_7).
 func (p *Project) renderHistoryScreen() app.UI {
 	screen := p.history
 	screen.Rows = p.historyRows()
