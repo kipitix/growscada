@@ -3,6 +3,7 @@ package project
 import (
 	"context"
 	"net/http"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -56,6 +57,19 @@ func (c *moveCounter) writes() []string {
 		}
 	}
 	return out
+}
+
+// widgetLists counts the reads of a Scene's Widgets.
+func (c *moveCounter) widgetLists() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	n := 0
+	for _, e := range c.entries {
+		if strings.HasPrefix(e, "GET ") && strings.HasSuffix(e, "/widgets") {
+			n++
+		}
+	}
+	return n
 }
 
 // moveFixture is selectionFixture with a client whose write requests are
@@ -285,16 +299,15 @@ func TestSetProject_SendsTheSeriesToTheProjectLeft(t *testing.T) {
 // A drag whose reload was held back still reads the Widgets when it ends
 // without sending a move.
 func TestDrag_DeferredReloadHappensWithoutAMove(t *testing.T) {
-	f, sceneID, ids, _ := moveFixture(t, 1)
-	want := f.widget(sceneID, ids[0])
-	f.p.widgets[0].Name = "stale"
+	f, _, _, counter := moveFixture(t, 1)
 	f.p.widgetsReloadDeferred = true
+	before := counter.widgetLists()
 
 	f.p.finalizeAllDrags(f.p.compoCtx)
 	f.run()
 
-	if got := f.p.widgets[0].Name; got != want.Name {
-		t.Errorf("the deferred reload did not happen: name %q, want %q", got, want.Name)
+	if got := counter.widgetLists() - before; got != 1 {
+		t.Errorf("%d reads of the Widgets: the deferred reload did not happen", got)
 	}
 	if f.p.widgetsReloadDeferred {
 		t.Error("the deferred reload is still owed")

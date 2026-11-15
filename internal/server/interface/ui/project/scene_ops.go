@@ -25,8 +25,10 @@ func (p *Project) createScene(ctx app.Context) {
 		return content.CreateScene(c, req)
 	}, func(ctx app.Context, created apiv0.CreateSceneResponse) {
 		// The new scene is the request as the server stored it: listed and
-		// editable at once, before the list is reread.
+		// editable at once, before the list is reread. Its ID is known to
+		// exist from now, so a list requested before it keeps it (task 61).
 		p.observeDraftVersion(mark, created.Version)
+		p.draftVersions.Touch(created.ID)
 		p.scenes = append(p.scenes, apiv0.SceneResponse{
 			ID:             created.ID,
 			Name:           req.Name,

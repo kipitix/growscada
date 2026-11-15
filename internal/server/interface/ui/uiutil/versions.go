@@ -18,22 +18,35 @@ import "github.com/google/uuid"
 // version, so each request takes a Mark when it is sent and its versions are
 // observed with it: those of a forgotten id are dropped, the reread sets them.
 //
+// A Mark also orders the requests: it grows with every request and every
+// forget, and Versions remembers the mark of the last response that named an
+// id (or of the write that touched it). A list requested before that mark may
+// miss the id without meaning it was deleted — it was created or written
+// after the list was sent (KnownAfter).
+//
 // The zero value is empty and ready to use, on the UI goroutine only.
 type Versions struct {
 	known map[uuid.UUID]int
-	// epoch counts the forgets; forgotAll is the epoch of the last Forget,
-	// forgotID the epoch of the last ForgetID of an id since then.
-	epoch     uint64
+	// seq numbers the marks; a Mark is the seq of the moment it was taken.
+	seq uint64
+	// forgotAll is the mark of the last Forget, forgotID the mark of the last
+	// ForgetID of an id since then.
 	forgotAll uint64
 	forgotID  map[uuid.UUID]uint64
+	// seen is the mark of the last response that named an id, or of the last
+	// Touch: an id seen after a list was requested exists, whatever the list
+	// says.
+	seen map[uuid.UUID]Mark
 }
 
 // Mark is the moment a request was sent, as Versions.Mark took it.
 type Mark uint64
 
-// Mark returns the moment of a request sent now; take it before sending.
+// Mark returns the moment of a request sent now, later than every mark taken
+// before; take it before sending.
 func (v *Versions) Mark() Mark {
-	return Mark(v.epoch)
+	v.seq++
+	return Mark(v.seq)
 }
 
 // Observe records version of id, stated by the response to the request sent
@@ -46,7 +59,13 @@ func (v *Versions) Observe(m Mark, id uuid.UUID, version int) {
 // response states a newer state of id than any known, so a copy of that state
 // kept along with the version is to be replaced by the response's.
 func (v *Versions) Advance(m Mark, id uuid.UUID, version int) bool {
-	if v.Forgotten(m, id) || version <= v.known[id] {
+	if v.Forgotten(m, id) {
+		return false
+	}
+	// The response names the id whatever version it states: the id exists as
+	// of m, so an older list that misses it does not say it was deleted.
+	v.see(m, id)
+	if version <= v.known[id] {
 		return false
 	}
 	if v.known == nil {
@@ -54,6 +73,20 @@ func (v *Versions) Advance(m Mark, id uuid.UUID, version int) bool {
 	}
 	v.known[id] = version
 	return true
+}
+
+// Touch records that id exists as of now: a write created it or wrote it. A
+// list requested before that moment and missing it does not say it was
+// deleted (KnownAfter).
+func (v *Versions) Touch(id uuid.UUID) {
+	v.see(v.Mark(), id)
+}
+
+// KnownAfter reports whether id was known to exist after m was taken: a
+// response sent at m and missing it is older than its creation or its last
+// write, so it does not say id was deleted.
+func (v *Versions) KnownAfter(m Mark, id uuid.UUID) bool {
+	return v.seen[id] > m
 }
 
 // Forgotten reports whether the version of id was forgotten since m: the
@@ -70,18 +103,30 @@ func (v *Versions) Of(id uuid.UUID) int {
 // ForgetID drops the known version of id alone; the next response sets it
 // anew. The other aggregates' versions stay: their writes are not in doubt.
 func (v *Versions) ForgetID(id uuid.UUID) {
-	v.epoch++
+	v.seq++
 	delete(v.known, id)
+	delete(v.seen, id)
 	if v.forgotID == nil {
 		v.forgotID = make(map[uuid.UUID]uint64)
 	}
-	v.forgotID[id] = v.epoch
+	v.forgotID[id] = v.seq
 }
 
 // Forget drops every known version; the next responses set them anew.
 func (v *Versions) Forget() {
-	v.epoch++
+	v.seq++
 	clear(v.known)
 	clear(v.forgotID) // forgotAll covers them
-	v.forgotAll = v.epoch
+	clear(v.seen)
+	v.forgotAll = v.seq
+}
+
+// see records that the response sent at m named id.
+func (v *Versions) see(m Mark, id uuid.UUID) {
+	if v.seen == nil {
+		v.seen = make(map[uuid.UUID]Mark)
+	}
+	if m > v.seen[id] {
+		v.seen[id] = m
+	}
 }

@@ -208,10 +208,9 @@ type Project struct {
 
 	// ── Tags sub-tab state ──────────────────────────────────────────────────
 	selectedTagID uuid.UUID
-	// tagLists numbers the requests of the Tag list; one numbered up to
-	// tagCreated was sent before the selected Tag was created and does not
-	// hold it.
-	tagLists, tagCreated uint64
+	// tagVersions marks the Tags known to exist, so a Tag list requested
+	// before a creation does not drop the new Tag's selection.
+	tagVersions uiutil.Versions
 
 	creatingTag bool
 	newTagName  string
@@ -437,6 +436,7 @@ func (p *Project) SetProject(id uuid.UUID) {
 	p.importSavedStates, p.importSavedStatesLoaded = nil, false
 	p.deployDialog = false
 	p.draftVersions.Forget()
+	p.tagVersions.Forget()
 	clear(p.staleScenes)
 	p.widgetsReloadDeferred = false
 	p.dragGuides, p.dragAltHeld = dragGuides{}, false

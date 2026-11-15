@@ -290,14 +290,14 @@ func TestTagUpdated_OfATagDeletedMeanwhile_DoesNotShowIt(t *testing.T) {
 
 func TestCreateTag_AListSentBefore_KeepsTheSelection(t *testing.T) {
 	f := startProject(t)
-	stale, mark, n := f.p.tags.List(), f.p.tags.Mark(), f.p.tagLists+1 // a list in flight
-	f.p.tagLists = n
+	stale, mark := f.p.tags.List(), f.p.tags.Mark() // a list in flight
+	tagMark := f.p.tagVersions.Mark()
 
 	f.p.newTagName, f.p.newTagType = "pump.on", "boolean"
 	f.p.createTag(f.p.compoCtx)
 	f.run()
 	created := f.p.selectedTagID
-	f.p.setTags(f.p.compoCtx, mark, f.p.markDraft(), n, stale)
+	f.p.setTags(f.p.compoCtx, mark, tagMark, f.p.markDraft(), stale)
 
 	if f.p.selectedTagID != created || created == uuid.Nil {
 		t.Errorf("selected %v, want the new Tag %v", f.p.selectedTagID, created)

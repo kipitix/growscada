@@ -23,7 +23,7 @@ func (p *Project) createTag(ctx app.Context) {
 		p.newTagName = ""
 		p.newTagType = ""
 		p.selectedTagID = created.ID
-		p.tagCreated = p.tagLists
+		p.tagVersions.Touch(created.ID)
 		uiutil.StoreID(ctx, p.selectionKey(tagIDKey), created.ID)
 		p.loadTags(ctx)
 		p.loadDraftState(ctx)

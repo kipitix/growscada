@@ -236,6 +236,10 @@ func (p *Project) loadScenes(ctx app.Context) {
 // the list of a replacement (a Discard, a Revert, an opened project file) is
 // the truth whatever Version it states, because the replacement answered that
 // Version itself (task 72_6).
+//
+// A list older than the known state does not delete a Scene known to exist
+// after it was requested (uiutil.Versions.KnownAfter): a Scene created
+// meanwhile is kept at the end, and the selection with it (task 61).
 func (p *Project) setScenes(ctx app.Context, mark uiutil.Mark, replacements uint64, scenes []apiv0.SceneResponse) {
 	old, known := p.findScene(p.selectedSceneID)
 	prevSceneID := p.selectedSceneID
@@ -257,29 +261,47 @@ func (p *Project) setScenes(ctx app.Context, mark uiutil.Mark, replacements uint
 	reread := fresh || replaced
 
 	merged := make([]apiv0.SceneResponse, len(scenes))
+	listed := make(map[uuid.UUID]struct{}, len(scenes))
 	for i, sc := range scenes {
 		if !reread {
+			// A local copy is as new as the response or newer: a Scene
+			// written since states the newer name and size.
 			if cur, ok := p.findScene(sc.ID); ok {
 				sc = cur
 			}
 		}
 		merged[i] = sc
+		listed[sc.ID] = struct{}{}
+	}
+	if !reread {
+		// A Scene the response misses was created after it was requested: it
+		// is kept, at the end, until a list that names it arrives.
+		for _, sc := range p.scenes {
+			if _, ok := listed[sc.ID]; ok {
+				continue
+			}
+			if !p.draftVersions.KnownAfter(mark, sc.ID) {
+				continue
+			}
+			merged = append(merged, sc)
+		}
 	}
 	p.scenes = merged
 
-	if _, exists := p.findScene(p.selectedSceneID); p.selectedSceneID != uuid.Nil && !exists {
+	if _, exists := p.findScene(p.selectedSceneID); p.selectedSceneID != uuid.Nil && !exists &&
+		!p.draftVersions.KnownAfter(mark, p.selectedSceneID) {
 		// The Scene shown is gone with its Widgets: nothing is left to draw.
 		p.selectedSceneID = uuid.Nil
 		p.widgets = nil
 		p.clearWidgetSelection(ctx)
 	}
-	if p.selectedSceneID == uuid.Nil && len(scenes) > 0 {
-		p.selectedSceneID = scenes[0].ID
+	if p.selectedSceneID == uuid.Nil && len(merged) > 0 {
+		p.selectedSceneID = merged[0].ID
 	}
 
 	// The Widgets of the selected Scene are read once the selection says which
 	// Scene that is: a reset may have deleted the one shown.
-	if len(scenes) > 0 {
+	if len(merged) > 0 {
 		p.reloadShownWidgets(ctx, p.selectedSceneID, reread)
 	}
 
@@ -336,15 +358,23 @@ func (p *Project) loadWidgets(ctx app.Context) {
 // setWidgets replaces the selected scene's widgets, prunes the selection of
 // the IDs that are gone and merges the widget properties editor for the single
 // selected Widget. mark is the moment the list was requested.
+//
+// A list older than the known state does not delete a Widget known to exist
+// after it was requested (uiutil.Versions.KnownAfter): a Widget created
+// meanwhile — the list misses it — is kept, and stays selected (task 61). The
+// list of another Scene, the one shown meanwhile, changes nothing here.
 func (p *Project) setWidgets(ctx app.Context, mark uiutil.Mark, sceneID uuid.UUID, widgets []apiv0.WidgetResponse) {
+	if sceneID != p.selectedSceneID {
+		return
+	}
 	oldID, oldSingle := p.singleSelected()
 	var old apiv0.WidgetResponse
 	var known bool
 	if oldSingle {
 		old, known = p.findWidget(oldID)
 	}
-	sceneChanged := len(p.widgets) > 0 && p.widgets[0].SceneID != sceneID
-	p.widgets = widgets
+	fresh := len(widgets) > 0 && p.draftVersions.Advance(mark, p.projectID, widgets[0].Version)
+	p.widgets = p.mergedWithKnownWidgets(mark, fresh, widgets)
 
 	// Widgets carry the Draft's Version; with none, the Scene is reread for
 	// it, which also keeps an empty Scene's state in step.
@@ -355,10 +385,6 @@ func (p *Project) setWidgets(ctx app.Context, mark uiutil.Mark, sceneID uuid.UUI
 		p.loadScene(ctx, sceneID)
 	}
 
-	// A response of another Scene says nothing about this Scene's selection.
-	if sceneChanged {
-		return
-	}
 	p.pruneSelection(ctx)
 	id, single := p.singleSelected()
 	if !single {
@@ -375,6 +401,37 @@ func (p *Project) setWidgets(ctx app.Context, mark uiutil.Mark, sceneID uuid.UUI
 	p.syncEditingFields(current)
 }
 
+// mergedWithKnownWidgets returns the Widgets a list requested at mark holds: a
+// fresh list replaces them, an older one only brings the IDs it names, each as
+// the local copy when there is one (a Widget written since states newer
+// geometry and name). A Widget the list misses stays when it is known to exist
+// after the list was requested; one known only from before it, or from no
+// response at all, is deleted.
+func (p *Project) mergedWithKnownWidgets(mark uiutil.Mark, fresh bool, widgets []apiv0.WidgetResponse) []apiv0.WidgetResponse {
+	if fresh {
+		return widgets
+	}
+	merged := make([]apiv0.WidgetResponse, len(widgets))
+	listed := make(map[uuid.UUID]struct{}, len(widgets))
+	for i, w := range widgets {
+		if cur, ok := p.findWidget(w.ID); ok {
+			w = cur
+		}
+		merged[i] = w
+		listed[w.ID] = struct{}{}
+	}
+	for _, w := range p.widgets {
+		if _, ok := listed[w.ID]; ok {
+			continue
+		}
+		if !p.draftVersions.KnownAfter(mark, w.ID) {
+			continue
+		}
+		merged = append(merged, w)
+	}
+	return merged
+}
+
 // ── Tags ──────────────────────────────────────────────────────────────────────
 
 func (p *Project) loadTags(ctx app.Context) {
@@ -383,29 +440,31 @@ func (p *Project) loadTags(ctx app.Context) {
 		return
 	}
 	mark := p.tags.Mark()
+	tagMark := p.tagVersions.Mark()
 	draftMark := p.markDraft()
-	p.tagLists++
-	n := p.tagLists
 	uiutil.LoadOfProject(p.compoCtx, &p.tagsReloader, p.projectContent,
 		func(c context.Context, pc *apiclient.ProjectClient) ([]apiv0.TagResponse, error) {
 			return pc.ListTags(c)
 		},
 		func(ctx app.Context, tags []apiv0.TagResponse) {
-			p.setTags(ctx, mark, draftMark, n, tags)
+			p.setTags(ctx, mark, tagMark, draftMark, tags)
 		}, p.loadTags)
 }
 
 // setTags merges the loaded tag list into the known Tags (a newer state from
 // a tag_updated wins) and drops the selection if its tag is gone. mark is the
-// moment the list was requested, draftMark that of its Draft Version, n its
-// number (tagLists): a list sent before the selected Tag was created leaves
-// the selection to the next one.
-func (p *Project) setTags(ctx app.Context, mark tagstate.Mark, draftMark uiutil.Mark, n uint64, tags []apiv0.TagResponse) {
+// moment the list was requested, tagMark that of the tag existence marks and
+// draftMark that of its Draft Version: a list sent before the selected Tag was
+// created does not hold it, but the Tag is known to exist after the list
+// (uiutil.Versions.KnownAfter), so the selection stays and the next list
+// shows it (task 61).
+func (p *Project) setTags(ctx app.Context, mark tagstate.Mark, tagMark, draftMark uiutil.Mark, tags []apiv0.TagResponse) {
 	p.tags = p.tags.Merge(mark, tags)
 	for _, found := range tags {
 		p.observeDraftVersion(draftMark, found.Version)
 	}
-	if _, ok := p.tags.Find(p.selectedTagID); ok || p.selectedTagID == uuid.Nil || n <= p.tagCreated {
+	if _, ok := p.tags.Find(p.selectedTagID); ok || p.selectedTagID == uuid.Nil ||
+		p.tagVersions.KnownAfter(tagMark, p.selectedTagID) {
 		return
 	}
 	p.selectedTagID = uuid.Nil

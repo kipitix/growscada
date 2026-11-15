@@ -49,6 +49,9 @@ func (p *Project) createWidget(ctx app.Context, typeID uuid.UUID, x, y float64) 
 		return content.CreateWidget(c, sceneID, req)
 	}, func(ctx app.Context, created apiv0.CreateWidgetResponse) {
 		p.observeDraftVersion(mark, created.Version)
+		// The new Widget exists from now: a list requested before it keeps
+		// it and the selection (task 61).
+		p.draftVersions.Touch(created.ID)
 		w.ID = created.ID
 		p.selectedWidgetIDs = []uuid.UUID{created.ID}
 		uiutil.StoreID(ctx, p.selectionKey(widgetIDKey), created.ID)
