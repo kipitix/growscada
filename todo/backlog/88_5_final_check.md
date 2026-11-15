@@ -59,9 +59,9 @@ Blocked by: 88_4
 - 2026-11-15 (миграция на данных): в сиде `engineering.saved_states`,
   `saved_state_labels`, `saved_state_library_imports` и
   `runtime.deployments.saved_state_number`; `GET …/library-imports`
-  отдаёт `saved_state`, `GET …/deployments` — `saved_state_number`, а
-  Deployment, сделанный из saved state #4, работает. Down проверен
-  тестами выше.
+  отдаёт `saved_state_number`, `GET …/deployments` —
+  `saved_state_number`, а Deployment, сделанный из saved state #4,
+  работает. Down проверен тестами выше.
 - 2026-11-15 (браузер, PWA): Save («Saved state 4 saved», кнопка затем
   «Nothing to save since the last save»); History проекта (#4…#1, метка
   `ready_for_import`, «Load» → «Saved state 1 loaded»); Deploy saved
@@ -71,6 +71,15 @@ Blocked by: 88_4
   #1», «Imported: saved state #1»); History библиотеки; Operation — живые
   значения развёрнутого #4. Консоль без ошибок приложения: только старая
   внешняя иконка go-app из manifest (404, CORB) и a11y-подсказки.
+- 2026-11-15 (ревью): первый проход по `commits?` пропустил тестовые
+  имена — `libraries_test.go` (`commit`/`commits`, «POST commits», «GET
+  commits», `hasImport(…, commit int)`), `project_helpers_test.go` (поле
+  `testServices.commits`, «save commit»), `widgets_test.go` (`commit`,
+  «as a Commit»), `events_test.go` (`commitNumber`) и
+  `TestRuntimeNode_DeployCommit_…`. Это код, а не история формата:
+  переименованы в saved state, тест `inprocess` называется
+  `TestRuntimeNode_DeploySavedState_…`; `version.Committed`/`IsCommitted`
+  оставлены — там commit о записи в базу, а не о сохранённом состоянии.
 - 2026-11-15 (наблюдения, не правки): вкладка History в верхнем меню —
   давний плейсхолдер `ui/history/history.go`, история открывается кнопкой
   с панели saved states, к 88 не относится; тосты называют номер без `#`
