@@ -85,7 +85,10 @@ func (p *Project) deleteScene(ctx app.Context, sceneID uuid.UUID) {
 	}, p.rejectedSceneEdit(nil))
 }
 
-// selectScene shows the Scene id, as a click on its tab does.
+// selectScene shows the Scene id, as a click on its tab does. The canvas
+// forgets the Widgets of the Scene left at once, before its own list is read:
+// they are not the ones the user asked for, and the empty canvas says the
+// Widgets are on their way (task 61).
 func (p *Project) selectScene(ctx app.Context, id uuid.UUID) {
 	// A pending arrow series belongs to the Scene being left: it is sent
 	// before the shown Widgets change.
@@ -93,6 +96,7 @@ func (p *Project) selectScene(ctx app.Context, id uuid.UUID) {
 	p.selectedSceneID = id
 	uiutil.StoreID(ctx, p.selectionKey(sceneIDKey), id)
 	p.clearWidgetSelection(ctx)
+	p.widgets = nil
 	p.syncSceneEditingFields()
 	p.loadWidgets(ctx)
 }

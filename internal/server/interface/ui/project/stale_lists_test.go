@@ -1,8 +1,14 @@
 package project
 
 import (
+	"io"
+	"net/http"
 	"slices"
+	"strings"
+	"sync"
 	"testing"
+
+	"github.com/maxence-charriere/go-app/v11/pkg/app"
 )
 
 // The lists a mode reloads can be overtaken by the writes it makes: a list
@@ -68,7 +74,7 @@ func TestSetWidgets_AListOfAnotherScene_IsDropped(t *testing.T) {
 	f.p.selectScene(f.p.compoCtx, second)
 	f.p.setWidgets(f.p.compoCtx, mark, first, stale)
 
-	if len(f.p.widgets) != 1 || f.p.widgets[0].Name != "theirs" {
+	if f.p.widgets != nil || rendersText(f.p.canvasLayers(""), "stale") {
 		t.Errorf("widgets %+v of the Scene left: want the canvas untouched", f.p.widgets)
 	}
 }
@@ -92,6 +98,121 @@ func TestScenesList_AnsweredAfterARename_DoesNotRollTheNameBack(t *testing.T) {
 	}
 	if name := f.p.sceneEdit.name; name != "Renamed" {
 		t.Errorf("editor name %q: the stale list rolled it back", name)
+	}
+	f.knowsVersion(sceneID)
+}
+
+// A switch of Scene empties the canvas at once: the Widgets of the Scene left
+// are not the ones to draw, and the canvas says the others are on their way
+// (task 61).
+func TestSelectScene_ClearsTheCanvasUntilTheWidgetsAnswer(t *testing.T) {
+	url, api := newServer(t)
+	first := createScene(t, api, "First")
+	second := createScene(t, api, "Second")
+	typeID := createWidgetType(t, api, "Lamp")
+	createWidget(t, api, first, typeID, "a")
+	createWidget(t, api, second, typeID, "b")
+	f := mount(t, url, api)
+	f.run()
+
+	f.p.selectScene(f.p.compoCtx, second)
+	if f.p.widgets != nil {
+		t.Fatalf("widgets %+v: the canvas still holds the Scene left", f.p.widgets)
+	}
+	if !f.p.widgetsLoading() {
+		t.Error("the canvas does not say the Widgets are on their way")
+	}
+	if !rendersText(f.p.canvasLayers(""), "Loading widgets…") {
+		t.Error("the canvas draws no loading notice")
+	}
+
+	f.run()
+	if len(f.p.widgets) != 1 || f.p.widgets[0].SceneID != second {
+		t.Fatalf("widgets %+v: want the ones of the Scene selected", f.p.widgets)
+	}
+	if f.p.widgetsLoading() {
+		t.Error("the canvas still says it is loading")
+	}
+}
+
+// rendersText reports whether one of the layers shows text.
+func rendersText(layers []app.UI, text string) bool {
+	for _, layer := range layers {
+		if strings.Contains(app.HTMLString(layer), text) {
+			return true
+		}
+	}
+	return false
+}
+
+// failOnceScene breaks the first GET of a Scene, as a server hiccup does: the
+// Scene stays stale and is reread by the next load (task 61).
+type failOnceScene struct {
+	inner  http.RoundTripper
+	suffix string
+
+	mu    sync.Mutex
+	armed bool
+	used  bool
+}
+
+// arm makes the next GET of the Scene fail; a false arm leaves the reads be.
+func (f *failOnceScene) arm() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.armed, f.used = true, false
+}
+
+func (f *failOnceScene) RoundTrip(r *http.Request) (*http.Response, error) {
+	f.mu.Lock()
+	fail := f.armed && !f.used && r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, f.suffix)
+	if fail {
+		f.used = true
+	}
+	f.mu.Unlock()
+	if !fail {
+		return f.inner.RoundTrip(r)
+	}
+	body := `{"title":"Internal Server Error","status":500}`
+	return &http.Response{
+		StatusCode: http.StatusInternalServerError,
+		Status:     "500 Internal Server Error",
+		Header:     http.Header{"Content-Type": []string{"application/problem+json"}},
+		Body:       io.NopCloser(strings.NewReader(body)),
+		Request:    r,
+	}, nil
+}
+
+func TestLoadStaleScenes_AfterAFailedRead_IsRereadByTheNextLoad(t *testing.T) {
+	url, api := newServer(t)
+	sceneID := createScene(t, api, "Main")
+	broken := &failOnceScene{
+		inner:  http.DefaultTransport,
+		suffix: "/scenes/" + sceneID.String(),
+	}
+	f := mountWith(t, url, api, &http.Client{Transport: broken})
+	f.run()
+	broken.arm()
+
+	f.p.loadScene(f.p.compoCtx, sceneID)
+	f.run()
+
+	if got := f.oneToast(); got.Status != http.StatusInternalServerError {
+		t.Errorf("toast %+v: want the failed read", got)
+	}
+	if _, ok := f.p.staleScenes[sceneID]; !ok {
+		t.Fatalf("the failed Scene was forgotten: nothing will reread it")
+	}
+
+	f.p.loadStaleScenes(f.p.compoCtx)
+	f.run()
+
+	f.noToasts()
+	if len(f.p.staleScenes) != 0 {
+		t.Errorf("stale scenes %v: the reread left some", f.p.staleScenes)
+	}
+	if _, ok := f.p.findScene(sceneID); !ok {
+		t.Errorf("the Scene is not listed")
 	}
 	f.knowsVersion(sceneID)
 }

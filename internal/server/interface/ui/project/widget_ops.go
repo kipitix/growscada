@@ -117,18 +117,23 @@ func (p *Project) saveWidgetGeometry(ctx app.Context) {
 	if idx < 0 {
 		return
 	}
+	current := p.widgets[idx]
+	// A field whose text still shows the Widget's value keeps that value
+	// exactly: the editor rounds it, and parsing the rounded text would
+	// change a field the user never touched (task 61).
+	shown := widgetEditFieldsOf(current)
 	var nf numberFields
-	posX := nf.float("position X", p.widgetEdit.posX)
-	posY := nf.float("position Y", p.widgetEdit.posY)
+	posX := nf.geometry("position X", p.widgetEdit.posX, shown.posX, current.Position.X)
+	posY := nf.geometry("position Y", p.widgetEdit.posY, shown.posY, current.Position.Y)
 	posZ := nf.int("position Z", p.widgetEdit.posZ)
 	width := nf.int("width", p.widgetEdit.width)
 	height := nf.int("height", p.widgetEdit.height)
-	originX := nf.float("origin X", p.widgetEdit.originX)
-	originY := nf.float("origin Y", p.widgetEdit.originY)
-	rotDeg := nf.float("rotation", p.widgetEdit.rotation)
+	originX := nf.geometry("origin X", p.widgetEdit.originX, shown.originX, current.Origin.X)
+	originY := nf.geometry("origin Y", p.widgetEdit.originY, shown.originY, current.Origin.Y)
+	rotDeg := nf.geometry("rotation", p.widgetEdit.rotation, shown.rotation, current.Rotation.Degrees)
 	if nf.err != nil {
 		p.compoCtx.NewActionWithValue(toast.ActionAdd, toast.ClientError(nf.err))
-		p.syncEditingFields(p.widgets[idx])
+		p.syncEditingFields(current)
 		return
 	}
 

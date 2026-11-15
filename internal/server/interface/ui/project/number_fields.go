@@ -31,3 +31,14 @@ func (n *numberFields) float(name, s string) float64 {
 	}
 	return v
 }
+
+// geometry is float for a field of an object the editor shows rounded: when
+// the text still is the shown value, the object's own value is returned
+// exactly, so saving another field of the same panel does not round this one;
+// a text the user changed is parsed.
+func (n *numberFields) geometry(name, text, shown string, exact float64) float64 {
+	if text == shown {
+		return exact
+	}
+	return n.float(name, text)
+}

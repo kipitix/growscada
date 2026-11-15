@@ -20,13 +20,19 @@ import (
 // therefore also what says whether a reread state is newer than the one shown;
 // there are no per-Scene versions any more.
 
-// loadScene rereads the Scene sceneID, whose state a change of one of its
-// Widgets made stale (loadStaleScenes).
-func (p *Project) loadScene(ctx app.Context, sceneID uuid.UUID) {
+// markStale records sceneID as a Scene to reread (loadScene): its state a
+// change of one of its Widgets made stale.
+func (p *Project) markStale(sceneID uuid.UUID) {
 	if p.staleScenes == nil {
 		p.staleScenes = make(map[uuid.UUID]struct{})
 	}
 	p.staleScenes[sceneID] = struct{}{}
+}
+
+// loadScene rereads the Scene sceneID, whose state a change of one of its
+// Widgets made stale (loadStaleScenes).
+func (p *Project) loadScene(ctx app.Context, sceneID uuid.UUID) {
+	p.markStale(sceneID)
 	p.loadStaleScenes(ctx)
 }
 
@@ -36,6 +42,11 @@ func (p *Project) loadScene(ctx app.Context, sceneID uuid.UUID) {
 // list holds, so a Scene not in it gives its version alone, one gone
 // meanwhile (404) nothing. Several (a changed WidgetType reconciles every
 // Scene using it) are reread with the list, in turn with its other loads.
+//
+// A failed read other than a 404 keeps the Scene stale: it is reread by the
+// next load, without a timer. Forgetting it would leave the Draft's Version
+// at the one the change replaced, and the next write of the Scene would be
+// refused as stale by the server (task 61).
 func (p *Project) loadStaleScenes(ctx app.Context) {
 	if p.staleScenesReloader.Loading() {
 		p.staleScenesReloader.Start() // queues a rerun
@@ -58,17 +69,30 @@ func (p *Project) loadStaleScenes(ctx app.Context) {
 		return
 	}
 	mark := p.markDraft()
-	uiutil.Load(p.compoCtx, &p.staleScenesReloader, func(c context.Context) (*apiv0.SceneResponse, error) {
+	if !p.staleScenesReloader.Start() {
+		return
+	}
+	uiutil.Do(p.compoCtx, func(c context.Context) (*apiv0.SceneResponse, error) {
 		sc, err := content.GetScene(c, sceneID)
-		if errors.Is(err, apiclient.ErrNotFound) {
-			return nil, nil
-		}
 		return &sc, err
-	}, func(ctx app.Context, sc *apiv0.SceneResponse) {
-		if sc != nil && content == p.content {
+	}, func(ctx app.Context, sc *apiv0.SceneResponse, err error) {
+		rerun := p.staleScenesReloader.Done()
+		switch {
+		case errors.Is(err, apiclient.ErrNotFound):
+			// The Scene is gone: there is nothing to reread.
+		case err != nil:
+			// The state the change made stays unknown until the read that
+			// answers: a write of this Scene would state a stale Version.
+			p.markStale(sceneID)
+			uiutil.ShowError(ctx, err)
+			ctx.Update()
+		case content == p.content:
 			p.setScene(ctx, mark, *sc)
 		}
-	}, p.loadStaleScenes)
+		if rerun {
+			p.loadStaleScenes(ctx)
+		}
+	})
 }
 
 // setScene records the reread Scene sc, advancing the Draft's Version by it,

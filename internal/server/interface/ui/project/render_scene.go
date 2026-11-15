@@ -252,6 +252,9 @@ func (p *Project) canvasLayers(backgroundHTML string) []app.UI {
 		renderCanvasGrid(),
 		uiutil.SceneWidgetLayer(widgets),
 	}
+	if p.widgetsLoading() {
+		layers = append(layers, p.renderWidgetsLoading())
+	}
 	if guides := p.renderDragGuides(); guides != nil {
 		layers = append(layers, guides)
 	}
@@ -259,6 +262,29 @@ func (p *Project) canvasLayers(backgroundHTML string) []app.UI {
 		layers = append(layers, p.renderMarquee())
 	}
 	return layers
+}
+
+// widgetsLoading reports whether the shown Scene's Widgets are being read and
+// the canvas has none to draw yet: the Scene was just selected (task 61).
+func (p *Project) widgetsLoading() bool {
+	return p.widgets == nil && p.widgetsReloader.Loading()
+}
+
+// renderWidgetsLoading is the notice of a canvas whose Widgets are on their
+// way: the Scene was just selected, and drawing the ones of the Scene left
+// would be wrong.
+func (p *Project) renderWidgetsLoading() app.UI {
+	return app.Div().
+		Attr("data-widgets-loading", "true").
+		Style("position", "absolute").
+		Style("inset", "0").
+		Style("display", "flex").
+		Style("align-items", "center").
+		Style("justify-content", "center").
+		Style("pointer-events", "none").
+		Style("color", "var(--text-muted)").
+		Style("font-size", "14px").
+		Body(app.Text("Loading widgets…"))
 }
 
 // sceneSize is the selected Scene's canvas size in pixels: its own, or the
