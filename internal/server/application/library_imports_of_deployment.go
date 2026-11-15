@@ -34,8 +34,8 @@ func missingLibraryImports(ctx context.Context, libraries library.LibraryReposit
 			}
 			return nil, fmt.Errorf("cannot read library %s: %w", imported.LibraryID, err)
 		}
-		if _, err := drafts.FindCommit(ctx, draft.LibraryScope(libraryID), imported.Commit); err != nil {
-			if errors.Is(err, draft.ErrCommitNotFound) {
+		if _, err := drafts.FindSavedState(ctx, draft.LibraryScope(libraryID), imported.Commit); err != nil {
+			if errors.Is(err, draft.ErrSavedStateNotFound) {
 				byLibrary[imported.LibraryID] = imported.Commit
 				continue
 			}
@@ -44,8 +44,8 @@ func missingLibraryImports(ctx context.Context, libraries library.LibraryReposit
 		}
 	}
 	missing := make([]appdto.MissingImport, 0, len(byLibrary))
-	for libraryID, commit := range byLibrary {
-		missing = append(missing, appdto.MissingImport{LibraryID: libraryID, Commit: commit})
+	for libraryID, savedState := range byLibrary {
+		missing = append(missing, appdto.MissingImport{LibraryID: libraryID, SavedState: savedState})
 	}
 	sort.Slice(missing, func(i, j int) bool {
 		return missing[i].LibraryID.String() < missing[j].LibraryID.String()
@@ -102,7 +102,7 @@ func dropMissingLibraryImports(content draft.Content, file projectv0.ProjectFile
 	warnings := make([]appdto.DiscardWarning, 0, len(missing))
 	for _, imported := range missing {
 		warnings = append(warnings, appdto.DiscardWarning{
-			LibraryID: imported.LibraryID, Commit: imported.Commit, DroppedWidgets: dropped[imported.LibraryID],
+			LibraryID: imported.LibraryID, SavedState: imported.SavedState, DroppedWidgets: dropped[imported.LibraryID],
 		})
 	}
 	return content, warnings

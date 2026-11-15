@@ -52,9 +52,11 @@ type payload struct {
 	// event, whose ID is its Environment's.
 	EnvironmentID *uuid.UUID `json:"environment_id,omitempty"`
 	DeviceID      *uuid.UUID `json:"device_id,omitempty"`
-	// Commit is the number of the saved state of commit_created and
-	// commit_title_updated.
-	Commit int `json:"commit,omitempty"`
+	// SavedState is the number of the saved state of the created and the
+	// renamed saved state events. The stored name of the field stays "commit"
+	// (task 88_1): a row written before the rename may still be in the outbox,
+	// and it changes with the event types (task 88_2).
+	SavedState int `json:"commit,omitempty"`
 	// LabelID is the label of a label_assigned or label_unassigned event: its
 	// ID is the scope's (a Project's or a Library's), so the label is named
 	// beside it (task 85_3).
@@ -76,8 +78,8 @@ func Encode(e event.Event) ([]byte, error) {
 	switch ev := e.(type) {
 	case tag.TagEvent:
 		p.ID = ev.TagID().UUID()
-	case draft.CommitEvent:
-		p.Commit = ev.CommitNumber()
+	case draft.SavedStateEvent:
+		p.SavedState = ev.SavedStateNumber()
 		if ev.Scope().IsLibrary() {
 			libraryID := ev.Scope().LibraryID().UUID()
 			p.ID, p.LibraryID = libraryID, &libraryID
@@ -123,7 +125,7 @@ func Encode(e event.Event) ([]byte, error) {
 		// 85_3; ADR 0025).
 		labelID := ev.LabelID().UUID()
 		p.LabelID = &labelID
-		p.Commit = ev.CommitNumber()
+		p.SavedState = ev.SavedStateNumber()
 		if ev.Scope().IsLibrary() {
 			libraryID := ev.Scope().LibraryID().UUID()
 			p.ID, p.LibraryID = libraryID, &libraryID
@@ -158,7 +160,7 @@ func Decode(eventType event.EventType, data []byte) (event.Event, error) {
 	environmentOfEvent := id.NewID(id.IDWithUUID[device.Environment](p.ID))
 
 	switch eventType {
-	case event.EventTypeCommitCreated, event.EventTypeCommitTitleUpdated:
+	case event.EventTypeSavedStateCreated, event.EventTypeSavedStateTitleUpdated:
 		var scope draft.Scope
 		switch {
 		case p.ProjectID != nil:
@@ -168,10 +170,10 @@ func Decode(eventType event.EventType, data []byte) (event.Event, error) {
 		default:
 			return nil, fmt.Errorf("cannot decode %s payload: no project_id or library_id", eventType)
 		}
-		if eventType == event.EventTypeCommitCreated {
-			return draft.NewCommitCreatedEvent(scope, p.Commit, ts), nil
+		if eventType == event.EventTypeSavedStateCreated {
+			return draft.NewSavedStateCreatedEvent(scope, p.SavedState, ts), nil
 		}
-		return draft.NewCommitTitleUpdatedEvent(scope, p.Commit, ts), nil
+		return draft.NewSavedStateTitleUpdatedEvent(scope, p.SavedState, ts), nil
 	case event.EventTypeWidgetTypeCreated, event.EventTypeWidgetTypeUpdated, event.EventTypeWidgetTypeDeleted:
 		if p.LibraryID == nil {
 			return nil, fmt.Errorf("cannot decode %s payload: no library_id", eventType)
@@ -222,9 +224,9 @@ func Decode(eventType event.EventType, data []byte) (event.Event, error) {
 			return nil, fmt.Errorf("cannot decode %s payload: no project_id or library_id", eventType)
 		}
 		if eventType == event.EventTypeLabelAssigned {
-			return label.NewLabelAssignedEvent(labelOfEvent, scope, p.Commit, ts), nil
+			return label.NewLabelAssignedEvent(labelOfEvent, scope, p.SavedState, ts), nil
 		}
-		return label.NewLabelUnassignedEvent(labelOfEvent, scope, p.Commit, ts), nil
+		return label.NewLabelUnassignedEvent(labelOfEvent, scope, p.SavedState, ts), nil
 	}
 
 	// Events of a Project's content: the Project is stored beside them.

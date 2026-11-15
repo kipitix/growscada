@@ -219,7 +219,7 @@ func checkImported(ctx context.Context, q rowQuerier, projectID id.ID[project.Pr
 	err := q.QueryRowContext(ctx,
 		`SELECT EXISTS (
 		   SELECT 1 FROM engineering.library_imports li
-		   JOIN engineering.commits c ON c.id = li.commit_id
+		   JOIN engineering.saved_states c ON c.id = li.saved_state_id
 		   WHERE li.project_id = $1
 		     AND EXISTS (SELECT 1
 		                 FROM jsonb_array_elements(COALESCE(c.content -> 'widget_types', '[]'::jsonb)) wt

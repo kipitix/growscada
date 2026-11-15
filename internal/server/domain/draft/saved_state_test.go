@@ -14,25 +14,25 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/version"
 )
 
-func TestCommitTitle_TrimsAndRefusesEmptyOrLong(t *testing.T) {
-	title, err := draft.NewCommitTitle("  Before the demo  ")
+func TestSavedStateTitle_TrimsAndRefusesEmptyOrLong(t *testing.T) {
+	title, err := draft.NewSavedStateTitle("  Before the demo  ")
 	if err != nil {
-		t.Fatalf("NewCommitTitle: %v", err)
+		t.Fatalf("NewSavedStateTitle: %v", err)
 	}
 	if title.String() != "Before the demo" {
 		t.Errorf("title %q, want it trimmed", title)
 	}
-	if _, err := draft.NewCommitTitle("   "); err == nil {
+	if _, err := draft.NewSavedStateTitle("   "); err == nil {
 		t.Error("an empty title was accepted")
 	}
 	long := make([]rune, 201)
 	for i := range long {
 		long[i] = 'a'
 	}
-	if _, err := draft.NewCommitTitle(string(long)); err == nil {
+	if _, err := draft.NewSavedStateTitle(string(long)); err == nil {
 		t.Error("a title of 201 characters was accepted")
 	}
-	if _, err := draft.NewCommitTitle(string(long[:200])); err != nil {
+	if _, err := draft.NewSavedStateTitle(string(long[:200])); err != nil {
 		t.Errorf("a title of 200 characters was refused: %v", err)
 	}
 }
@@ -57,64 +57,64 @@ func TestAuthor_TrimsAndRefusesEmptyOrLong(t *testing.T) {
 	}
 }
 
-func TestNewCommit_RecordsCreatedAndWithTitleRecordsUpdated(t *testing.T) {
+func TestNewSavedState_RecordsCreatedAndWithTitleRecordsUpdated(t *testing.T) {
 	projectID := id.NewID[project.Project]()
 	scope := draft.ProjectScope(projectID)
 	at := time.Date(2026, 11, 8, 10, 0, 0, 0, time.UTC)
-	title, _ := draft.NewCommitTitle("Before the demo")
+	title, _ := draft.NewSavedStateTitle("Before the demo")
 	author, _ := draft.NewAuthor("Ada")
 	ver, _ := version.New(version.WithNumber[draft.Draft](7))
-	content := draft.NewProjectCommitContent(projectv0.ProjectFile{
+	content := draft.NewProjectSavedStateContent(projectv0.ProjectFile{
 		Header: projectv0.Header{SchemaVersion: projectv0.SchemaVersion(), ProjectID: projectID.UUID()},
 		Tags:   []projectv0.TagDefinition{},
 	})
 
-	commit, err := draft.NewCommit(scope, id.NewID[draft.Commit](), 1, title, author, at, ver, content)
+	savedState, err := draft.NewSavedState(scope, id.NewID[draft.SavedState](), 1, title, author, at, ver, content)
 	if err != nil {
-		t.Fatalf("NewCommit: %v", err)
+		t.Fatalf("NewSavedState: %v", err)
 	}
-	events := commit.PendingEvents()
-	if len(events) != 1 || events[0].Type() != event.EventTypeCommitCreated {
+	events := savedState.PendingEvents()
+	if len(events) != 1 || events[0].Type() != event.EventTypeSavedStateCreated {
 		t.Fatalf("events %v, want one commit_created", events)
 	}
-	if commit.DraftVersion().Number() != 7 {
-		t.Errorf("commit fixed version %s, want 7", commit.DraftVersion())
+	if savedState.DraftVersion().Number() != 7 {
+		t.Errorf("saved state fixed version %s, want 7", savedState.DraftVersion())
 	}
-	if commit.Content().IsProject() != true || commit.Content().IsLibrary() {
+	if savedState.Content().IsProject() != true || savedState.Content().IsLibrary() {
 		t.Errorf("content is not a project file")
 	}
 
-	renamedTitle, _ := draft.NewCommitTitle("For the demo")
-	renamed := commit.WithTitle(renamedTitle)
+	renamedTitle, _ := draft.NewSavedStateTitle("For the demo")
+	renamed := savedState.WithTitle(renamedTitle)
 	if renamed.Title().String() != "For the demo" {
 		t.Errorf("renamed title %q", renamed.Title())
 	}
-	if renamed.Number() != commit.Number() || renamed.Content().IsProject() != true {
+	if renamed.Number() != savedState.Number() || renamed.Content().IsProject() != true {
 		t.Errorf("the rename touched the snapshot")
 	}
 	events = renamed.PendingEvents()
-	if len(events) != 1 || events[0].Type() != event.EventTypeCommitTitleUpdated {
+	if len(events) != 1 || events[0].Type() != event.EventTypeSavedStateTitleUpdated {
 		t.Fatalf("events %v, want one commit_title_updated", events)
 	}
 }
 
-func TestNewCommit_RefusesContentOfTheOtherScope(t *testing.T) {
-	title, _ := draft.NewCommitTitle("Title")
+func TestNewSavedState_RefusesContentOfTheOtherScope(t *testing.T) {
+	title, _ := draft.NewSavedStateTitle("Title")
 	author, _ := draft.NewAuthor("Ada")
 	ver, _ := version.New(version.WithNumber[draft.Draft](1))
-	types := draft.NewLibraryCommitContent([]library.WidgetTypeCopy{})
-	if _, err := draft.NewCommit(draft.ProjectScope(id.NewID[project.Project]()),
-		id.NewID[draft.Commit](), 1, title, author, time.Now(), ver, types); err == nil {
-		t.Error("a project's commit with widget types was accepted")
+	types := draft.NewLibrarySavedStateContent([]library.WidgetTypeCopy{})
+	if _, err := draft.NewSavedState(draft.ProjectScope(id.NewID[project.Project]()),
+		id.NewID[draft.SavedState](), 1, title, author, time.Now(), ver, types); err == nil {
+		t.Error("a project's saved state with widget types was accepted")
 	}
-	file := draft.NewProjectCommitContent(projectv0.ProjectFile{})
-	if _, err := draft.NewCommit(draft.LibraryScope(id.NewID[library.Library]()),
-		id.NewID[draft.Commit](), 1, title, author, time.Now(), ver, file); err == nil {
-		t.Error("a library's commit with a project file was accepted")
+	file := draft.NewProjectSavedStateContent(projectv0.ProjectFile{})
+	if _, err := draft.NewSavedState(draft.LibraryScope(id.NewID[library.Library]()),
+		id.NewID[draft.SavedState](), 1, title, author, time.Now(), ver, file); err == nil {
+		t.Error("a library's saved state with a project file was accepted")
 	}
 }
 
-func TestCommitContent_SurvivesTheEncoding(t *testing.T) {
+func TestSavedStateContent_SurvivesTheEncoding(t *testing.T) {
 	libraryID := id.NewID[library.Library]()
 	typeID := id.NewID[library.WidgetType]()
 	name, _ := library.NewWidgetTypeName("gauge")
@@ -130,11 +130,11 @@ func TestCommitContent_SurvivesTheEncoding(t *testing.T) {
 		t.Fatalf("NewWidgetTypeCopy: %v", err)
 	}
 
-	encoded, err := json.Marshal(draft.NewLibraryCommitContent([]library.WidgetTypeCopy{wt}))
+	encoded, err := json.Marshal(draft.NewLibrarySavedStateContent([]library.WidgetTypeCopy{wt}))
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
 	}
-	var decoded draft.CommitContent
+	var decoded draft.SavedStateContent
 	if err := json.Unmarshal(encoded, &decoded); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}

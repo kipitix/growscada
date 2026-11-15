@@ -454,36 +454,36 @@ func (s *Session) DeleteEnvironmentDevice(ctx context.Context, environmentID id.
 // it. A switch removes, in the same change, the PortBindings the new saved
 // state breaks; Widgets left without their WidgetType refuse it (ADR 0012). The
 // bool reports whether the import was added.
-func (s *Session) PutLibraryImport(ctx context.Context, libraryID id.ID[library.Library], commitNumber int) (libraryimport.LibraryImport, bool, error) {
-	commit, err := s.loader.LibraryCommit(ctx, libraryID, commitNumber)
+func (s *Session) PutLibraryImport(ctx context.Context, libraryID id.ID[library.Library], savedStateNumber int) (libraryimport.LibraryImport, bool, error) {
+	savedState, err := s.loader.LibrarySavedState(ctx, libraryID, savedStateNumber)
 	if err != nil {
 		return nil, false, err
 	}
 	found, err := s.loader.LibraryImport(ctx, libraryID)
 	switch {
 	case errors.Is(err, libraryimport.ErrLibraryImportNotFound):
-		created := libraryimport.CreateLibraryImport(s.ProjectID(), commit)
+		created := libraryimport.CreateLibraryImport(s.ProjectID(), savedState)
 		s.recordAfter(SnapshotOfLibraryImport(created))
 		s.recordEvents(created.PendingEvents()...)
 		return created, true, nil
 	case err != nil:
 		return nil, false, err
 	}
-	from, err := s.loader.LibraryCommit(ctx, libraryID, found.CommitNumber())
+	from, err := s.loader.LibrarySavedState(ctx, libraryID, found.SavedStateNumber())
 	if err != nil {
 		return nil, false, err
 	}
-	if err := s.checkImportImpact(ctx, &from, &commit); err != nil {
+	if err := s.checkImportImpact(ctx, &from, &savedState); err != nil {
 		return nil, false, err
 	}
-	switched, err := found.Switch(commit)
+	switched, err := found.Switch(savedState)
 	if err != nil {
 		return nil, false, err
 	}
 	s.recordBefore(SnapshotOfLibraryImport(found))
 	s.recordAfter(SnapshotOfLibraryImport(switched))
 	s.recordEvents(switched.PendingEvents()...)
-	if err := s.reconcileScenes(ctx, &commit); err != nil {
+	if err := s.reconcileScenes(ctx, &savedState); err != nil {
 		return nil, false, err
 	}
 	return switched, false, nil
@@ -496,7 +496,7 @@ func (s *Session) DeleteLibraryImport(ctx context.Context, libraryID id.ID[libra
 	if err != nil {
 		return nil, err
 	}
-	from, err := s.loader.LibraryCommit(ctx, libraryID, found.CommitNumber())
+	from, err := s.loader.LibrarySavedState(ctx, libraryID, found.SavedStateNumber())
 	if err != nil {
 		return nil, err
 	}
@@ -511,7 +511,7 @@ func (s *Session) DeleteLibraryImport(ctx context.Context, libraryID id.ID[libra
 
 // checkImportImpact refuses a switch or removal that would leave Widgets of the
 // Project without their WidgetType (libraryimport.ImportImpactOf).
-func (s *Session) checkImportImpact(ctx context.Context, from, to *libraryimport.Commit) error {
+func (s *Session) checkImportImpact(ctx context.Context, from, to *libraryimport.SavedState) error {
 	scenes, err := s.loader.Scenes(ctx)
 	if err != nil {
 		return err
@@ -525,8 +525,8 @@ func (s *Session) checkImportImpact(ctx context.Context, from, to *libraryimport
 
 // reconcileScenes removes the PortBindings the new saved state breaks from
 // every Scene of the Project (ADR 0010, ADR 0012).
-func (s *Session) reconcileScenes(ctx context.Context, commit *libraryimport.Commit) error {
-	if commit == nil {
+func (s *Session) reconcileScenes(ctx context.Context, savedState *libraryimport.SavedState) error {
+	if savedState == nil {
 		return nil
 	}
 	scenes, err := s.loader.Scenes(ctx)
@@ -545,7 +545,7 @@ func (s *Session) reconcileScenes(ctx context.Context, commit *libraryimport.Com
 				continue
 			}
 			seen[w.TypeID()] = struct{}{}
-			wt, ok := (*commit).FindWidgetType(w.TypeID())
+			wt, ok := (*savedState).FindWidgetType(w.TypeID())
 			if !ok {
 				continue
 			}

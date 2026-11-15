@@ -25,7 +25,7 @@ func TestEncodeDecode_RoundTripsEveryKind(t *testing.T) {
 		{Kind: draft.KindDevice, ID: id, State: draft.DeviceState{Name: "d", Protocol: "simulation", Config: json.RawMessage(`{"a":1}`)}},
 		{Kind: draft.KindEnvironment, ID: id, State: draft.EnvironmentState{Name: "e"}},
 		{Kind: draft.KindEnvironmentDevice, ID: id, State: draft.EnvironmentDeviceState{EnvironmentID: id, DeviceID: id, Params: json.RawMessage(`{}`)}},
-		{Kind: draft.KindLibraryImport, ID: id, State: draft.LibraryImportState{LibraryID: id, Commit: 2}},
+		{Kind: draft.KindLibraryImport, ID: id, State: draft.LibraryImportState{LibraryID: id, SavedState: 2}},
 	}
 	encoded, err := Encode(snapshots)
 	if err != nil {

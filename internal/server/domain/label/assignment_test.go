@@ -21,30 +21,30 @@ func libraryScope() draft.Scope { return draft.LibraryScope(id.NewID[library.Lib
 
 func TestNewAssignment_ValidatesScopeAndNumber(t *testing.T) {
 	at := time.Date(2026, 11, 14, 12, 0, 0, 0, time.UTC)
-	commitID := id.NewID[draft.Commit]()
-	assignment, err := label.NewAssignment(commitID, projectScope(), 3, at)
+	savedStateID := id.NewID[draft.SavedState]()
+	assignment, err := label.NewAssignment(savedStateID, projectScope(), 3, at)
 	if err != nil {
 		t.Fatalf("a valid assignment: %v", err)
 	}
-	if assignment.CommitID() != commitID || !assignment.Scope().IsProject() ||
-		assignment.CommitNumber() != 3 || !assignment.AssignedAt().Equal(at) {
+	if assignment.SavedStateID() != savedStateID || !assignment.Scope().IsProject() ||
+		assignment.SavedStateNumber() != 3 || !assignment.AssignedAt().Equal(at) {
 		t.Errorf("the assignment: %s", assignment)
 	}
-	if _, err := label.NewAssignment(commitID, libraryScope(), 1, at); err != nil {
+	if _, err := label.NewAssignment(savedStateID, libraryScope(), 1, at); err != nil {
 		t.Errorf("a library's assignment: %v", err)
 	}
 
 	for _, bad := range []struct {
-		commitID id.ID[draft.Commit]
-		scope    draft.Scope
-		number   int
+		savedStateID id.ID[draft.SavedState]
+		scope        draft.Scope
+		number       int
 	}{
-		{commitID, projectScope(), 0},
-		{commitID, projectScope(), -1},
-		{commitID, draft.Scope{}, 1},
-		{id.ID[draft.Commit]{}, projectScope(), 1},
+		{savedStateID, projectScope(), 0},
+		{savedStateID, projectScope(), -1},
+		{savedStateID, draft.Scope{}, 1},
+		{id.ID[draft.SavedState]{}, projectScope(), 1},
 	} {
-		if _, err := label.NewAssignment(bad.commitID, bad.scope, bad.number, at); !errors.Is(err, label.ErrInvalidAssignment) {
+		if _, err := label.NewAssignment(bad.savedStateID, bad.scope, bad.number, at); !errors.Is(err, label.ErrInvalidAssignment) {
 			t.Errorf("assignment %v/%d: %v, want ErrInvalidAssignment", bad.scope, bad.number, err)
 		}
 	}
@@ -53,16 +53,16 @@ func TestNewAssignment_ValidatesScopeAndNumber(t *testing.T) {
 func TestLabel_AssignIsIdempotent(t *testing.T) {
 	labelID := id.NewID[label.Label]()
 	scope := projectScope()
-	commitID := id.NewID[draft.Commit]()
+	savedStateID := id.NewID[draft.SavedState]()
 	at := time.Date(2026, 11, 14, 12, 0, 0, 0, time.UTC)
 	created := label.ReconstituteLabel(labelID, id.NewID[organization.Organization](),
 		mustName(t, "Ready"), mustColor(t, "#22c55e"), at, nil)
 
-	assigned, err := created.Assign(commitID, scope, 3, at)
+	assigned, err := created.Assign(savedStateID, scope, 3, at)
 	if err != nil {
 		t.Fatalf("Assign: %v", err)
 	}
-	if len(assigned.Assignments()) != 1 || assigned.Assignments()[0].CommitID() != commitID {
+	if len(assigned.Assignments()) != 1 || assigned.Assignments()[0].SavedStateID() != savedStateID {
 		t.Fatalf("the assignment: %v", assigned.Assignments())
 	}
 	if len(created.Assignments()) != 0 {
@@ -73,12 +73,12 @@ func TestLabel_AssignIsIdempotent(t *testing.T) {
 		t.Fatalf("the assignment's events: %v", pending)
 	}
 	recorded, ok := pending[0].(label.LabelAssignedEvent)
-	if !ok || recorded.LabelID() != labelID || recorded.Scope() != scope || recorded.CommitNumber() != 3 {
+	if !ok || recorded.LabelID() != labelID || recorded.Scope() != scope || recorded.SavedStateNumber() != 3 {
 		t.Errorf("the recorded assignment event: %v", pending[0])
 	}
 
 	// The same mark again changes nothing and records nothing.
-	repeated, err := assigned.Assign(commitID, scope, 3, at.Add(time.Hour))
+	repeated, err := assigned.Assign(savedStateID, scope, 3, at.Add(time.Hour))
 	if err != nil {
 		t.Fatalf("a repeated Assign: %v", err)
 	}
@@ -87,12 +87,12 @@ func TestLabel_AssignIsIdempotent(t *testing.T) {
 	}
 
 	// Another saved state is another mark; the set is ordered as it was made.
-	otherCommit := id.NewID[draft.Commit]()
-	second, err := repeated.Assign(otherCommit, libraryScope(), 1, at)
+	otherSavedState := id.NewID[draft.SavedState]()
+	second, err := repeated.Assign(otherSavedState, libraryScope(), 1, at)
 	if err != nil {
 		t.Fatalf("a second Assign: %v", err)
 	}
-	if len(second.Assignments()) != 2 || second.Assignments()[0].CommitID() != commitID {
+	if len(second.Assignments()) != 2 || second.Assignments()[0].SavedStateID() != savedStateID {
 		t.Errorf("the assignments: %v", second.Assignments())
 	}
 }
@@ -100,16 +100,16 @@ func TestLabel_AssignIsIdempotent(t *testing.T) {
 func TestLabel_UnassignIsIdempotent(t *testing.T) {
 	labelID := id.NewID[label.Label]()
 	scope := libraryScope()
-	commitID := id.NewID[draft.Commit]()
+	savedStateID := id.NewID[draft.SavedState]()
 	at := time.Date(2026, 11, 14, 12, 0, 0, 0, time.UTC)
 	created := label.ReconstituteLabel(labelID, id.NewID[organization.Organization](),
 		mustName(t, "Ready"), label.Color{}, at, nil)
-	assigned, err := created.Assign(commitID, scope, 2, at)
+	assigned, err := created.Assign(savedStateID, scope, 2, at)
 	if err != nil {
 		t.Fatalf("Assign: %v", err)
 	}
 
-	unassigned, err := assigned.Unassign(commitID)
+	unassigned, err := assigned.Unassign(savedStateID)
 	if err != nil {
 		t.Fatalf("Unassign: %v", err)
 	}
@@ -121,12 +121,12 @@ func TestLabel_UnassignIsIdempotent(t *testing.T) {
 		t.Fatalf("the unassignment's events: %v", pending)
 	}
 	recorded, ok := pending[len(pending)-1].(label.LabelUnassignedEvent)
-	if !ok || recorded.Scope() != scope || recorded.CommitNumber() != 2 || recorded.LabelID() != labelID {
+	if !ok || recorded.Scope() != scope || recorded.SavedStateNumber() != 2 || recorded.LabelID() != labelID {
 		t.Errorf("the recorded unassignment event: %v", pending[0])
 	}
 
 	// Taking off a mark that is not there changes nothing and records nothing.
-	repeated, err := unassigned.Unassign(commitID)
+	repeated, err := unassigned.Unassign(savedStateID)
 	if err != nil {
 		t.Fatalf("a repeated Unassign: %v", err)
 	}
@@ -139,7 +139,7 @@ func TestLabel_AssignmentsAreCopiedOut(t *testing.T) {
 	at := time.Date(2026, 11, 14, 12, 0, 0, 0, time.UTC)
 	assigned, err := label.ReconstituteLabel(id.NewID[label.Label](), id.NewID[organization.Organization](),
 		mustName(t, "Ready"), label.Color{}, at, nil).
-		Assign(id.NewID[draft.Commit](), projectScope(), 1, at)
+		Assign(id.NewID[draft.SavedState](), projectScope(), 1, at)
 	if err != nil {
 		t.Fatalf("Assign: %v", err)
 	}

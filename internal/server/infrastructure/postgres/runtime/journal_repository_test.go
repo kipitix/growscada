@@ -245,8 +245,8 @@ func TestCreateDeployment_RecordsADeploymentEntry(t *testing.T) {
 	ctx := context.Background()
 
 	at := time.Date(2026, 11, 6, 12, 0, 0, 0, time.UTC)
-	firstCommit := 1
-	deployed, err := deployments.CreateDeployment(ctx, projectID.UUID(), documentOf(projectID), runtimeapp.DeploymentCauseDeploy, &firstCommit, at)
+	firstSavedState := 1
+	deployed, err := deployments.CreateDeployment(ctx, projectID.UUID(), documentOf(projectID), runtimeapp.DeploymentCauseDeploy, &firstSavedState, at)
 	if err != nil {
 		t.Fatalf("CreateDeployment: %v", err)
 	}
@@ -264,15 +264,15 @@ func TestCreateDeployment_RecordsADeploymentEntry(t *testing.T) {
 		t.Fatalf("%d journal entries, want one per Deployment", len(entries))
 	}
 	for i, want := range []struct {
-		number int
-		cause  recordv0.DeploymentCause
-		from   *int
-		commit *int
-		at     time.Time
+		number     int
+		cause      recordv0.DeploymentCause
+		from       *int
+		savedState *int
+		at         time.Time
 	}{
-		{deployed.Number, recordv0.DeploymentCauseDeploy, nil, &firstCommit, at},
+		{deployed.Number, recordv0.DeploymentCauseDeploy, nil, &firstSavedState, at},
 		{fromFile.Number, recordv0.DeploymentCauseFile, nil, nil, at.Add(time.Minute)},
-		{rolledBack.Number, recordv0.DeploymentCauseRollback, &deployed.Number, &firstCommit, at.Add(2 * time.Minute)},
+		{rolledBack.Number, recordv0.DeploymentCauseRollback, &deployed.Number, &firstSavedState, at.Add(2 * time.Minute)},
 	} {
 		entry := entries[i]
 		payload := deploymentPayload(t, entry)
@@ -283,9 +283,9 @@ func TestCreateDeployment_RecordsADeploymentEntry(t *testing.T) {
 			(payload.RolledBackFrom != nil && *payload.RolledBackFrom != *want.from) {
 			t.Errorf("entry %d: rolled back from %v, want %v", i, payload.RolledBackFrom, want.from)
 		}
-		if (payload.CommitNumber == nil) != (want.commit == nil) ||
-			(payload.CommitNumber != nil && *payload.CommitNumber != *want.commit) {
-			t.Errorf("entry %d: release %v, want %v", i, payload.CommitNumber, want.commit)
+		if (payload.CommitNumber == nil) != (want.savedState == nil) ||
+			(payload.CommitNumber != nil && *payload.CommitNumber != *want.savedState) {
+			t.Errorf("entry %d: release %v, want %v", i, payload.CommitNumber, want.savedState)
 		}
 		if got := entry.Timestamp.UTC(); !got.Equal(want.at) {
 			t.Errorf("entry %d at %s, want the Deployment's %s", i, got, want.at)

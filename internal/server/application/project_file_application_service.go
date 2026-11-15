@@ -60,9 +60,9 @@ type projectFileServiceImpl struct {
 var _ ProjectFileService = (*projectFileServiceImpl)(nil)
 
 // NewProjectFileService returns the service of the project files of the live
-// Projects aContent serves, reading the running Deployments through aRuntime and
-// this server's Libraries and their saved states — through aContent's Drafts —
-// for opening a file.
+// Projects aContent serves, reading the running Deployments through aRuntime
+// and this server's Libraries and their saved states — through aContent's
+// Drafts — for opening a file.
 func NewProjectFileService(aContent ProjectContent, aBuilder ProjectFileBuilder, aRuntime RuntimeNode,
 	someLibraries library.LibraryRepository) ProjectFileService {
 	return &projectFileServiceImpl{
@@ -182,8 +182,8 @@ func (s projectFileServiceImpl) lockLocalImports(ctx context.Context, file proje
 			}
 			return err
 		}
-		if _, err := s.content.Drafts().FindCommit(ctx, draft.LibraryScope(libraryID), imported.Commit); err != nil {
-			if errors.Is(err, draft.ErrCommitNotFound) {
+		if _, err := s.content.Drafts().FindSavedState(ctx, draft.LibraryScope(libraryID), imported.Commit); err != nil {
+			if errors.Is(err, draft.ErrSavedStateNotFound) {
 				issues = append(issues, FileIssue{Path: path,
 					Message: fmt.Sprintf("library %s has no saved state %d on this server", imported.LibraryID, imported.Commit)})
 				continue

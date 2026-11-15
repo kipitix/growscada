@@ -53,7 +53,7 @@ func (r libraryImportRepositoryPostgresImpl) FindByLibrary(ctx context.Context, 
 // arguments are numbered from $2, in the order they were added.
 func (r libraryImportRepositoryPostgresImpl) readImports(ctx context.Context, and string, args ...any) ([]libraryimport.LibraryImport, error) {
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT library_id, commit_id, commit_number FROM engineering.library_imports WHERE project_id = $1 `+and+` ORDER BY pk_id`,
+		`SELECT library_id, saved_state_id, saved_state_number FROM engineering.library_imports WHERE project_id = $1 `+and+` ORDER BY pk_id`,
 		append([]any{r.project.UUID()}, args...)...,
 	)
 	if err != nil {
@@ -63,15 +63,15 @@ func (r libraryImportRepositoryPostgresImpl) readImports(ctx context.Context, an
 	imports := []libraryimport.LibraryImport{}
 	for rows.Next() {
 		var (
-			rawLibraryID uuid.UUID
-			rawCommitID  uuid.UUID
-			rawCommit    int
+			rawLibraryID    uuid.UUID
+			rawSavedStateID uuid.UUID
+			rawSavedState   int
 		)
-		if err := rows.Scan(&rawLibraryID, &rawCommitID, &rawCommit); err != nil {
+		if err := rows.Scan(&rawLibraryID, &rawSavedStateID, &rawSavedState); err != nil {
 			return nil, fmt.Errorf("error scanning library import: %w", err)
 		}
 		imports = append(imports, libraryimport.ReconstituteLibraryImport(r.project,
-			id.NewID(id.IDWithUUID[library.Library](rawLibraryID)), rawCommitID, rawCommit))
+			id.NewID(id.IDWithUUID[library.Library](rawLibraryID)), rawSavedStateID, rawSavedState))
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("error iterating over library imports: %w", err)
@@ -83,7 +83,7 @@ func (r libraryImportRepositoryPostgresImpl) readImports(ctx context.Context, an
 // $1 imports, in the order of its imports.
 const importedWidgetTypesQuery = `SELECT c.content
 	FROM engineering.library_imports li
-	JOIN engineering.commits c ON c.id = li.commit_id
+	JOIN engineering.saved_states c ON c.id = li.saved_state_id
 	WHERE li.project_id = $1
 	ORDER BY li.pk_id`
 
@@ -118,7 +118,7 @@ func (r libraryImportRepositoryPostgresImpl) readImported(ctx context.Context, w
 		if err := rows.Scan(&contentJSON); err != nil {
 			return nil, fmt.Errorf("error scanning the content of an imported saved state: %w", err)
 		}
-		var content draft.CommitContent
+		var content draft.SavedStateContent
 		if err := json.Unmarshal(contentJSON, &content); err != nil {
 			return nil, fmt.Errorf("cannot decode the content of an imported saved state: %w", err)
 		}
@@ -157,25 +157,25 @@ func (r libraryImportRepositoryPostgresImpl) FindImportedWidgetType(ctx context.
 // commitContentOfImport reads the content of a saved state an import names,
 // inside the Draft's transaction: the loader decodes the copies an import
 // switch and a removal are checked against.
-func commitContentOfImport(ctx context.Context, q rowQuerier, libraryID id.ID[library.Library], number int) (draft.CommitContent, uuid.UUID, error) {
+func commitContentOfImport(ctx context.Context, q rowQuerier, libraryID id.ID[library.Library], number int) (draft.SavedStateContent, uuid.UUID, error) {
 	var (
 		rawID       uuid.UUID
 		contentJSON []byte
 	)
 	err := q.QueryRowContext(ctx,
 		`SELECT c.id, c.content
-		 FROM engineering.commits c JOIN engineering.drafts d ON d.id = c.draft_id
+		 FROM engineering.saved_states c JOIN engineering.drafts d ON d.id = c.draft_id
 		 WHERE d.library_id = $1 AND c.number = $2`, libraryID.UUID(), number,
 	).Scan(&rawID, &contentJSON)
 	if errors.Is(err, sql.ErrNoRows) {
-		return draft.CommitContent{}, uuid.Nil, fmt.Errorf("%w: %d of library %s", draft.ErrCommitNotFound, number, libraryID)
+		return draft.SavedStateContent{}, uuid.Nil, fmt.Errorf("%w: %d of library %s", draft.ErrSavedStateNotFound, number, libraryID)
 	}
 	if err != nil {
-		return draft.CommitContent{}, uuid.Nil, fmt.Errorf("cannot read saved state %d of library %s: %w", number, libraryID, err)
+		return draft.SavedStateContent{}, uuid.Nil, fmt.Errorf("cannot read saved state %d of library %s: %w", number, libraryID, err)
 	}
-	var content draft.CommitContent
+	var content draft.SavedStateContent
 	if err := json.Unmarshal(contentJSON, &content); err != nil {
-		return draft.CommitContent{}, uuid.Nil, fmt.Errorf("cannot decode saved state %d of library %s: %w", number, libraryID, err)
+		return draft.SavedStateContent{}, uuid.Nil, fmt.Errorf("cannot decode saved state %d of library %s: %w", number, libraryID, err)
 	}
 	return content, rawID, nil
 }

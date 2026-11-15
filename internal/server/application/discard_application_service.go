@@ -19,8 +19,8 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/tag"
 )
 
-// DiscardService is the Engineering node's resets of a Project's Draft
-// (ADR 0016, task 72_4, task 84): Discard replaces it with its last saved state,
+// DiscardService is the Engineering node's resets of a Project's Draft (ADR
+// 0016, task 72_4, task 84): Discard replaces it with its last saved state,
 // dropping unsaved work, Load with a saved state the client names, and Revert
 // with the Deployment the Project runs. Each is one transaction over the Draft.
 type DiscardService interface {
@@ -43,8 +43,8 @@ type DiscardService interface {
 	// Draft is clean exactly when that saved state is its last one. A Library
 	// Import the saved state names but this server cannot write is dropped with
 	// the Widgets of its WidgetTypes and named in the answer (task 71). Returns
-	// draft.ErrCommitNotFound for a number the Project does not have and an error
-	// wrapping project.ErrProjectNotFound if it is not live.
+	// draft.ErrSavedStateNotFound for a number the Project does not have and an
+	// error wrapping project.ErrProjectNotFound if it is not live.
 	Load(ctx context.Context, projectID uuid.UUID, number int) (appdto.LoadedDraft, error)
 }
 
@@ -57,9 +57,9 @@ type discardServiceImpl struct {
 var _ DiscardService = (*discardServiceImpl)(nil)
 
 // NewDiscardService returns the DiscardService of the live Projects the
-// ProjectContent serves, reading the current Deployment through the Runtime node
-// aRuntime and checking its Library Imports against this server's Libraries and
-// their saved states (ADR 0018, task 71, task 85_6).
+// ProjectContent serves, reading the current Deployment through the Runtime
+// node aRuntime and checking its Library Imports against this server's
+// Libraries and their saved states (ADR 0018, task 71, task 85_6).
 func NewDiscardService(aContent ProjectContent, aRuntime RuntimeNode,
 	someLibraries library.LibraryRepository) DiscardService {
 	return &discardServiceImpl{content: aContent, runtime: aRuntime, libraries: someLibraries}
@@ -72,7 +72,7 @@ func (s discardServiceImpl) Discard(ctx context.Context, rawProjectID uuid.UUID)
 	}
 	// The newest saved state is what the Draft falls back to when its unsaved
 	// changes go.
-	last, found, err := s.content.Drafts().FindLastCommit(ctx, s.content.ScopeOf(projectID))
+	last, found, err := s.content.Drafts().FindLastSavedState(ctx, s.content.ScopeOf(projectID))
 	if err != nil {
 		return appdto.DiscardedDraft{}, fmt.Errorf("cannot read the last saved state of project %s: %w", projectID, err)
 	}
@@ -95,14 +95,14 @@ func (s discardServiceImpl) Load(ctx context.Context, rawProjectID uuid.UUID, nu
 		return appdto.LoadedDraft{}, err
 	}
 	scope := s.content.ScopeOf(projectID)
-	commit, err := s.content.Drafts().FindCommit(ctx, scope, number)
+	savedState, err := s.content.Drafts().FindSavedState(ctx, scope, number)
 	if err != nil {
 		return appdto.LoadedDraft{}, fmt.Errorf("cannot read saved state %d of project %s: %w", number, projectID, err)
 	}
 	// The loaded content is the Draft's clean state only when it is the last
 	// saved state: an older one leaves the Draft with unsaved changes (task 74).
 	// The comparison is the repository's, under the Draft's lock.
-	result, warnings, err := s.resetTo(ctx, projectID, commit, commit.Number())
+	result, warnings, err := s.resetTo(ctx, projectID, savedState, savedState.Number())
 	if err != nil {
 		return appdto.LoadedDraft{}, err
 	}
@@ -116,20 +116,20 @@ func (s discardServiceImpl) Load(ctx context.Context, rawProjectID uuid.UUID, nu
 // resetTo replaces the whole Draft of projectID with the content of a saved
 // state in one transaction: the imports the content keeps are locked FOR SHARE
 // in it, the DraftChange stack is cleared and the Version raised, and no
-// DraftChange is written. cleanCommit is the number of the saved state whose
-// content is written: the Draft is clean exactly when that is its last saved
-// state, compared under the Draft's lock (task 74). The Library Imports the
-// content names but this server lacks are dropped with the Widgets of their
+// DraftChange is written. cleanSavedState is the number of the saved state
+// whose content is written: the Draft is clean exactly when that is its last
+// saved state, compared under the Draft's lock (task 74). The Library Imports
+// the content names but this server lacks are dropped with the Widgets of their
 // WidgetTypes and returned as warnings, and they make the content no saved
 // state's (task 71).
-func (s discardServiceImpl) resetTo(ctx context.Context, projectID id.ID[project.Project], commit draft.Commit, cleanCommit int) (draft.Draft, []appdto.DiscardWarning, error) {
-	file, ok := commit.Content().ProjectFile()
+func (s discardServiceImpl) resetTo(ctx context.Context, projectID id.ID[project.Project], savedState draft.SavedState, cleanSavedState int) (draft.Draft, []appdto.DiscardWarning, error) {
+	file, ok := savedState.Content().ProjectFile()
 	if !ok {
-		return nil, nil, fmt.Errorf("saved state %d of project %s holds no project file", commit.Number(), projectID)
+		return nil, nil, fmt.Errorf("saved state %d of project %s holds no project file", savedState.Number(), projectID)
 	}
 	content, err := contentOfProjectFile(projectID, file)
 	if err != nil {
-		return nil, nil, fmt.Errorf("cannot read saved state %d of project %s: %w", commit.Number(), projectID, err)
+		return nil, nil, fmt.Errorf("cannot read saved state %d of project %s: %w", savedState.Number(), projectID, err)
 	}
 	missing, err := missingLibraryImports(ctx, s.libraries, s.content.Drafts(), file)
 	if err != nil {
@@ -139,16 +139,16 @@ func (s discardServiceImpl) resetTo(ctx context.Context, projectID id.ID[project
 	if len(warnings) > 0 {
 		// What is written is no longer the saved state's content: the Draft keeps
 		// its unsaved mark (task 71).
-		cleanCommit = 0
+		cleanSavedState = 0
 	}
-	result, err := s.content.Drafts().Replace(ctx, s.content.ScopeOf(projectID), cleanCommit, func(session *draft.Session) error {
+	result, err := s.content.Drafts().Replace(ctx, s.content.ScopeOf(projectID), cleanSavedState, func(session *draft.Session) error {
 		if err := s.lockDiscardedImports(ctx, content, session); err != nil {
 			return err
 		}
 		return session.Replace(ctx, content)
 	})
 	if err != nil {
-		return nil, nil, fmt.Errorf("cannot load saved state %d of project %s: %w", commit.Number(), projectID, err)
+		return nil, nil, fmt.Errorf("cannot load saved state %d of project %s: %w", savedState.Number(), projectID, err)
 	}
 	return result, warnings, nil
 }
@@ -180,17 +180,17 @@ func (s discardServiceImpl) Revert(ctx context.Context, rawProjectID uuid.UUID) 
 	}
 	content, warnings := dropMissingLibraryImports(content, deployment.Content, missing)
 	// The Draft the Revert writes is its last saved state's content only when the
-	// Deployment is exactly that and nothing of it was dropped: then it is
-	// clean, as after a Discard. A Deployment of another saved state, of a file or
-	// of an older state is a different content (task 74).
-	cleanCommit, err := s.revertIsTheLastCommit(ctx, projectID, deployment.Content)
+	// Deployment is exactly that and nothing of it was dropped: then it is clean,
+	// as after a Discard. A Deployment of another saved state, of a file or of an
+	// older state is a different content (task 74).
+	cleanSavedState, err := s.revertIsTheLastSavedState(ctx, projectID, deployment.Content)
 	if err != nil {
 		return appdto.DiscardedDraft{}, err
 	}
 	if len(warnings) > 0 {
-		cleanCommit = 0
+		cleanSavedState = 0
 	}
-	result, err := s.content.Drafts().Replace(ctx, s.content.ScopeOf(projectID), cleanCommit, func(session *draft.Session) error {
+	result, err := s.content.Drafts().Replace(ctx, s.content.ScopeOf(projectID), cleanSavedState, func(session *draft.Session) error {
 		if err := s.lockDiscardedImports(ctx, content, session); err != nil {
 			return err
 		}
@@ -202,15 +202,15 @@ func (s discardServiceImpl) Revert(ctx context.Context, rawProjectID uuid.UUID) 
 	return appdto.DiscardedDraft{Version: result.Version().Number(), Warnings: warnings}, nil
 }
 
-// revertIsTheLastCommit returns the number of the Project's last saved state
-// when the document of the Deployment it runs is that saved state's content,
-// and 0 otherwise: the Draft a Revert writes is then that saved state again and
-// clean, as after a Discard (task 74). A Project with no saved state, or a
-// Deployment of another content, is 0. The repository compares the number with
-// the one it holds under the Draft's lock, so a Save committed meanwhile keeps
-// the Draft unsaved.
-func (s discardServiceImpl) revertIsTheLastCommit(ctx context.Context, projectID id.ID[project.Project], document projectv0.ProjectFile) (int, error) {
-	last, found, err := s.content.Drafts().FindLastCommit(ctx, s.content.ScopeOf(projectID))
+// revertIsTheLastSavedState returns the number of the Project's last saved
+// state when the document of the Deployment it runs is that saved state's
+// content, and 0 otherwise: the Draft a Revert writes is then that saved state
+// again and clean, as after a Discard (task 74). A Project with no saved state,
+// or a Deployment of another content, is 0. The repository compares the number
+// with the one it holds under the Draft's lock, so a Save committed meanwhile
+// keeps the Draft unsaved.
+func (s discardServiceImpl) revertIsTheLastSavedState(ctx context.Context, projectID id.ID[project.Project], document projectv0.ProjectFile) (int, error) {
+	last, found, err := s.content.Drafts().FindLastSavedState(ctx, s.content.ScopeOf(projectID))
 	if err != nil {
 		return 0, fmt.Errorf("cannot read the last saved state of project %s: %w", projectID, err)
 	}

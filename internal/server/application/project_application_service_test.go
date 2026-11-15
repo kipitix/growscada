@@ -96,7 +96,7 @@ func TestProjectService_CreateFindUpdate(t *testing.T) {
 	}
 
 	// A write of the Draft's content makes it unsaved, and a Save fixes it:
-	// the flag follows the last Commit (task 73; ADR 0016, ADR 0021).
+	// the flag follows the last SavedState (task 73; ADR 0016, ADR 0021).
 	if _, err := r.tagSvc.CreateTag(ctx, created.ID, appdto.CreateTagInput{
 		Version: draftVersionOf(t, created.ID), Name: "pump.speed", Type: "integer",
 	}); err != nil {
@@ -106,7 +106,7 @@ func TestProjectService_CreateFindUpdate(t *testing.T) {
 	if err != nil || !changed.HasUnsavedChanges {
 		t.Errorf("after a write of the Draft: %+v, %v, want unsaved changes", changed, err)
 	}
-	mustSaveCommit(t, created.ID, "First")
+	mustSaveState(t, created.ID, "First")
 	saved, err := svc.FindProjectByID(ctx, created.ID)
 	if err != nil || saved.HasUnsavedChanges {
 		t.Errorf("after a Save: %+v, %v, want no unsaved changes", saved, err)

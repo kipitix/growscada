@@ -85,7 +85,7 @@ func TestLibraryDelete_OnlyWhileNoLiveProjectPinsIt(t *testing.T) {
 	}
 	var left int
 	if err := testDB.QueryRowContext(ctx, `SELECT (SELECT count(*) FROM engineering.widget_types WHERE library_id = $1)
-	          + (SELECT count(*) FROM engineering.commits c JOIN engineering.drafts d ON d.id = c.draft_id
+	          + (SELECT count(*) FROM engineering.saved_states c JOIN engineering.drafts d ON d.id = c.draft_id
 	             WHERE d.library_id = $1)`, lib.ID().UUID()).Scan(&left); err != nil || left != 0 {
 		t.Errorf("rows of the removed library left: %d, %v", left, err)
 	}

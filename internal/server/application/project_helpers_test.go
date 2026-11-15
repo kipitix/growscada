@@ -183,7 +183,7 @@ func newRuntime() (runtimeapp.TagStateService, application.RuntimeNode) {
 // first, or the Tag has no state to write.
 func deployProject(t *testing.T, projectID uuid.UUID) {
 	t.Helper()
-	saved := mustSaveCommit(t, projectID, "Deploy")
+	saved := mustSaveState(t, projectID, "Deploy")
 	if _, err := newDeployService().Deploy(context.Background(), projectID, saved.Number); err != nil {
 		if errors.Is(err, application.ErrNothingToDeploy) {
 			return

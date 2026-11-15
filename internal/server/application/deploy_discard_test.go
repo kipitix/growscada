@@ -17,18 +17,18 @@ import (
 	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/repositories"
 )
 
-// mustSaveCommit fixes the Draft of the project as a Commit at the Version it
-// shows, as Save does. A Draft unchanged since its last Commit has nothing to
-// save: that Commit is the one the test means.
-func mustSaveCommit(t *testing.T, projectID uuid.UUID, title string) appdto.Commit {
+// mustSaveState fixes the Draft of the project as a SavedState at the Version
+// it shows, as Save does. A Draft unchanged since its last SavedState has
+// nothing to save: that SavedState is the one the test means.
+func mustSaveState(t *testing.T, projectID uuid.UUID, title string) appdto.SavedState {
 	t.Helper()
 	ctx := context.Background()
 	scope := draft.ProjectScope(id.NewID(id.IDWithUUID[project.Project](projectID)))
-	saved, err := newCommitService().Save(ctx, scope, draftVersionOf(t, projectID), title, "Ada")
+	saved, err := newSavedStateService().Save(ctx, scope, draftVersionOf(t, projectID), title, "Ada")
 	if errors.Is(err, draft.ErrNothingToSave) {
-		list, listErr := newCommitService().List(ctx, scope, uuid.Nil)
+		list, listErr := newSavedStateService().List(ctx, scope, uuid.Nil)
 		if listErr != nil || len(list) == 0 {
-			t.Fatalf("no commit to reuse: %v", listErr)
+			t.Fatalf("no saved state to reuse: %v", listErr)
 		}
 		return list[0]
 	}
@@ -38,21 +38,22 @@ func mustSaveCommit(t *testing.T, projectID uuid.UUID, title string) appdto.Comm
 	return saved
 }
 
-// mustDeployCommit makes the saved state commitNumber the running Deployment.
-func mustDeployCommit(t *testing.T, projectID uuid.UUID, commitNumber int) appdto.Deployment {
+// mustDeploySavedState makes the saved state savedStateNumber the running
+// Deployment.
+func mustDeploySavedState(t *testing.T, projectID uuid.UUID, savedStateNumber int) appdto.Deployment {
 	t.Helper()
-	deployment, err := newDeployService().Deploy(context.Background(), projectID, commitNumber)
+	deployment, err := newDeployService().Deploy(context.Background(), projectID, savedStateNumber)
 	if err != nil {
-		t.Fatalf("Deploy saved state %d: %v", commitNumber, err)
+		t.Fatalf("Deploy saved state %d: %v", savedStateNumber, err)
 	}
 	return deployment
 }
 
-// mustDeployTheDraft saves the Draft as a Commit and deploys it.
+// mustDeployTheDraft saves the Draft as a SavedState and deploys it.
 func mustDeployTheDraft(t *testing.T, projectID uuid.UUID) appdto.Deployment {
 	t.Helper()
-	saved := mustSaveCommit(t, projectID, "Deploy")
-	return mustDeployCommit(t, projectID, saved.Number)
+	saved := mustSaveState(t, projectID, "Deploy")
+	return mustDeploySavedState(t, projectID, saved.Number)
 }
 
 // newDiscardService returns the Engineering node's DiscardService over the
@@ -99,12 +100,12 @@ func mustCreateTag(t *testing.T, name, tagType string) appdto.Tag {
 
 // --- Deploy a saved state ---
 
-func TestDeployCommit_CreatesADeployment(t *testing.T) {
+func TestDeploySavedState_CreatesADeployment(t *testing.T) {
 	cleanDevices(t)
 	cleanScenes(t)
 	ctx := context.Background()
 	created := mustCreateTag(t, "speed", "integer")
-	saved := mustSaveCommit(t, mainProject, "First save")
+	saved := mustSaveState(t, mainProject, "First save")
 
 	deployment, err := newDeployService().Deploy(ctx, mainProject, saved.Number)
 	if err != nil {
@@ -116,8 +117,8 @@ func TestDeployCommit_CreatesADeployment(t *testing.T) {
 	if deployment.Cause != "deploy" || deployment.RolledBackFrom != nil {
 		t.Errorf("the cause of the Deployment is %q from %v, want a deploy", deployment.Cause, deployment.RolledBackFrom)
 	}
-	if deployment.CommitNumber == nil || *deployment.CommitNumber != saved.Number {
-		t.Errorf("the deployment names saved state %v, want %d", deployment.CommitNumber, saved.Number)
+	if deployment.SavedStateNumber == nil || *deployment.SavedStateNumber != saved.Number {
+		t.Errorf("the deployment names saved state %v, want %d", deployment.SavedStateNumber, saved.Number)
 	}
 	current, ok, err := newRuntimeNode().FindCurrentDeployment(ctx, mainProject)
 	if err != nil || !ok || current.Number != deployment.Number {
@@ -131,12 +132,12 @@ func TestDeployCommit_CreatesADeployment(t *testing.T) {
 	}
 }
 
-func TestDeployCommit_Repeated_IsRefused(t *testing.T) {
+func TestDeploySavedState_Repeated_IsRefused(t *testing.T) {
 	cleanDevices(t)
 	cleanScenes(t)
 	ctx := context.Background()
 	mustCreateTag(t, "speed", "integer")
-	saved := mustSaveCommit(t, mainProject, "First save")
+	saved := mustSaveState(t, mainProject, "First save")
 	if _, err := newDeployService().Deploy(ctx, mainProject, saved.Number); err != nil {
 		t.Fatalf("Deploy: %v", err)
 	}
@@ -145,18 +146,18 @@ func TestDeployCommit_Repeated_IsRefused(t *testing.T) {
 	}
 }
 
-func TestDeployCommit_Missing_IsNotFound(t *testing.T) {
+func TestDeploySavedState_Missing_IsNotFound(t *testing.T) {
 	cleanDevices(t)
 	cleanScenes(t)
-	if _, err := newDeployService().Deploy(context.Background(), mainProject, 9); !errors.Is(err, draft.ErrCommitNotFound) {
-		t.Errorf("Deploy of a missing saved state: %v, want ErrCommitNotFound", err)
+	if _, err := newDeployService().Deploy(context.Background(), mainProject, 9); !errors.Is(err, draft.ErrSavedStateNotFound) {
+		t.Errorf("Deploy of a missing saved state: %v, want ErrSavedStateNotFound", err)
 	}
 	if _, err := newDeployService().Deploy(context.Background(), mainProject, 0); !errors.Is(err, application.ErrInvalidInput) {
 		t.Errorf("Deploy of saved state 0: %v, want invalid input", err)
 	}
 }
 
-func TestDeployCommit_AChangedCommit_IsANewDeployment(t *testing.T) {
+func TestDeploySavedState_AChangedCommit_IsANewDeployment(t *testing.T) {
 	cleanDevices(t)
 	cleanScenes(t)
 	ctx := context.Background()
@@ -167,7 +168,7 @@ func TestDeployCommit_AChangedCommit_IsANewDeployment(t *testing.T) {
 		t.Fatalf("CreateWidget: %v", err)
 	}
 	first := mustDeployTheDraft(t, mainProject)
-	if first.CommitNumber == nil {
+	if first.SavedStateNumber == nil {
 		t.Fatalf("the first deployment: %+v, want its saved state", first)
 	}
 
@@ -177,7 +178,7 @@ func TestDeployCommit_AChangedCommit_IsANewDeployment(t *testing.T) {
 		t.Fatalf("UpdateWidget: %v", err)
 	}
 	second := mustDeployTheDraft(t, mainProject)
-	if second.Number != first.Number+1 || second.CommitNumber == nil || *second.CommitNumber <= *first.CommitNumber {
+	if second.Number != first.Number+1 || second.SavedStateNumber == nil || *second.SavedStateNumber <= *first.SavedStateNumber {
 		t.Errorf("the second deployment: %+v, want the next Deployment of a later saved state", second)
 	}
 }
@@ -202,18 +203,18 @@ func TestProjectFileService_Deploy_LeavesNoRelease(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Deploy: %v", err)
 	}
-	if deployment.Number < 1 || deployment.Cause != "file" || deployment.CommitNumber != nil {
+	if deployment.Number < 1 || deployment.Cause != "file" || deployment.SavedStateNumber != nil {
 		t.Errorf("the deployment of the file: %+v, want a file Deployment with no saved state", deployment)
 	}
 	current, ok, err := newRuntimeNode().FindCurrentDeployment(ctx, mainProject)
-	if err != nil || !ok || current.CommitNumber != nil || current.Number != deployment.Number {
+	if err != nil || !ok || current.SavedStateNumber != nil || current.Number != deployment.Number {
 		t.Errorf("the running deployment: %+v, %v, %v", current, ok, err)
 	}
 }
 
-// --- Discard to the last Commit and Revert to the Deployment ---
+// --- Discard to the last SavedState and Revert to the Deployment ---
 
-func TestDiscard_WithoutACommit_IsRefused(t *testing.T) {
+func TestDiscard_WithoutASavedState_IsRefused(t *testing.T) {
 	cleanProjects(t)
 	ctx := context.Background()
 	created, err := application.NewProjectService(repositories.NewProjectRepositoryPostgres(testDB), repositories.NewDraftRepositoryPostgres(testDB), soleOrganization()).
@@ -227,11 +228,11 @@ func TestDiscard_WithoutACommit_IsRefused(t *testing.T) {
 	}
 }
 
-// TestDiscard_RestoresTheLastCommit: the Draft is brought back to its last
-// Commit — the removed Widget, Scene, Tag, Device and pin come back under
+// TestDiscard_RestoresTheLastSavedState: the Draft is brought back to its last
+// SavedState — the removed Widget, Scene, Tag, Device and pin come back under
 // their IDs, what was added goes, and the Tag states are the Runtime node's,
 // kept.
-func TestDiscard_RestoresTheLastCommit(t *testing.T) {
+func TestDiscard_RestoresTheLastSavedState(t *testing.T) {
 	cleanDevices(t)
 	cleanScenes(t)
 	ctx := context.Background()
@@ -308,8 +309,8 @@ func TestDiscard_RestoresTheLastCommit(t *testing.T) {
 }
 
 // TestDiscard_RemovesADeviceAndAnEnvironmentOfTheDraft: a Device and an
-// Environment added since the last Commit go, with the pair that joins them and
-// the Tag the Device supplies.
+// Environment added since the last SavedState go, with the pair that joins them
+// and the Tag the Device supplies.
 func TestDiscard_RemovesADeviceAndAnEnvironmentOfTheDraft(t *testing.T) {
 	cleanDevices(t)
 	cleanScenes(t)
@@ -354,7 +355,7 @@ func TestDiscard_RemovesADeviceAndAnEnvironmentOfTheDraft(t *testing.T) {
 }
 
 // TestDiscard_OfAnImportedLibraryRestoresTheImport: the import of a Library
-// the Draft dropped comes back, at the saved state the last Commit names.
+// the Draft dropped comes back, at the saved state the last SavedState names.
 func TestDiscard_OfAnImportedLibraryRestoresTheImport(t *testing.T) {
 	cleanDevices(t)
 	cleanScenes(t)
@@ -370,16 +371,16 @@ func TestDiscard_OfAnImportedLibraryRestoresTheImport(t *testing.T) {
 	runDiscard(t, mainProject)
 
 	imports, err := newLibraryImportService(t).FindLibraryImports(ctx, mainProject)
-	if err != nil || len(imports) != 1 || imports[0].LibraryID != lib.ID || imports[0].CommitNumber != 1 {
+	if err != nil || len(imports) != 1 || imports[0].LibraryID != lib.ID || imports[0].SavedStateNumber != 1 {
 		t.Errorf("the imports after the Discard: %+v, %v, want %s at saved state 1", imports, err, lib.ID)
 	}
 }
 
 // TestUnsavedChanges_FollowTheDraftsCleanVersion: the unsaved-changes flag of a
-// Project comes from the Draft's own Clean Version marker: a never written Draft
-// is clean, a write is unsaved, and a Save, a Discard and a Revert to the last
-// Commit's content clean it; a write above the marker, or a Revert to another
-// content, is unsaved again (task 74; ADR 0016, amendment 2026-11-10).
+// Project comes from the Draft's own Clean Version marker: a never written
+// Draft is clean, a write is unsaved, and a Save, a Discard and a Revert to the
+// last SavedState's content clean it; a write above the marker, or a Revert to
+// another content, is unsaved again (task 74; ADR 0016, amendment 2026-11-10).
 func TestUnsavedChanges_FollowTheDraftsCleanVersion(t *testing.T) {
 	cleanProjects(t)
 	ctx := context.Background()
@@ -412,7 +413,7 @@ func TestUnsavedChanges_FollowTheDraftsCleanVersion(t *testing.T) {
 	scope := draft.ProjectScope(id.NewID(id.IDWithUUID[project.Project](created.ID)))
 	refused := func(step string) {
 		t.Helper()
-		if _, err := newCommitService().Save(ctx, scope, draftVersionOf(t, created.ID), step, "Ada"); !errors.Is(err, draft.ErrNothingToSave) {
+		if _, err := newSavedStateService().Save(ctx, scope, draftVersionOf(t, created.ID), step, "Ada"); !errors.Is(err, draft.ErrNothingToSave) {
 			t.Errorf("%s: Save %v, want ErrNothingToSave", step, err)
 		}
 	}
@@ -420,7 +421,7 @@ func TestUnsavedChanges_FollowTheDraftsCleanVersion(t *testing.T) {
 	check("never written", false)
 	write("speed")
 	check("written", true)
-	mustSaveCommit(t, created.ID, "First")
+	mustSaveState(t, created.ID, "First")
 	check("saved", false)
 	refused("saved")
 
@@ -441,12 +442,12 @@ func TestUnsavedChanges_FollowTheDraftsCleanVersion(t *testing.T) {
 	if _, err := newDiscardService().Revert(ctx, created.ID); err != nil {
 		t.Fatalf("Revert: %v", err)
 	}
-	check("reverted to the last commit's content", false)
+	check("reverted to the last savedState's content", false)
 
-	// A later Commit is not the running Deployment: a Revert to that Deployment
-	// is another content, so the Draft stays unsaved.
+	// A later SavedState is not the running Deployment: a Revert to that
+	// Deployment is another content, so the Draft stays unsaved.
 	write("level")
-	mustSaveCommit(t, created.ID, "Second")
+	mustSaveState(t, created.ID, "Second")
 	check("saved after the revert", false)
 	if _, err := newDiscardService().Revert(ctx, created.ID); err != nil {
 		t.Fatalf("Revert to the running deployment: %v", err)
@@ -456,7 +457,7 @@ func TestUnsavedChanges_FollowTheDraftsCleanVersion(t *testing.T) {
 
 // TestDiscard_WithAWarningStaysUnsaved: a Discard that could not restore a
 // Library Release drops its pin with its Widgets — the content really differs
-// from the Commit's — and the Draft stays unsaved (task 74; task 71).
+// from the SavedState's — and the Draft stays unsaved (task 74; task 71).
 func TestDiscard_WithAWarningStaysUnsaved(t *testing.T) {
 	r := newReconciliation(t, reconciliationWiring{})
 	ctx := context.Background()
@@ -466,7 +467,7 @@ func TestDiscard_WithAWarningStaysUnsaved(t *testing.T) {
 		t.Fatalf("before the Discard: %+v, %v; want the deployed Draft clean", found, err)
 	}
 
-	// This server does not have the Library the Commit pins any more.
+	// This server does not have the Library the SavedState pins any more.
 	if _, err := testDB.ExecContext(ctx,
 		`UPDATE engineering.libraries SET deleted_at = now() WHERE id = $1`, lib.ID); err != nil {
 		t.Fatalf("mark the library deleted: %v", err)
@@ -493,7 +494,7 @@ func TestRevert_WithoutADeployment_IsRefused(t *testing.T) {
 }
 
 // TestRevert_RestoresTheDeployment: the Draft goes back to what runs, even
-// when a later Commit exists — that is the difference from Discard.
+// when a later SavedState exists — that is the difference from Discard.
 func TestRevert_RestoresTheDeployment(t *testing.T) {
 	cleanDevices(t)
 	cleanScenes(t)

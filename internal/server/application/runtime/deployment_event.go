@@ -18,17 +18,17 @@ type DeploymentCreatedEvent interface {
 	project.ContentEvent
 	Number() int
 	DeployedAt() time.Time
-	// CommitNumber is the saved state the Deployment made running (task 85_4);
+	// SavedStateNumber is the saved state the Deployment made running (task 85_4);
 	// nil for a Deployment from a file.
-	CommitNumber() *int
+	SavedStateNumber() *int
 }
 
 type deploymentCreatedEventImpl struct {
 	event.Base
 	project.Content
-	number       int
-	deployedAt   time.Time
-	commitNumber *int
+	number           int
+	deployedAt       time.Time
+	savedStateNumber *int
 }
 
 var _ DeploymentCreatedEvent = (*deploymentCreatedEventImpl)(nil)
@@ -38,14 +38,14 @@ var _ DeploymentCreatedEvent = (*deploymentCreatedEventImpl)(nil)
 func NewDeploymentCreatedEvent(aDeployment Deployment, opts ...event.EventOption) DeploymentCreatedEvent {
 	projectID := id.NewID(id.IDWithUUID[project.Project](aDeployment.Content.ProjectID))
 	return &deploymentCreatedEventImpl{
-		Base:         event.NewBase(event.EventTypeDeploymentCreated, opts...),
-		Content:      project.NewContent(projectID),
-		number:       aDeployment.Number,
-		deployedAt:   aDeployment.DeployedAt,
-		commitNumber: aDeployment.CommitNumber,
+		Base:             event.NewBase(event.EventTypeDeploymentCreated, opts...),
+		Content:          project.NewContent(projectID),
+		number:           aDeployment.Number,
+		deployedAt:       aDeployment.DeployedAt,
+		savedStateNumber: aDeployment.SavedStateNumber,
 	}
 }
 
-func (e deploymentCreatedEventImpl) Number() int           { return e.number }
-func (e deploymentCreatedEventImpl) DeployedAt() time.Time { return e.deployedAt }
-func (e deploymentCreatedEventImpl) CommitNumber() *int    { return e.commitNumber }
+func (e deploymentCreatedEventImpl) Number() int            { return e.number }
+func (e deploymentCreatedEventImpl) DeployedAt() time.Time  { return e.deployedAt }
+func (e deploymentCreatedEventImpl) SavedStateNumber() *int { return e.savedStateNumber }

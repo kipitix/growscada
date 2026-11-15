@@ -67,7 +67,7 @@ func (i Impact) Check() error {
 // it. A binding to a Tag that does not exist is no matter of the import: it is
 // removed whatever the import. It is both the preview of a switch and the check
 // that refuses it.
-func ImportImpactOf(widgets []PlacedWidget, from, to *Commit, tagTypes scene.TagTypes) Impact {
+func ImportImpactOf(widgets []PlacedWidget, from, to *SavedState, tagTypes scene.TagTypes) Impact {
 	var impact Impact
 	if from == nil {
 		return impact

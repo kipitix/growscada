@@ -324,7 +324,7 @@ func TestDispatcher_HoldsBackRowsUntilOlderTransactionsEnd(t *testing.T) {
 	younger := beginWithID(t)
 	appendDeleted(t, ctx, younger, second)
 	if err := younger.Commit(); err != nil {
-		t.Fatalf("commit: %v", err)
+		t.Fatalf("saved state: %v", err)
 	}
 
 	var delivered recorder
@@ -335,7 +335,7 @@ func TestDispatcher_HoldsBackRowsUntilOlderTransactionsEnd(t *testing.T) {
 
 	appendDeleted(t, ctx, older, first)
 	if err := older.Commit(); err != nil {
-		t.Fatalf("commit: %v", err)
+		t.Fatalf("saved state: %v", err)
 	}
 	if n, err := d.DrainOnce(ctx); err != nil || n != 2 {
 		t.Fatalf("delivered %d (err %v), want 2", n, err)
@@ -430,7 +430,7 @@ func TestDispatcher_DrainOnce_DeliversMoreThanOneBatch(t *testing.T) {
 		t.Fatalf("Append: %v", err)
 	}
 	if err := tx.Commit(); err != nil {
-		t.Fatalf("commit: %v", err)
+		t.Fatalf("saved state: %v", err)
 	}
 
 	var delivered recorder

@@ -1,7 +1,7 @@
 // Package libraryimport holds the Library Import: the choice, in a Project's
-// Draft, of one saved state of one Library (task 85_6; ADR 0007,
-// ADR 0012). A Project sees the WidgetTypes of the saved state it imported: the
-// copies the saved state holds, never the Library's Draft.
+// Draft, of one saved state of one Library (task 85_6; ADR 0007, ADR 0012). A
+// Project sees the WidgetTypes of the saved state it imported: the copies the
+// saved state holds, never the Library's Draft.
 package libraryimport
 
 import (
@@ -33,18 +33,18 @@ type LibraryImport interface {
 	ProjectID() id.ID[project.Project]
 	// LibraryID is the Library imported; it never changes.
 	LibraryID() id.ID[library.Library]
-	// CommitID is the identity of the imported saved state of the Library. It
+	// SavedStateID is the identity of the imported saved state of the Library. It
 	// is the identity the row carries; a value rebuilt from a ProjectFile alone
 	// has none, and the write resolves it by the number.
-	CommitID() uuid.UUID
-	// CommitNumber is the number of the saved state imported within the Library's
-	// Draft.
-	CommitNumber() int
+	SavedStateID() uuid.UUID
+	// SavedStateNumber is the number of the saved state imported within the
+	// Library's Draft.
+	SavedStateNumber() int
 
 	// Switch imports the saved state instead and records a
 	// LibraryImportUpdatedEvent. Returns an error if the saved state is of another
 	// Library.
-	Switch(commit Commit) (LibraryImport, error)
+	Switch(savedState SavedState) (LibraryImport, error)
 
 	// Delete records a LibraryImportDeletedEvent; the Draft's write removes
 	// the import.
@@ -55,24 +55,24 @@ type LibraryImport interface {
 }
 
 type libraryImportImpl struct {
-	projectID id.ID[project.Project]
-	libraryID id.ID[library.Library]
-	commitID  uuid.UUID
-	commit    int
-	pending   []event.Event
+	projectID    id.ID[project.Project]
+	libraryID    id.ID[library.Library]
+	savedStateID uuid.UUID
+	savedState   int
+	pending      []event.Event
 }
 
 var _ LibraryImport = (*libraryImportImpl)(nil)
 
 // CreateLibraryImport creates a new, not yet saved import of a saved state in
 // the Draft of the Project aProjectID and records a LibraryImportCreatedEvent.
-func CreateLibraryImport(aProjectID id.ID[project.Project], commit Commit) LibraryImport {
+func CreateLibraryImport(aProjectID id.ID[project.Project], savedState SavedState) LibraryImport {
 	return &libraryImportImpl{
-		projectID: aProjectID,
-		libraryID: commit.LibraryID(),
-		commitID:  commit.ID(),
-		commit:    commit.Number(),
-		pending:   []event.Event{NewLibraryImportCreatedEvent(commit.LibraryID(), aProjectID)},
+		projectID:    aProjectID,
+		libraryID:    savedState.LibraryID(),
+		savedStateID: savedState.ID(),
+		savedState:   savedState.Number(),
+		pending:      []event.Event{NewLibraryImportCreatedEvent(savedState.LibraryID(), aProjectID)},
 	}
 }
 
@@ -80,22 +80,22 @@ func CreateLibraryImport(aProjectID id.ID[project.Project], commit Commit) Libra
 // For repositories. A saved state UUID of uuid.Nil means the identity is not
 // known to the caller (an import rebuilt from a ProjectFile): the write
 // resolves it by the Library and the number in the same transaction.
-func ReconstituteLibraryImport(aProjectID id.ID[project.Project], aLibraryID id.ID[library.Library], aCommitID uuid.UUID, aCommit int) LibraryImport {
-	return &libraryImportImpl{projectID: aProjectID, libraryID: aLibraryID, commitID: aCommitID, commit: aCommit}
+func ReconstituteLibraryImport(aProjectID id.ID[project.Project], aLibraryID id.ID[library.Library], aSavedStateID uuid.UUID, aSavedState int) LibraryImport {
+	return &libraryImportImpl{projectID: aProjectID, libraryID: aLibraryID, savedStateID: aSavedStateID, savedState: aSavedState}
 }
 
 func (i *libraryImportImpl) ProjectID() id.ID[project.Project] { return i.projectID }
 func (i *libraryImportImpl) LibraryID() id.ID[library.Library] { return i.libraryID }
-func (i *libraryImportImpl) CommitID() uuid.UUID               { return i.commitID }
-func (i *libraryImportImpl) CommitNumber() int                 { return i.commit }
-func (i *libraryImportImpl) Switch(commit Commit) (LibraryImport, error) {
-	if commit.LibraryID() != i.libraryID {
+func (i *libraryImportImpl) SavedStateID() uuid.UUID           { return i.savedStateID }
+func (i *libraryImportImpl) SavedStateNumber() int             { return i.savedState }
+func (i *libraryImportImpl) Switch(savedState SavedState) (LibraryImport, error) {
+	if savedState.LibraryID() != i.libraryID {
 		return nil, fmt.Errorf("cannot import saved state %d of library %s in place of library %s",
-			commit.Number(), commit.LibraryID(), i.libraryID)
+			savedState.Number(), savedState.LibraryID(), i.libraryID)
 	}
 	switched := *i
-	switched.commitID = commit.ID()
-	switched.commit = commit.Number()
+	switched.savedStateID = savedState.ID()
+	switched.savedState = savedState.Number()
 	switched.pending = append(slices.Clone(i.pending), NewLibraryImportUpdatedEvent(i.libraryID, i.projectID))
 	return &switched, nil
 }
@@ -112,5 +112,5 @@ func (i *libraryImportImpl) PendingEvents() []event.Event {
 
 // String implements [fmt.Stringer].
 func (i *libraryImportImpl) String() string {
-	return fmt.Sprintf("LibraryImport: library %s saved state %d in project %s", i.libraryID, i.commit, i.projectID)
+	return fmt.Sprintf("LibraryImport: library %s saved state %d in project %s", i.libraryID, i.savedState, i.projectID)
 }

@@ -51,7 +51,7 @@ func ensureTestWidgetType(t *testing.T) {
 		 VALUES ($2, $1, 'test-type', '<div></div>', 'function update(){}', 'javascript', '[]', 100, 100)
 		 ON CONFLICT (id) DO NOTHING`, []any{testLibrary, testWidgetTypeID}},
 		{`INSERT INTO engineering.drafts (id, library_id) VALUES (gen_random_uuid(), $1) ON CONFLICT DO NOTHING`, []any{testLibrary}},
-		{`INSERT INTO engineering.commits (id, draft_id, number, title, author, created_at, draft_version, content)
+		{`INSERT INTO engineering.saved_states (id, draft_id, number, title, author, created_at, draft_version, content)
 		 SELECT gen_random_uuid(), d.id, 1, 'Save', 'Ada', now(), 1,
 		        jsonb_build_object('format', 1, 'kind', 'library', 'widget_types',
 		            jsonb_build_array(jsonb_build_object(
@@ -61,9 +61,9 @@ func ensureTestWidgetType(t *testing.T) {
 		                'input_ports', '[]'::jsonb)))
 		 FROM engineering.drafts d WHERE d.library_id = $1
 		 ON CONFLICT DO NOTHING`, []any{testLibrary, testWidgetTypeID}},
-		{`INSERT INTO engineering.library_imports (project_id, library_id, commit_number, commit_id)
+		{`INSERT INTO engineering.library_imports (project_id, library_id, saved_state_number, saved_state_id)
 		 SELECT $1, $2, 1, c.id
-		 FROM engineering.drafts d JOIN engineering.commits c ON c.draft_id = d.id AND c.number = 1
+		 FROM engineering.drafts d JOIN engineering.saved_states c ON c.draft_id = d.id AND c.number = 1
 		 WHERE d.library_id = $2
 		 ON CONFLICT DO NOTHING`, []any{mainProject, testLibrary}},
 	} {

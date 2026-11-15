@@ -255,7 +255,7 @@ func main() {
 		DraftChanges:   draftChangesService,
 		Discard:        discardService,
 		ProjectFiles:   projectFileService,
-		Commits:        application.NewCommitService(projectContent, libraryContent, projectFileBuilder, widgetTypeRepositories, labelService),
+		Commits:        application.NewSavedStateService(projectContent, libraryContent, projectFileBuilder, widgetTypeRepositories, labelService),
 		Settings:       application.NewSettingsService(userSettingsRepository, settings.SingleUser(), organizationID),
 		Labels:         labelService,
 		Deploy:         deployService,

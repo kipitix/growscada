@@ -56,7 +56,7 @@ const constraintWidgetTypesName = "uq_widget_types_library_name"
 // project imports.
 const (
 	constraintLibraryImportsProjectLibrary = "uq_library_imports_project_library"
-	constraintLibraryImportsCommitID       = "fk_library_imports_commit_id"
+	constraintLibraryImportsSavedStateID   = "fk_library_imports_saved_state_id"
 	constraintLibraryImportsLibraryID      = "fk_library_imports_library_id"
 )
 

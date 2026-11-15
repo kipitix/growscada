@@ -485,7 +485,7 @@ func newLibraryResponse(l appdto.Library) apiv0.LibraryResponse {
 		Name:              l.Name,
 		Description:       l.Description,
 		Version:           l.Version,
-		LatestCommit:      l.LatestCommit,
+		LatestCommit:      l.LatestSavedState,
 		HasUnsavedChanges: l.HasUnsavedChanges,
 	}
 }
@@ -498,7 +498,7 @@ func newGetLibrariesResponse(list []appdto.Library) apiv0.GetLibrariesResponse {
 	return apiv0.GetLibrariesResponse{Libraries: items}
 }
 
-func newCommitResponse(c appdto.Commit) apiv0.CommitResponse {
+func newCommitResponse(c appdto.SavedState) apiv0.CommitResponse {
 	resp := apiv0.CommitResponse{
 		ID:           c.ID,
 		Number:       c.Number,
@@ -532,7 +532,7 @@ func newCommitLabelsResponse(labels []appdto.Label) apiv0.CommitLabelsResponse {
 	return apiv0.CommitLabelsResponse{Labels: newLabelResponses(labels)}
 }
 
-func newGetCommitsResponse(list []appdto.Commit) apiv0.GetCommitsResponse {
+func newGetCommitsResponse(list []appdto.SavedState) apiv0.GetCommitsResponse {
 	items := make([]apiv0.CommitResponse, len(list))
 	for i, c := range list {
 		items[i] = newCommitResponse(c)
@@ -543,7 +543,7 @@ func newGetCommitsResponse(list []appdto.Commit) apiv0.GetCommitsResponse {
 func newLibraryImportResponse(i appdto.LibraryImport) apiv0.LibraryImportResponse {
 	return apiv0.LibraryImportResponse{
 		LibraryID:    i.LibraryID,
-		CommitNumber: i.CommitNumber,
+		CommitNumber: i.SavedStateNumber,
 		Title:        i.Title,
 		Author:       i.Author,
 		SavedAt:      i.SavedAt,
@@ -614,7 +614,7 @@ func newDeploymentResponse(deployment runtimeapp.Deployment) apiv0.DeploymentRes
 		DeployedAt:     deployedAt(deployment.DeployedAt),
 		Cause:          apiv0.DeploymentCause(deployment.Cause),
 		RolledBackFrom: deployment.RolledBackFrom,
-		CommitNumber:   deployment.CommitNumber,
+		CommitNumber:   deployment.SavedStateNumber,
 		Content:        deployment.Content,
 	}
 }
@@ -633,7 +633,7 @@ func newDeploymentSummary(summary runtimeapp.DeploymentSummary) apiv0.Deployment
 		DeployedAt:     deployedAt(summary.DeployedAt),
 		Cause:          apiv0.DeploymentCause(summary.Cause),
 		RolledBackFrom: summary.RolledBackFrom,
-		CommitNumber:   summary.CommitNumber,
+		CommitNumber:   summary.SavedStateNumber,
 	}
 }
 
@@ -655,7 +655,7 @@ func newLoadCommitResponse(loaded appdto.LoadedDraft) apiv0.LoadCommitResponse {
 	}
 	for _, warning := range loaded.Warnings {
 		resp.Warnings = append(resp.Warnings, apiv0.DiscardWarningResponse{
-			LibraryID: warning.LibraryID, Commit: warning.Commit, DroppedWidgets: warning.DroppedWidgets,
+			LibraryID: warning.LibraryID, Commit: warning.SavedState, DroppedWidgets: warning.DroppedWidgets,
 		})
 	}
 	return resp
@@ -667,7 +667,7 @@ func newDiscardProjectResponse(discarded appdto.DiscardedDraft) apiv0.DiscardPro
 	resp := apiv0.DiscardProjectResponse{Version: discarded.Version}
 	for _, warning := range discarded.Warnings {
 		resp.Warnings = append(resp.Warnings, apiv0.DiscardWarningResponse{
-			LibraryID: warning.LibraryID, Commit: warning.Commit, DroppedWidgets: warning.DroppedWidgets,
+			LibraryID: warning.LibraryID, Commit: warning.SavedState, DroppedWidgets: warning.DroppedWidgets,
 		})
 	}
 	return resp

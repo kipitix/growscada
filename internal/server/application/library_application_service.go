@@ -34,12 +34,13 @@ type LibraryService interface {
 	// transaction over the Draft and answers the Draft's new state. A library
 	// never saved is ErrNothingToDiscard.
 	Discard(ctx context.Context, libraryID uuid.UUID) (appdto.DraftState, error)
-	// LoadCommit replaces the library's Draft with the WidgetTypes of its saved
-	// state number, in one transaction: the saved state becomes what is edited,
-	// the DraftChange stack is cleared and the Version raised, as a Discard does.
-	// The Draft is clean exactly when that saved state is its last one (task 84).
-	// A number the library does not have is draft.ErrCommitNotFound.
-	LoadCommit(ctx context.Context, libraryID uuid.UUID, number int) (appdto.LoadedDraft, error)
+	// LoadSavedState replaces the library's Draft with the WidgetTypes of its
+	// saved state number, in one transaction: the saved state becomes what is
+	// edited, the DraftChange stack is cleared and the Version raised, as a
+	// Discard does. The Draft is clean exactly when that saved state is its last
+	// one (task 84). A number the library does not have is
+	// draft.ErrSavedStateNotFound.
+	LoadSavedState(ctx context.Context, libraryID uuid.UUID, number int) (appdto.LoadedDraft, error)
 }
 
 type libraryServiceImpl struct {
@@ -106,19 +107,19 @@ func (s libraryServiceImpl) describe(ctx context.Context, l library.Library) (ap
 func (s libraryServiceImpl) describeAll(ctx context.Context, list []library.Library) ([]appdto.Library, error) {
 	result := make([]appdto.Library, len(list))
 	for i, l := range list {
-		lastCommit, found, err := s.content.Drafts().FindLastCommit(ctx, s.content.ScopeOf(l.ID()))
+		lastSavedState, found, err := s.content.Drafts().FindLastSavedState(ctx, s.content.ScopeOf(l.ID()))
 		if err != nil {
 			return nil, fmt.Errorf("cannot find the last saved state of library %s: %w", l.ID(), err)
 		}
-		lastCommitNumber := 0
+		lastSavedStateNumber := 0
 		if found {
-			lastCommitNumber = lastCommit.Number()
+			lastSavedStateNumber = lastSavedState.Number()
 		}
 		unsaved, err := s.unsavedChanges(ctx, l.ID())
 		if err != nil {
 			return nil, err
 		}
-		result[i] = appdto.NewLibrary(l, lastCommitNumber, unsaved)
+		result[i] = appdto.NewLibrary(l, lastSavedStateNumber, unsaved)
 	}
 	return result, nil
 }
@@ -243,8 +244,8 @@ func (s libraryServiceImpl) DeleteLibraryByID(ctx context.Context, rawID uuid.UU
 		if err != nil {
 			return err
 		}
-		// A running Deployment naming one of the library's saved states would make
-		// a Discard of it unable to restore the import; the imports alone do not tell
+		// A running Deployment naming one of the library's saved states would make a
+		// Discard of it unable to restore the import; the imports alone do not tell
 		// (task 71).
 		named, err := s.runtime.DeploymentNamesLibrary(ctx, found.ID().UUID())
 		if err != nil {
@@ -296,7 +297,7 @@ func (s libraryServiceImpl) Discard(ctx context.Context, rawID uuid.UUID) (appdt
 		return appdto.DraftState{}, err
 	}
 	scope := s.content.ScopeOf(found.ID())
-	last, ok, err := s.content.Drafts().FindLastCommit(ctx, scope)
+	last, ok, err := s.content.Drafts().FindLastSavedState(ctx, scope)
 	if err != nil {
 		return appdto.DraftState{}, fmt.Errorf("cannot read the last saved state of library %s: %w", found.ID(), err)
 	}
@@ -316,32 +317,32 @@ func (s libraryServiceImpl) Discard(ctx context.Context, rawID uuid.UUID) (appdt
 	return appdto.DraftState{Version: result.Version().Number(), HasUnsavedChanges: result.HasUnsavedChanges()}, nil
 }
 
-// LoadCommit makes the library's Draft the content of one of its saved states
-// (task 84): the reset a Discard makes, to the saved state the client named
-// rather than the last one.
-func (s libraryServiceImpl) LoadCommit(ctx context.Context, rawID uuid.UUID, number int) (appdto.LoadedDraft, error) {
+// LoadSavedState makes the library's Draft the content of one of its saved
+// states (task 84): the reset a Discard makes, to the saved state the client
+// named rather than the last one.
+func (s libraryServiceImpl) LoadSavedState(ctx context.Context, rawID uuid.UUID, number int) (appdto.LoadedDraft, error) {
 	found, err := s.findOwn(ctx, rawID)
 	if err != nil {
 		return appdto.LoadedDraft{}, err
 	}
 	scope := s.content.ScopeOf(found.ID())
-	commit, err := s.content.Drafts().FindCommit(ctx, scope, number)
+	savedState, err := s.content.Drafts().FindSavedState(ctx, scope, number)
 	if err != nil {
 		return appdto.LoadedDraft{}, fmt.Errorf("cannot read saved state %d of library %s: %w", number, found.ID(), err)
 	}
-	types, ok := commit.Content().WidgetTypes()
+	types, ok := savedState.Content().WidgetTypes()
 	if !ok {
-		return appdto.LoadedDraft{}, fmt.Errorf("saved state %d of library %s holds no widget types", commit.Number(), found.ID())
+		return appdto.LoadedDraft{}, fmt.Errorf("saved state %d of library %s holds no widget types", savedState.Number(), found.ID())
 	}
 	// The loaded content is the Draft's clean state only when it is the last
 	// saved state: an older one leaves the Draft with unsaved changes (task 74).
 	// The comparison is the repository's, under the Draft's lock.
-	result, err := s.content.Drafts().Replace(ctx, scope, commit.Number(),
+	result, err := s.content.Drafts().Replace(ctx, scope, savedState.Number(),
 		func(session *draft.Session) error {
 			return session.ReplaceWidgetTypes(ctx, types)
 		})
 	if err != nil {
-		return appdto.LoadedDraft{}, fmt.Errorf("cannot load saved state %d of library %s: %w", commit.Number(), found.ID(), err)
+		return appdto.LoadedDraft{}, fmt.Errorf("cannot load saved state %d of library %s: %w", savedState.Number(), found.ID(), err)
 	}
 	return appdto.LoadedDraft{
 		Version:           result.Version().Number(),

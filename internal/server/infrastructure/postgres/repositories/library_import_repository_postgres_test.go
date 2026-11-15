@@ -12,11 +12,11 @@ import (
 	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/repositories"
 )
 
-// TestLibraryImportRepository_ReadsTheCommitAnImportNames: an import written by
-// the Draft carries the identity of its own Library's saved state — two
-// Libraries at saved state 1 are told apart — and the WidgetTypes the Project
-// may be of come from those saved states' content (task 85_6).
-func TestLibraryImportRepository_ReadsTheCommitAnImportNames(t *testing.T) {
+// TestLibraryImportRepository_ReadsTheSavedStateAnImportNames: an import
+// written by the Draft carries the identity of its own Library's saved state —
+// two Libraries at saved state 1 are told apart — and the WidgetTypes the
+// Project may be of come from those saved states' content (task 85_6).
+func TestLibraryImportRepository_ReadsTheSavedStateAnImportNames(t *testing.T) {
 	cleanLibraries(t)
 	first := mustImportWidgetType(t, mainProject)
 	second := mustImportWidgetType(t, mainProject)
@@ -31,13 +31,13 @@ func TestLibraryImportRepository_ReadsTheCommitAnImportNames(t *testing.T) {
 		t.Fatalf("the imports: %d, want the two libraries", len(all))
 	}
 	for _, imported := range all {
-		commit, err := testDrafts().FindCommit(ctx, draft.LibraryScope(imported.LibraryID()), imported.CommitNumber())
+		savedState, err := testDrafts().FindSavedState(ctx, draft.LibraryScope(imported.LibraryID()), imported.SavedStateNumber())
 		if err != nil {
-			t.Fatalf("FindCommit of library %s: %v", imported.LibraryID(), err)
+			t.Fatalf("FindSavedState of library %s: %v", imported.LibraryID(), err)
 		}
-		if imported.CommitID() != commit.ID().UUID() {
-			t.Errorf("the import of library %s names commit %s of the saved state, not %s",
-				imported.LibraryID(), imported.CommitID(), commit.ID())
+		if imported.SavedStateID() != savedState.ID().UUID() {
+			t.Errorf("the import of library %s names saved state %s of the saved state, not %s",
+				imported.LibraryID(), imported.SavedStateID(), savedState.ID())
 		}
 	}
 
@@ -64,12 +64,12 @@ func TestLibraryImportRepository_ReadsTheCommitAnImportNames(t *testing.T) {
 		t.Errorf("a library the project does not import: expected ErrLibraryImportNotFound, got %v", err)
 	}
 
-	// The row holds its saved state: a Commit an import names cannot be
-	// removed on its own (fk_library_imports_commit_id).
+	// The row holds its saved state: a SavedState an import names cannot be
+	// removed on its own (fk_library_imports_saved_state_id).
 	for _, imported := range all {
 		if _, err := testDB.ExecContext(ctx,
-			`DELETE FROM engineering.commits WHERE id = $1`, imported.CommitID()); err == nil {
-			t.Errorf("the commit of the import of library %s was removed under it", imported.LibraryID())
+			`DELETE FROM engineering.saved_states WHERE id = $1`, imported.SavedStateID()); err == nil {
+			t.Errorf("the saved state of the import of library %s was removed under it", imported.LibraryID())
 		}
 	}
 }

@@ -139,15 +139,15 @@ type recordingDeployments struct {
 
 	projectID  uuid.UUID
 	file       projectv0.ProjectFile
-	commit     int
+	savedState int
 	deployment runtimeapp.Deployment
 	current    runtimeapp.Deployment
 	hasCurrent bool
 	err        error
 }
 
-func (r *recordingDeployments) DeployCommit(_ context.Context, projectID uuid.UUID, commitNumber int, file projectv0.ProjectFile) (runtimeapp.Deployment, error) {
-	r.projectID, r.file, r.commit = projectID, file, commitNumber
+func (r *recordingDeployments) DeploySavedState(_ context.Context, projectID uuid.UUID, savedStateNumber int, file projectv0.ProjectFile) (runtimeapp.Deployment, error) {
+	r.projectID, r.file, r.savedState = projectID, file, savedStateNumber
 	return r.deployment, r.err
 }
 
@@ -163,11 +163,11 @@ func TestRuntimeNode_DeployCommit_HandsOverTheSavedStateAndConvertsTheDeployment
 	file := projectv0.ProjectFile{Header: projectv0.Header{ProjectID: projectID}}
 	deployments := &recordingDeployments{deployment: runtimeapp.Deployment{Number: 3, DeployedAt: at, Content: file}}
 
-	got, err := inprocess.NewRuntimeNode(&recordingStates{}, nil, deployments).DeployCommit(context.Background(), projectID, 4, file)
+	got, err := inprocess.NewRuntimeNode(&recordingStates{}, nil, deployments).DeploySavedState(context.Background(), projectID, 4, file)
 	if err != nil {
-		t.Fatalf("DeployCommit: %v", err)
+		t.Fatalf("DeploySavedState: %v", err)
 	}
-	if deployments.projectID != projectID || deployments.commit != 4 || !reflect.DeepEqual(deployments.file, file) {
+	if deployments.projectID != projectID || deployments.savedState != 4 || !reflect.DeepEqual(deployments.file, file) {
 		t.Errorf("deployed %v of %v, want %v of %v", deployments.file, deployments.projectID, file, projectID)
 	}
 	want := appdto.Deployment{Number: 3, DeployedAt: at, Content: file}
@@ -202,8 +202,8 @@ func TestRuntimeNode_FindCurrentDeployment_ConvertsTheDeploymentAndItsPresence(t
 // without the Deployment service has nothing to deploy to.
 func TestRuntimeNode_WithoutDeployments_RefusesToDeploy(t *testing.T) {
 	node := inprocess.NewRuntimeNode(&recordingStates{}, nil, nil)
-	if _, err := node.DeployCommit(context.Background(), uuid.New(), 1, projectv0.ProjectFile{}); err == nil {
-		t.Error("DeployCommit without a Deployment service returned no error")
+	if _, err := node.DeploySavedState(context.Background(), uuid.New(), 1, projectv0.ProjectFile{}); err == nil {
+		t.Error("DeploySavedState without a Deployment service returned no error")
 	}
 	if _, _, err := node.FindCurrentDeployment(context.Background(), uuid.New()); err == nil {
 		t.Error("FindCurrentDeployment without a Deployment service returned no error")

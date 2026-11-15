@@ -55,9 +55,9 @@ func ensurePinnedType(t *testing.T, libraryID uuid.UUID, libraryName string, typ
 			t.Fatalf("ensurePinnedType: %v", err)
 		}
 	}
-	commit := mustCommitLibrary(t, libraryID)
+	savedState := mustSaveLibraryState(t, libraryID)
 	if _, _, err := newLibraryImportService(t).PutLibraryImport(context.Background(),
-		projectID, libraryID, commit.Number, draftVersionOf(t, projectID)); err != nil {
+		projectID, libraryID, savedState.Number, draftVersionOf(t, projectID)); err != nil {
 		t.Fatalf("ensurePinnedType: import: %v", err)
 	}
 }
@@ -107,22 +107,23 @@ func mustCreateLibrary(t *testing.T) appdto.Library {
 	return lib
 }
 
-// mustCommitLibrary saves the library's Draft as a Commit as it is.
-func mustCommitLibrary(t *testing.T, libraryID uuid.UUID) appdto.Commit {
+// mustSaveLibraryState saves the library's Draft as a SavedState as it is.
+func mustSaveLibraryState(t *testing.T, libraryID uuid.UUID) appdto.SavedState {
 	t.Helper()
-	return mustCommitLibraryTitled(t, libraryID, "Save", "Ada")
+	return mustSaveLibraryStateTitled(t, libraryID, "Save", "Ada")
 }
 
-// mustCommitLibraryTitled saves the library's Draft as a Commit titled title.
-func mustCommitLibraryTitled(t *testing.T, libraryID uuid.UUID, title, author string) appdto.Commit {
+// mustSaveLibraryStateTitled saves the library's Draft as a SavedState titled
+// title.
+func mustSaveLibraryStateTitled(t *testing.T, libraryID uuid.UUID, title, author string) appdto.SavedState {
 	t.Helper()
-	commit, err := newCommitService().Save(context.Background(),
+	savedState, err := newSavedStateService().Save(context.Background(),
 		draft.LibraryScope(id.NewID(id.IDWithUUID[library.Library](libraryID))),
 		libraryDraftVersionOf(t, libraryID), title, author)
 	if err != nil {
-		t.Fatalf("Save commit: %v", err)
+		t.Fatalf("Save savedState: %v", err)
 	}
-	return commit
+	return savedState
 }
 
 // importNewWidgetType creates, in a new library, a WidgetType of input (its
@@ -145,8 +146,8 @@ func importNewWidgetType(t *testing.T, projectID uuid.UUID, input appdto.WidgetT
 	if err != nil {
 		t.Fatalf("CreateWidgetType: %v", err)
 	}
-	commit := mustCommitLibrary(t, lib.ID)
-	if _, _, err := newLibraryImportService(t).PutLibraryImport(ctx, projectID, lib.ID, commit.Number, draftVersionOf(t, projectID)); err != nil {
+	savedState := mustSaveLibraryState(t, lib.ID)
+	if _, _, err := newLibraryImportService(t).PutLibraryImport(ctx, projectID, lib.ID, savedState.Number, draftVersionOf(t, projectID)); err != nil {
 		t.Fatalf("PutLibraryImport: %v", err)
 	}
 	return wt, lib

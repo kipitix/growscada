@@ -143,14 +143,18 @@ type InputPortState struct {
 	TypeHint    string `json:"type_hint"`
 }
 
-// LibraryImportState is an import's row; its ID is the Library's. Commit is the
-// number of the Library's saved state it names: the identity of that saved
-// state (the row's commit_id) is resolved from the Library and the number in
-// the write, so a snapshot restored by an undo or built from a ProjectFile
-// carries the number alone.
+// LibraryImportState is an import's row; its ID is the Library's. SavedState
+// is the number of the Library's saved state it names: the identity of that
+// saved state (the row's saved_state_id) is resolved from the Library and the
+// number in the write, so a snapshot restored by an undo or built from a
+// ProjectFile carries the number alone.
+//
+// The stored name of the field stays "commit" (task 88_1): the DraftChange
+// snapshots of earlier builds carry it, and the JSONB documents are rewritten
+// as one with the contracts (task 88_2).
 type LibraryImportState struct {
-	LibraryID uuid.UUID `json:"library_id"`
-	Commit    int       `json:"commit"`
+	LibraryID  uuid.UUID `json:"library_id"`
+	SavedState int       `json:"commit"`
 }
 
 func (LibraryImportState) kind() Kind { return KindLibraryImport }
@@ -249,7 +253,7 @@ func SnapshotOfWidgetType(wt library.WidgetType) Snapshot {
 // Library's.
 func SnapshotOfLibraryImport(i libraryimport.LibraryImport) Snapshot {
 	return Snapshot{Kind: KindLibraryImport, ID: i.LibraryID().UUID(), State: LibraryImportState{
-		LibraryID: i.LibraryID().UUID(), Commit: i.CommitNumber(),
+		LibraryID: i.LibraryID().UUID(), SavedState: i.SavedStateNumber(),
 	}}
 }
 
@@ -380,9 +384,9 @@ func (s Snapshot) LibraryImport(projectID id.ID[project.Project]) (libraryimport
 	if !ok {
 		return nil, fmt.Errorf("snapshot of %s carries %T, not a library import", s.ID, s.State)
 	}
-	if state.Commit < 1 {
-		return nil, fmt.Errorf("snapshot of import %s: saved state number %d is not positive", state.LibraryID, state.Commit)
+	if state.SavedState < 1 {
+		return nil, fmt.Errorf("snapshot of import %s: saved state number %d is not positive", state.LibraryID, state.SavedState)
 	}
 	return libraryimport.ReconstituteLibraryImport(projectID,
-		id.NewID(id.IDWithUUID[library.Library](state.LibraryID)), uuid.Nil, state.Commit), nil
+		id.NewID(id.IDWithUUID[library.Library](state.LibraryID)), uuid.Nil, state.SavedState), nil
 }

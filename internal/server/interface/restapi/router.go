@@ -93,7 +93,7 @@ type Services struct {
 	DraftChanges   application.DraftChangesService
 	Discard        application.DiscardService
 	ProjectFiles   application.ProjectFileService
-	Commits        application.CommitService
+	Commits        application.SavedStateService
 	// Settings are the per-user settings of the server (task 81): one
 	// person's view of its content, never its content (ADR 0024).
 	Settings application.SettingsService

@@ -57,11 +57,11 @@ func (n runtimeNode) FindTagStates(ctx context.Context, projectID uuid.UUID, tag
 	return states, nil
 }
 
-func (n runtimeNode) DeployCommit(ctx context.Context, projectID uuid.UUID, commitNumber int, file projectv0.ProjectFile) (appdto.Deployment, error) {
+func (n runtimeNode) DeploySavedState(ctx context.Context, projectID uuid.UUID, savedStateNumber int, file projectv0.ProjectFile) (appdto.Deployment, error) {
 	if n.deployments == nil {
 		return appdto.Deployment{}, fmt.Errorf("runtime node serves no deployments")
 	}
-	deployment, err := n.deployments.DeployCommit(ctx, projectID, commitNumber, file)
+	deployment, err := n.deployments.DeploySavedState(ctx, projectID, savedStateNumber, file)
 	if errors.Is(err, runtimeapp.ErrNothingToDeploy) {
 		// The Engineering node's sentinel is the port's own: it imports no
 		// Runtime node package (ADR 0011).
@@ -118,11 +118,11 @@ func (n runtimeNode) DeploymentNamesLibrary(ctx context.Context, libraryID uuid.
 // process is where the two meet (ADR 0011).
 func toAppdtoDeployment(deployment runtimeapp.Deployment) appdto.Deployment {
 	return appdto.Deployment{
-		Number:         deployment.Number,
-		DeployedAt:     deployment.DeployedAt,
-		Cause:          string(deployment.Cause),
-		RolledBackFrom: deployment.RolledBackFrom,
-		CommitNumber:   deployment.CommitNumber,
-		Content:        deployment.Content,
+		Number:           deployment.Number,
+		DeployedAt:       deployment.DeployedAt,
+		Cause:            string(deployment.Cause),
+		RolledBackFrom:   deployment.RolledBackFrom,
+		SavedStateNumber: deployment.SavedStateNumber,
+		Content:          deployment.Content,
 	}
 }

@@ -21,14 +21,14 @@ func TestLibraryService_DescribesTheSavedStateOfItsDraft(t *testing.T) {
 	svc := newLibraryService()
 	lib := mustCreateLibrary(t)
 	// A library never written is clean and never saved (task 74; ADR 0016).
-	if lib.HasUnsavedChanges || lib.LatestCommit != 0 {
+	if lib.HasUnsavedChanges || lib.LatestSavedState != 0 {
 		t.Errorf("a new library: %+v, want no unsaved changes and no saved state", lib)
 	}
 	if _, err := newWidgetTypeService().CreateWidgetType(ctx, lib.ID, libraryDraftVersionOf(t, lib.ID), testCreateWidgetTypeInput); err != nil {
 		t.Fatalf("CreateWidgetType: %v", err)
 	}
-	commit := mustCommitLibrary(t, lib.ID)
-	if found, _ := svc.FindLibraryByID(ctx, lib.ID); found.HasUnsavedChanges || found.LatestCommit != commit.Number {
+	savedState := mustSaveLibraryState(t, lib.ID)
+	if found, _ := svc.FindLibraryByID(ctx, lib.ID); found.HasUnsavedChanges || found.LatestSavedState != savedState.Number {
 		t.Errorf("after the Save: %+v, want unsaved changes gone and the saved state named", found)
 	}
 	list, err := svc.FindAllLibraries(ctx)
@@ -38,11 +38,11 @@ func TestLibraryService_DescribesTheSavedStateOfItsDraft(t *testing.T) {
 	found := false
 	for _, l := range list {
 		if l.ID == lib.ID {
-			found = l.LatestCommit == commit.Number && !l.HasUnsavedChanges
+			found = l.LatestSavedState == savedState.Number && !l.HasUnsavedChanges
 		}
 	}
 	if !found {
-		t.Errorf("the library in the list: %+v, want saved state %d", list, commit.Number)
+		t.Errorf("the library in the list: %+v, want saved state %d", list, savedState.Number)
 	}
 }
 
@@ -62,7 +62,7 @@ func TestLibraryService_DeleteRefusedWhileALiveProjectImportsIt(t *testing.T) {
 	if err != nil {
 		t.Fatalf("DeleteLibraryByID: %v", err)
 	}
-	if deleted.LatestCommit != 1 {
+	if deleted.LatestSavedState != 1 {
 		t.Errorf("the deleted library: %+v, want it as it was, at saved state 1", deleted)
 	}
 	if _, err := r.libSvc.FindLibraryByID(ctx, libraryID); !errors.Is(err, library.ErrLibraryNotFound) {
@@ -73,7 +73,7 @@ func TestLibraryService_DeleteRefusedWhileALiveProjectImportsIt(t *testing.T) {
 	var rows int
 	if err := testDB.QueryRowContext(ctx, `SELECT (SELECT count(*) FROM engineering.libraries WHERE id = $1)
 	          + (SELECT count(*) FROM engineering.widget_types WHERE library_id = $1)
-	          + (SELECT count(*) FROM engineering.commits c JOIN engineering.drafts d ON d.id = c.draft_id
+	          + (SELECT count(*) FROM engineering.saved_states c JOIN engineering.drafts d ON d.id = c.draft_id
 	             WHERE d.library_id = $1)`, libraryID).Scan(&rows); err != nil || rows != 0 {
 		t.Errorf("rows of the removed library: %d, %v", rows, err)
 	}
@@ -84,8 +84,8 @@ func TestLibraryService_DeleteRefusedWhileALiveProjectImportsIt(t *testing.T) {
 
 // TestLibraryService_DeleteRefusedWhileARunningDeploymentNamesIt: an import in
 // the running Deployment of a Project keeps the Library, even with no import
-// left in the Draft; a Deployment, a Commit and a Project Release of the past
-// do not (task 71, task 85_6).
+// left in the Draft; a Deployment, a SavedState and a Project Release of the
+// past do not (task 71, task 85_6).
 func TestLibraryService_DeleteRefusedWhileARunningDeploymentNamesIt(t *testing.T) {
 	r := newReconciliation(t, reconciliationWiring{})
 	ctx := context.Background()
@@ -102,18 +102,18 @@ func TestLibraryService_DeleteRefusedWhileARunningDeploymentNamesIt(t *testing.T
 	}
 
 	// A new Deployment without the import leaves the library in history alone: a
-	// Commit or an old Deployment does not keep it.
+	// SavedState or an old Deployment does not keep it.
 	deployProject(t, mainProject)
 	if _, err := r.libSvc.DeleteLibraryByID(ctx, libraryID); err != nil {
-		t.Fatalf("named by an old Deployment and a Commit only: %v", err)
+		t.Fatalf("named by an old Deployment and a SavedState only: %v", err)
 	}
 }
 
-// TestDiscard_ResetsTheDraftToTheLastCommit: one transaction brings the
-// WidgetTypes added since the Commit go, the changed ones restored and the
-// removed ones back under their IDs — two names swapped since the Commit
+// TestDiscard_ResetsTheDraftToTheLastSavedState: one transaction brings the
+// WidgetTypes added since the SavedState go, the changed ones restored and the
+// removed ones back under their IDs — two names swapped since the SavedState
 // included.
-func TestDiscard_ResetsTheDraftToTheLastCommit(t *testing.T) {
+func TestDiscard_ResetsTheDraftToTheLastSavedState(t *testing.T) {
 	r := newReconciliation(t, reconciliationWiring{})
 	ctx := context.Background()
 	lib := mustCreateLibrary(t)
@@ -141,7 +141,7 @@ func TestDiscard_ResetsTheDraftToTheLastCommit(t *testing.T) {
 		return updated
 	}
 	a, b, removed := create("a"), create("b"), create("removed")
-	mustCommitLibrary(t, lib.ID)
+	mustSaveLibraryState(t, lib.ID)
 
 	if _, err := r.wtSvc.DeleteWidgetTypeByID(ctx, lib.ID, removed.ID, libraryDraftVersionOf(t, lib.ID)); err != nil {
 		t.Fatal(err)
@@ -162,8 +162,8 @@ func TestDiscard_ResetsTheDraftToTheLastCommit(t *testing.T) {
 	if state.Version <= 0 || state.HasUnsavedChanges {
 		t.Errorf("the Draft state after the Discard: %+v", state)
 	}
-	// The Draft is its last Commit again: there is nothing to save.
-	if _, err := newCommitService().Save(ctx,
+	// The Draft is its last SavedState again: there is nothing to save.
+	if _, err := newSavedStateService().Save(ctx,
 		draft.LibraryScope(id.NewID(id.IDWithUUID[library.Library](lib.ID))),
 		libraryDraftVersionOf(t, lib.ID), "After the discard", "Ada"); !errors.Is(err, draft.ErrNothingToSave) {
 		t.Errorf("a Save after a Discard: %v, want ErrNothingToSave", err)
@@ -203,7 +203,7 @@ func TestLibraryImport_SwitchOrphaningWidgetsIsRefused_PreviewNamesThem(t *testi
 	if err != nil {
 		t.Fatal(err)
 	}
-	two := mustCommitLibrary(t, libraryID)
+	two := mustSaveLibraryState(t, libraryID)
 	r.switchImport(t, kept.ID, two.Number)
 	sc := r.createScene(t, "scene")
 	onKept := r.addWidget(t, sc.ID, sc.Version, kept, "value")
@@ -218,7 +218,7 @@ func TestLibraryImport_SwitchOrphaningWidgetsIsRefused_PreviewNamesThem(t *testi
 	}); err != nil {
 		t.Fatal(err)
 	}
-	three := mustCommitLibrary(t, libraryID)
+	three := mustSaveLibraryState(t, libraryID)
 
 	impact, err := r.importSvc.ImportImpact(ctx, mainProject, libraryID, &three.Number)
 	if err != nil {
@@ -256,8 +256,8 @@ func TestLibraryImport_SwitchOrphaningWidgetsIsRefused_PreviewNamesThem(t *testi
 	if _, _, err := r.importSvc.PutLibraryImport(ctx, mainProject, libraryID, three.Number, draftVersionOf(t, mainProject)-1); !errors.Is(err, draft.ErrDraftConflict) {
 		t.Errorf("a stale switch: expected draft.ErrDraftConflict, got %v", err)
 	}
-	if _, _, err := r.importSvc.PutLibraryImport(ctx, mainProject, libraryID, 9, imported.Version); !errors.Is(err, draft.ErrCommitNotFound) {
-		t.Errorf("a missing saved state: expected ErrCommitNotFound, got %v", err)
+	if _, _, err := r.importSvc.PutLibraryImport(ctx, mainProject, libraryID, 9, imported.Version); !errors.Is(err, draft.ErrSavedStateNotFound) {
+		t.Errorf("a missing saved state: expected ErrSavedStateNotFound, got %v", err)
 	}
 
 	// Once the orphan is gone, the switch passes and the policy removes the
@@ -266,7 +266,7 @@ func TestLibraryImport_SwitchOrphaningWidgetsIsRefused_PreviewNamesThem(t *testi
 		t.Fatal(err)
 	}
 	switched, created, err := r.importSvc.PutLibraryImport(ctx, mainProject, libraryID, three.Number, draftVersionOf(t, mainProject))
-	if err != nil || created || switched.CommitNumber != three.Number {
+	if err != nil || created || switched.SavedStateNumber != three.Number {
 		t.Fatalf("switch: %+v, %t, %v", switched, created, err)
 	}
 	r.settle(t)
@@ -283,18 +283,18 @@ func TestLibraryImport_AddRequiresASavedStateAndImportsOnce(t *testing.T) {
 	ctx := context.Background()
 	svc := newLibraryImportService(t)
 	lib := mustCreateLibrary(t)
-	if _, _, err := svc.PutLibraryImport(ctx, mainProject, lib.ID, 1, draftVersionOf(t, mainProject)); !errors.Is(err, draft.ErrCommitNotFound) {
-		t.Errorf("a library never saved: expected ErrCommitNotFound, got %v", err)
+	if _, _, err := svc.PutLibraryImport(ctx, mainProject, lib.ID, 1, draftVersionOf(t, mainProject)); !errors.Is(err, draft.ErrSavedStateNotFound) {
+		t.Errorf("a library never saved: expected ErrSavedStateNotFound, got %v", err)
 	}
-	mustCommitLibrary(t, lib.ID)
+	mustSaveLibraryState(t, lib.ID)
 	imported, created, err := svc.PutLibraryImport(ctx, mainProject, lib.ID, 1, draftVersionOf(t, mainProject))
-	if err != nil || !created || imported.CommitNumber != 1 || imported.Version == 0 {
+	if err != nil || !created || imported.SavedStateNumber != 1 || imported.Version == 0 {
 		t.Fatalf("add: %+v, %t, %v", imported, created, err)
 	}
 	if imported.Title != "Save" || imported.Author != "Ada" || imported.SavedAt.IsZero() {
 		t.Errorf("the provenance of the added import: %+v, want saved state 1 titled %q by Ada", imported, "Save")
 	}
-	if again, added, err := svc.PutLibraryImport(ctx, mainProject, lib.ID, 1, draftVersionOf(t, mainProject)); err != nil || added || again.CommitNumber != 1 {
+	if again, added, err := svc.PutLibraryImport(ctx, mainProject, lib.ID, 1, draftVersionOf(t, mainProject)); err != nil || added || again.SavedStateNumber != 1 {
 		t.Errorf("importing the same saved state again: %+v, %t, %v; want the import as it is", again, added, err)
 	} else if again.Title != "Save" {
 		t.Errorf("the provenance of the same import: %+v", again)
@@ -317,8 +317,8 @@ func TestLibraryImport_ProvenanceOfEachLibrary(t *testing.T) {
 	ctx := context.Background()
 	svc := newLibraryImportService(t)
 	first, second := mustCreateLibrary(t), mustCreateLibrary(t)
-	mustCommitLibraryTitled(t, first.ID, "First library", "Ada")
-	mustCommitLibraryTitled(t, second.ID, "Second library", "Bob")
+	mustSaveLibraryStateTitled(t, first.ID, "First library", "Ada")
+	mustSaveLibraryStateTitled(t, second.ID, "Second library", "Bob")
 	for _, lib := range []appdto.Library{first, second} {
 		if _, _, err := svc.PutLibraryImport(ctx, mainProject, lib.ID, 1, draftVersionOf(t, mainProject)); err != nil {
 			t.Fatalf("import library %s: %v", lib.ID, err)
@@ -340,7 +340,7 @@ func TestLibraryImport_ProvenanceOfEachLibrary(t *testing.T) {
 			continue
 		}
 		seen[pin.LibraryID] = true
-		if pin.Title != expected.title || pin.Author != expected.author || pin.CommitNumber != 1 {
+		if pin.Title != expected.title || pin.Author != expected.author || pin.SavedStateNumber != 1 {
 			t.Errorf("the import of library %s: %+v, want saved state 1 titled %q by %s", pin.LibraryID, pin, expected.title, expected.author)
 		}
 	}

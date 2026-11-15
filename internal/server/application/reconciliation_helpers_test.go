@@ -145,13 +145,13 @@ func (r *reconciliation) keepPorts(t *testing.T, wt appdto.WidgetType, ports ...
 	if err != nil {
 		t.Fatalf("UpdateWidgetType: %v", err)
 	}
-	r.switchImport(t, wt.ID, mustCommitLibrary(t, r.libraries[wt.ID]).Number)
+	r.switchImport(t, wt.ID, mustSaveLibraryState(t, r.libraries[wt.ID]).Number)
 	return updated
 }
 
-// switchImport imports the saved state commit of the library of the type
-// typeID in mainProject.
-func (r *reconciliation) switchImport(t *testing.T, typeID uuid.UUID, commit int) {
+// switchImport imports the saved state numbered savedState of the library of
+// the type typeID in mainProject.
+func (r *reconciliation) switchImport(t *testing.T, typeID uuid.UUID, savedState int) {
 	t.Helper()
 	ctx := context.Background()
 	imports, err := r.importSvc.FindLibraryImports(ctx, mainProject)
@@ -160,7 +160,7 @@ func (r *reconciliation) switchImport(t *testing.T, typeID uuid.UUID, commit int
 	}
 	for _, imported := range imports {
 		if imported.LibraryID == r.libraries[typeID] {
-			if _, _, err := r.importSvc.PutLibraryImport(ctx, mainProject, imported.LibraryID, commit, draftVersionOf(t, mainProject)); err != nil {
+			if _, _, err := r.importSvc.PutLibraryImport(ctx, mainProject, imported.LibraryID, savedState, draftVersionOf(t, mainProject)); err != nil {
 				t.Fatalf("PutLibraryImport: %v", err)
 			}
 			return

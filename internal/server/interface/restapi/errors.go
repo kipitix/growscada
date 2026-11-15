@@ -104,7 +104,7 @@ var errorMappings = []errorMapping{
 		"Nothing to save: the draft has not changed since the last save"},
 	{application.ErrDraftNotSaveable, http.StatusConflict, commitResource,
 		"The Draft cannot be saved: it cannot be assembled; repair the Draft first"},
-	{draft.ErrCommitNotFound, http.StatusNotFound, commitResource, ""},
+	{draft.ErrSavedStateNotFound, http.StatusNotFound, commitResource, ""},
 	{runtimeapp.ErrNothingToRollback, http.StatusConflict, deploymentResource,
 		"Nothing to rollback: the deployment holds the document the project runs"},
 	{runtimeapp.ErrDeploymentNotFound, http.StatusNotFound, deploymentResource, ""},
@@ -193,7 +193,7 @@ func sendError(w http.ResponseWriter, r *http.Request, err error) {
 	}
 	// A saved state named by the request body rather than the path: the 404
 	// names the number the request stated (task 85_6).
-	var missingCommit application.MissingCommitError
+	var missingCommit application.MissingSavedStateError
 	if errors.As(err, &missingCommit) {
 		sendProblem(w, NewNotFound(commitResource.name, strconv.Itoa(missingCommit.Number), r.URL.Path))
 		return

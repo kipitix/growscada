@@ -12,43 +12,43 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/library"
 )
 
-// commitContentFormatVersion is the version of the internal encoding of a
+// savedStateContentFormatVersion is the version of the internal encoding of a
 // saved state's content: like the outbox payload and a DraftChange, it is not a
-// contract, and a change of the shape keeps reading the previous format
-// until no saved state of it is left.
-const commitContentFormatVersion = 1
+// contract, and a change of the shape keeps reading the previous format until
+// no saved state of it is left.
+const savedStateContentFormatVersion = 1
 
-// CommitContent is the immutable snapshot a saved state holds: the canonical
-// ProjectFile of a Project's Draft, or the copies of a Library's Draft
-// WidgetTypes — exactly one of them. It is stored encoded (CommitContent
-// implements [json.Marshaler]) and is never changed: a saved state is a point
-// of history.
-type CommitContent struct {
+// SavedStateContent is the immutable snapshot a saved state holds: the
+// canonical ProjectFile of a Project's Draft, or the copies of a Library's
+// Draft WidgetTypes — exactly one of them. It is stored encoded
+// (SavedStateContent implements [json.Marshaler]) and is never changed: a saved
+// state is a point of history.
+type SavedStateContent struct {
 	projectFile *projectv0.ProjectFile
 	widgetTypes []library.WidgetTypeCopy
 }
 
-// NewProjectCommitContent returns the content of a Project's saved state over
-// the canonical ProjectFile the Draft's builder assembled.
-func NewProjectCommitContent(file projectv0.ProjectFile) CommitContent {
-	return CommitContent{projectFile: &file}
+// NewProjectSavedStateContent returns the content of a Project's saved state
+// over the canonical ProjectFile the Draft's builder assembled.
+func NewProjectSavedStateContent(file projectv0.ProjectFile) SavedStateContent {
+	return SavedStateContent{projectFile: &file}
 }
 
-// NewLibraryCommitContent returns the content of a Library's saved state over
-// the copies of its Draft's WidgetTypes.
-func NewLibraryCommitContent(widgetTypes []library.WidgetTypeCopy) CommitContent {
-	return CommitContent{widgetTypes: slices.Clone(widgetTypes)}
+// NewLibrarySavedStateContent returns the content of a Library's saved state
+// over the copies of its Draft's WidgetTypes.
+func NewLibrarySavedStateContent(widgetTypes []library.WidgetTypeCopy) SavedStateContent {
+	return SavedStateContent{widgetTypes: slices.Clone(widgetTypes)}
 }
 
 // IsProject reports whether the content is a Project's.
-func (c CommitContent) IsProject() bool { return c.projectFile != nil }
+func (c SavedStateContent) IsProject() bool { return c.projectFile != nil }
 
 // IsLibrary reports whether the content is a Library's.
-func (c CommitContent) IsLibrary() bool { return c.projectFile == nil && c.widgetTypes != nil }
+func (c SavedStateContent) IsLibrary() bool { return c.projectFile == nil && c.widgetTypes != nil }
 
 // ProjectFile returns the content's ProjectFile; false for a Library's
 // content.
-func (c CommitContent) ProjectFile() (projectv0.ProjectFile, bool) {
+func (c SavedStateContent) ProjectFile() (projectv0.ProjectFile, bool) {
 	if c.projectFile == nil {
 		return projectv0.ProjectFile{}, false
 	}
@@ -57,15 +57,15 @@ func (c CommitContent) ProjectFile() (projectv0.ProjectFile, bool) {
 
 // WidgetTypes returns the content's WidgetTypes; false for a Project's
 // content.
-func (c CommitContent) WidgetTypes() ([]library.WidgetTypeCopy, bool) {
+func (c SavedStateContent) WidgetTypes() ([]library.WidgetTypeCopy, bool) {
 	if c.projectFile != nil {
 		return nil, false
 	}
 	return slices.Clone(c.widgetTypes), true
 }
 
-// commitContentDocument is the stored form of a CommitContent.
-type commitContentDocument struct {
+// savedStateContentDocument is the stored form of a SavedStateContent.
+type savedStateContentDocument struct {
 	Format      int                      `json:"format"`
 	Kind        string                   `json:"kind"`
 	ProjectFile *projectv0.ProjectFile   `json:"project_file,omitempty"`
@@ -95,8 +95,8 @@ type inputPortDocument struct {
 
 // MarshalJSON encodes the content with the format version and the kind, so a
 // reader needs no scope to decode it.
-func (c CommitContent) MarshalJSON() ([]byte, error) {
-	doc := commitContentDocument{Format: commitContentFormatVersion}
+func (c SavedStateContent) MarshalJSON() ([]byte, error) {
+	doc := savedStateContentDocument{Format: savedStateContentFormatVersion}
 	switch {
 	case c.projectFile != nil:
 		doc.Kind = "project"
@@ -136,20 +136,20 @@ func (c CommitContent) MarshalJSON() ([]byte, error) {
 
 // UnmarshalJSON decodes the content as MarshalJSON wrote it. A format this
 // build does not know is an error: a saved state is history, never guessed.
-func (c *CommitContent) UnmarshalJSON(data []byte) error {
-	var doc commitContentDocument
+func (c *SavedStateContent) UnmarshalJSON(data []byte) error {
+	var doc savedStateContentDocument
 	if err := json.Unmarshal(data, &doc); err != nil {
 		return fmt.Errorf("cannot decode saved state content: %w", err)
 	}
-	if doc.Format != commitContentFormatVersion {
-		return fmt.Errorf("saved state content format %d is not the supported %d", doc.Format, commitContentFormatVersion)
+	if doc.Format != savedStateContentFormatVersion {
+		return fmt.Errorf("saved state content format %d is not the supported %d", doc.Format, savedStateContentFormatVersion)
 	}
 	switch doc.Kind {
 	case "project":
 		if doc.ProjectFile == nil {
 			return fmt.Errorf("cannot decode saved state content: kind %q without a project file", doc.Kind)
 		}
-		*c = NewProjectCommitContent(*doc.ProjectFile)
+		*c = NewProjectSavedStateContent(*doc.ProjectFile)
 		return nil
 	case "library":
 		types := make([]library.WidgetTypeCopy, len(doc.WidgetTypes))
@@ -196,7 +196,7 @@ func (c *CommitContent) UnmarshalJSON(data []byte) error {
 			}
 			types[i] = copied
 		}
-		*c = NewLibraryCommitContent(types)
+		*c = NewLibrarySavedStateContent(types)
 		return nil
 	default:
 		return fmt.Errorf("cannot decode saved state content: unknown kind %q", doc.Kind)

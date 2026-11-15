@@ -21,13 +21,13 @@ import (
 // is downloaded as the ProjectFile it holds. The same handler serves both
 // paths; the scope is the path the request came under.
 type CommitHandlers struct {
-	commits application.CommitService
+	commits application.SavedStateService
 	labels  application.LabelService
 }
 
 // NewCommitHandler creates the handler over the Engineering node's saved states
 // and over the labels of a saved state.
-func NewCommitHandler(commits application.CommitService, labels application.LabelService) *CommitHandlers {
+func NewCommitHandler(commits application.SavedStateService, labels application.LabelService) *CommitHandlers {
 	return &CommitHandlers{commits: commits, labels: labels}
 }
 
@@ -49,8 +49,8 @@ func commitScope(w http.ResponseWriter, r *http.Request) (draft.Scope, bool) {
 	return draft.ProjectScope(id.NewID(id.IDWithUUID[project.Project](projectID))), true
 }
 
-// PostCommit handles POST …/commits: a Save of the Draft at the stated
-// Version. 201 with the saved state; 409 nothing_to_save, draft_not_saveable or
+// PostCommit handles POST …/commits: a Save of the Draft at the stated Version.
+// 201 with the saved state; 409 nothing_to_save, draft_not_saveable or
 // draft_conflict; 400 for an empty title or author.
 func (h CommitHandlers) PostCommit(w http.ResponseWriter, r *http.Request) {
 	scope, ok := commitScope(w, r)
@@ -206,9 +206,9 @@ func commitLabelPath(w http.ResponseWriter, r *http.Request) (draft.Scope, int, 
 }
 
 // commitsLabelFilter reads ?label=<uuid> of a saved state list: uuid.Nil (every
-// saved state) when the parameter is absent; a value that is not a UUID, or
-// the zero UUID, which names no label, is the client's input. On failure it
-// has already answered.
+// saved state) when the parameter is absent; a value that is not a UUID, or the
+// zero UUID, which names no label, is the client's input. On failure it has
+// already answered.
 func commitsLabelFilter(w http.ResponseWriter, r *http.Request) (uuid.UUID, bool) {
 	raw := r.URL.Query().Get(apiv0.CommitsQueryLabel)
 	if raw == "" {

@@ -16,28 +16,29 @@ import (
 	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/repositories"
 )
 
-// newCommitService returns the service of Commits over the test database.
-func newCommitService() application.CommitService {
+// newSavedStateService returns the service of saved states over the test
+// database.
+func newSavedStateService() application.SavedStateService {
 	content := contentOver(newScopes())
-	return application.NewCommitService(content, newLibraryContent(),
+	return application.NewSavedStateService(content, newLibraryContent(),
 		application.NewProjectFileBuilder(content), repositories.NewWidgetTypeRepositories(testDB),
 		application.NewLabelService(repositories.NewLabelRepositoryPostgres(testDB),
 			repositories.NewDraftRepositoryPostgres(testDB),
 			soleOrganization()))
 }
 
-// TestCommitService_ProjectSaveListFindRename: a Save of a Project's Draft
-// numbers its Commits, a Save without changes is refused, and the history,
+// TestSavedStateService_ProjectSaveListFindRename: a Save of a Project's Draft
+// numbers its saved states, a Save without changes is refused, and the history,
 // the ProjectFile and the title rename work (task 72_2; ADR 0021).
-func TestCommitService_ProjectSaveListFindRename(t *testing.T) {
+func TestSavedStateService_ProjectSaveListFindRename(t *testing.T) {
 	cleanProjects(t)
 	ctx := context.Background()
 	projects := application.NewProjectService(repositories.NewProjectRepositoryPostgres(testDB), repositories.NewDraftRepositoryPostgres(testDB), soleOrganization())
-	createdProject, err := projects.CreateProject(ctx, appdto.ProjectInput{Name: "commits-" + uuid.NewString()})
+	createdProject, err := projects.CreateProject(ctx, appdto.ProjectInput{Name: "savedStates-" + uuid.NewString()})
 	if err != nil {
 		t.Fatalf("CreateProject: %v", err)
 	}
-	service := newCommitService()
+	service := newSavedStateService()
 	scope := draft.ProjectScope(id.NewID(id.IDWithUUID[project.Project](createdProject.ID)))
 
 	saved, err := service.Save(ctx, scope, 1, "First save", "Ada")
@@ -45,10 +46,10 @@ func TestCommitService_ProjectSaveListFindRename(t *testing.T) {
 		t.Fatalf("Save: %v", err)
 	}
 	if saved.Number != 1 || saved.Title != "First save" || saved.Author != "Ada" {
-		t.Errorf("saved commit: %+v", saved)
+		t.Errorf("saved state: %+v", saved)
 	}
 	if saved.DraftVersion != 1 {
-		t.Errorf("the commit fixed version %d, want 1", saved.DraftVersion)
+		t.Errorf("the saved state fixed version %d, want 1", saved.DraftVersion)
 	}
 
 	if _, err := service.Save(ctx, scope, 1, "Again", "Ada"); !errors.Is(err, draft.ErrNothingToSave) {
@@ -74,10 +75,10 @@ func TestCommitService_ProjectSaveListFindRename(t *testing.T) {
 		t.Fatalf("Find: %v", err)
 	}
 	if found.Title != "First save" || found.Counts.Tags != 0 {
-		t.Errorf("found commit: %+v", found)
+		t.Errorf("found saved state: %+v", found)
 	}
-	if _, err := service.Find(ctx, scope, 9); !errors.Is(err, draft.ErrCommitNotFound) {
-		t.Errorf("Find of a missing commit: %v, want ErrCommitNotFound", err)
+	if _, err := service.Find(ctx, scope, 9); !errors.Is(err, draft.ErrSavedStateNotFound) {
+		t.Errorf("Find of a missing savedState: %v, want ErrSavedStateNotFound", err)
 	}
 
 	renamed, err := service.Rename(ctx, scope, 1, "  Before the demo ")
@@ -100,18 +101,18 @@ func TestCommitService_ProjectSaveListFindRename(t *testing.T) {
 	}
 }
 
-// TestCommitService_LibrarySaveAndList: a Library's Draft is saved the same
-// way, its Commit holds its WidgetTypes, and a Project's download is refused
-// for a Library's scope (task 72_2; ADR 0021).
-func TestCommitService_LibrarySaveAndList(t *testing.T) {
+// TestSavedStateService_LibrarySaveAndList: a Library's Draft is saved the same
+// way, its SavedState holds its WidgetTypes, and a Project's download is
+// refused for a Library's scope (task 72_2; ADR 0021).
+func TestSavedStateService_LibrarySaveAndList(t *testing.T) {
 	ctx := context.Background()
 	libraries := application.NewLibraryService(newLibraryContent(), repositories.NewLibraryRepositoryPostgres(testDB),
 		repositories.NewWidgetTypeRepositories(testDB), newRuntimeNode())
-	created, err := libraries.CreateLibrary(ctx, appdto.LibraryInput{Name: "commits-" + uuid.NewString()})
+	created, err := libraries.CreateLibrary(ctx, appdto.LibraryInput{Name: "savedStates-" + uuid.NewString()})
 	if err != nil {
 		t.Fatalf("CreateLibrary: %v", err)
 	}
-	service := newCommitService()
+	service := newSavedStateService()
 	scope := draft.LibraryScope(id.NewID(id.IDWithUUID[library.Library](created.ID)))
 
 	saved, err := service.Save(ctx, scope, 1, "Widgets", "Ada")
@@ -119,16 +120,16 @@ func TestCommitService_LibrarySaveAndList(t *testing.T) {
 		t.Fatalf("Save: %v", err)
 	}
 	if saved.Number != 1 {
-		t.Errorf("saved commit number %d", saved.Number)
+		t.Errorf("saved state number %d", saved.Number)
 	}
 	found, err := service.Find(ctx, scope, 1)
 	if err != nil {
 		t.Fatalf("Find: %v", err)
 	}
 	if found.WidgetTypes == nil {
-		t.Errorf("a library's commit carries no widget types list")
+		t.Errorf("a library's saved state carries no widget types list")
 	}
 	if _, err := service.ProjectFile(ctx, scope, 1); !errors.Is(err, application.ErrInvalidInput) {
-		t.Errorf("ProjectFile of a library's commit: %v, want invalid input", err)
+		t.Errorf("ProjectFile of a library's saved state: %v, want invalid input", err)
 	}
 }

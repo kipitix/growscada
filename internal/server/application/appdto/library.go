@@ -17,9 +17,9 @@ type Library struct {
 	Name        string
 	Description string
 	Version     int
-	// LatestCommit is the number of the Draft's last saved state; 0 when it was
-	// never saved.
-	LatestCommit int
+	// LatestSavedState is the number of the Draft's last saved state; 0 when it
+	// was never saved.
+	LatestSavedState int
 	// HasUnsavedChanges reports whether the Draft moved since its last saved
 	// state.
 	HasUnsavedChanges bool
@@ -36,13 +36,13 @@ type LibraryInput struct {
 // NewLibrary creates a Library DTO from the domain aggregate, the number of
 // its last saved state (0 when it was never saved) and whether its Draft moved
 // since that saved state (task 74).
-func NewLibrary(l library.Library, latestCommit int, hasUnsavedChanges bool) Library {
+func NewLibrary(l library.Library, latestSavedState int, hasUnsavedChanges bool) Library {
 	return Library{
 		ID:                l.ID().UUID(),
 		Name:              l.Name().String(),
 		Description:       l.Description().String(),
 		Version:           l.Version().Number(),
-		LatestCommit:      latestCommit,
+		LatestSavedState:  latestSavedState,
 		HasUnsavedChanges: hasUnsavedChanges,
 	}
 }
@@ -51,24 +51,24 @@ func NewLibrary(l library.Library, latestCommit int, hasUnsavedChanges bool) Lib
 // Project: the saved state of the Library it names, with that state's title,
 // Author, time and labels (task 85_6).
 type LibraryImport struct {
-	LibraryID    uuid.UUID
-	CommitNumber int
-	Title        string
-	Author       string
-	SavedAt      time.Time
-	Labels       []Label
-	Version      int
+	LibraryID        uuid.UUID
+	SavedStateNumber int
+	Title            string
+	Author           string
+	SavedAt          time.Time
+	Labels           []Label
+	Version          int
 }
 
 // NewLibraryImport creates a LibraryImport DTO from the domain entity and, when
 // this server has it, the saved state it names: a saved state that cannot be
 // read leaves the provenance empty and the number as stored.
-func NewLibraryImport(i libraryimport.LibraryImport, version int, commit draft.Commit, labels []Label) LibraryImport {
-	dto := LibraryImport{LibraryID: i.LibraryID().UUID(), CommitNumber: i.CommitNumber(), Labels: labels, Version: version}
-	if commit != nil {
-		dto.Title = commit.Title().String()
-		dto.Author = commit.Author().String()
-		dto.SavedAt = commit.CreatedAt()
+func NewLibraryImport(i libraryimport.LibraryImport, version int, savedState draft.SavedState, labels []Label) LibraryImport {
+	dto := LibraryImport{LibraryID: i.LibraryID().UUID(), SavedStateNumber: i.SavedStateNumber(), Labels: labels, Version: version}
+	if savedState != nil {
+		dto.Title = savedState.Title().String()
+		dto.Author = savedState.Author().String()
+		dto.SavedAt = savedState.CreatedAt()
 	}
 	if dto.Labels == nil {
 		dto.Labels = []Label{}

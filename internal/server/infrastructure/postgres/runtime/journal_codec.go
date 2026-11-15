@@ -38,17 +38,17 @@ func newTagStateEntry(projectID uuid.UUID, at time.Time, tagID uuid.UUID, value,
 	}
 }
 
-// newDeploymentEntry returns the Journal entry of a Deployment that appeared: its
-// number, its cause, the saved state it made running (task 85_4) and the
+// newDeploymentEntry returns the Journal entry of a Deployment that appeared:
+// its number, its cause, the saved state it made running (task 85_4) and the
 // Deployment a Rollback copied. The document itself is not part of the entry
 // (ADR 0014).
-func newDeploymentEntry(projectID uuid.UUID, at time.Time, number int, cause recordv0.DeploymentCause, commitNumber *int, rolledBackFrom *int) recordv0.Entry {
+func newDeploymentEntry(projectID uuid.UUID, at time.Time, number int, cause recordv0.DeploymentCause, savedStateNumber *int, rolledBackFrom *int) recordv0.Entry {
 	return recordv0.Entry{
 		Header:     recordv0.Header{SchemaVersion: recordv0.SchemaVersion()},
 		Timestamp:  at.UTC().Format(time.RFC3339),
 		ProjectID:  projectID,
 		Type:       recordv0.EntryTypeDeployment,
-		Deployment: &recordv0.Deployment{Number: number, Cause: cause, RolledBackFrom: rolledBackFrom, CommitNumber: commitNumber},
+		Deployment: &recordv0.Deployment{Number: number, Cause: cause, RolledBackFrom: rolledBackFrom, CommitNumber: savedStateNumber},
 	}
 }
 

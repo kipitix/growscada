@@ -52,9 +52,9 @@ type projectFileValidation struct {
 	content draft.Content
 }
 
-// projectFileValidator validates a ProjectFile for the Engineering node
-// (ADR 0018). Opening also checks the document's imports against this server's
-// live Libraries and their saved states; deploying a file does not, because the
+// projectFileValidator validates a ProjectFile for the Engineering node (ADR
+// 0018). Opening also checks the document's imports against this server's live
+// Libraries and their saved states; deploying a file does not, because the
 // document carries the WidgetTypes its Widgets use.
 type projectFileValidator struct {
 	libraries library.LibraryRepository
@@ -481,15 +481,15 @@ func (v projectFileValidator) localWidgetTypes(ctx context.Context, file project
 		if err != nil {
 			return nil, fmt.Errorf("cannot read library %s: %w", imported.LibraryID, err)
 		}
-		commit, err := v.drafts.FindCommit(ctx, draft.LibraryScope(lib.ID()), imported.Commit)
-		if errors.Is(err, draft.ErrCommitNotFound) {
+		savedState, err := v.drafts.FindSavedState(ctx, draft.LibraryScope(lib.ID()), imported.Commit)
+		if errors.Is(err, draft.ErrSavedStateNotFound) {
 			problems.add(path, "library %s has no saved state %d on this server", imported.LibraryID, imported.Commit)
 			continue
 		}
 		if err != nil {
 			return nil, fmt.Errorf("cannot read saved state %d of library %s: %w", imported.Commit, imported.LibraryID, err)
 		}
-		copies, ok := commit.Content().WidgetTypes()
+		copies, ok := savedState.Content().WidgetTypes()
 		if !ok {
 			problems.add(path, "saved state %d of library %s holds no widget types", imported.Commit, imported.LibraryID)
 			continue

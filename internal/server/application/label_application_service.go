@@ -15,11 +15,11 @@ import (
 )
 
 // LabelService serves the Labels of the server's Organization: their names,
-// their colors and the saved states they mark (task 85_2, task 85_3;
-// ADR 0025). A label is not content: the service reads no Draft Version,
-// states none and writes no DraftChange. An assignment names a saved state of a
-// Project's or a Library's Draft and is written in the label's own
-// transaction, which locks the label and the saved state.
+// their colors and the saved states they mark (task 85_2, task 85_3; ADR 0025).
+// A label is not content: the service reads no Draft Version, states none and
+// writes no DraftChange. An assignment names a saved state of a Project's or a
+// Library's Draft and is written in the label's own transaction, which locks
+// the label and the saved state.
 type LabelService interface {
 	// List returns the Organization's labels, ordered by name ignoring case.
 	List(ctx context.Context) ([]appdto.Label, error)
@@ -37,17 +37,17 @@ type LabelService interface {
 	// label.ErrLabelNotFound for a label the Organization lacks.
 	Delete(ctx context.Context, labelID uuid.UUID) error
 
-	// Assign marks the saved state commitNumber of scope with the label and
+	// Assign marks the saved state savedStateNumber of scope with the label and
 	// returns every label the saved state carries afterwards. It is idempotent: a
 	// repeat changes nothing and records no event. A Project or Library that is
 	// not live is its not-found error, a saved state scope lacks is
-	// draft.ErrCommitNotFound, a label the Organization lacks
+	// draft.ErrSavedStateNotFound, a label the Organization lacks
 	// label.ErrLabelNotFound; a number that is not positive is invalid input.
-	Assign(ctx context.Context, scope draft.Scope, commitNumber int, labelID uuid.UUID) ([]appdto.Label, error)
+	Assign(ctx context.Context, scope draft.Scope, savedStateNumber int, labelID uuid.UUID) ([]appdto.Label, error)
 
-	// Unassign takes the label off the saved state commitNumber of scope,
+	// Unassign takes the label off the saved state savedStateNumber of scope,
 	// idempotently, and returns the labels the saved state still carries.
-	Unassign(ctx context.Context, scope draft.Scope, commitNumber int, labelID uuid.UUID) ([]appdto.Label, error)
+	Unassign(ctx context.Context, scope draft.Scope, savedStateNumber int, labelID uuid.UUID) ([]appdto.Label, error)
 
 	// LabelsOf returns the labels of every saved state of scope that carries one,
 	// keyed by the saved state's number: the read of a saved state list that shows
@@ -143,7 +143,7 @@ func (s labelServiceImpl) Delete(ctx context.Context, rawID uuid.UUID) error {
 }
 
 func (s labelServiceImpl) Assign(ctx context.Context, scope draft.Scope, rawNumber int, rawLabelID uuid.UUID) ([]appdto.Label, error) {
-	number, commit, err := s.commitOf(ctx, scope, rawNumber)
+	number, savedState, err := s.commitOf(ctx, scope, rawNumber)
 	if err != nil {
 		return nil, err
 	}
@@ -151,20 +151,20 @@ func (s labelServiceImpl) Assign(ctx context.Context, scope draft.Scope, rawNumb
 	if err != nil {
 		return nil, err
 	}
-	assigned, err := found.Assign(commit.ID(), scope, number, s.now())
+	assigned, err := found.Assign(savedState.ID(), scope, number, s.now())
 	if err != nil {
 		return nil, fmt.Errorf("cannot assign label: %w", invalidInput(err))
 	}
 	if len(assigned.PendingEvents()) > 0 {
-		if _, err := s.repository.Assign(ctx, assigned, commit.ID()); err != nil {
+		if _, err := s.repository.Assign(ctx, assigned, savedState.ID()); err != nil {
 			return nil, fmt.Errorf("cannot save the assignment of label %s: %w", found.ID(), err)
 		}
 	}
-	return s.labelsOfCommit(ctx, scope, number)
+	return s.labelsOfSavedState(ctx, scope, number)
 }
 
 func (s labelServiceImpl) Unassign(ctx context.Context, scope draft.Scope, rawNumber int, rawLabelID uuid.UUID) ([]appdto.Label, error) {
-	number, commit, err := s.commitOf(ctx, scope, rawNumber)
+	number, savedState, err := s.commitOf(ctx, scope, rawNumber)
 	if err != nil {
 		return nil, err
 	}
@@ -172,16 +172,16 @@ func (s labelServiceImpl) Unassign(ctx context.Context, scope draft.Scope, rawNu
 	if err != nil {
 		return nil, err
 	}
-	unassigned, err := found.Unassign(commit.ID())
+	unassigned, err := found.Unassign(savedState.ID())
 	if err != nil {
 		return nil, fmt.Errorf("cannot unassign label: %w", invalidInput(err))
 	}
 	if len(unassigned.PendingEvents()) > 0 {
-		if _, err := s.repository.Unassign(ctx, unassigned, commit.ID()); err != nil {
+		if _, err := s.repository.Unassign(ctx, unassigned, savedState.ID()); err != nil {
 			return nil, fmt.Errorf("cannot save the assignment of label %s: %w", found.ID(), err)
 		}
 	}
-	return s.labelsOfCommit(ctx, scope, number)
+	return s.labelsOfSavedState(ctx, scope, number)
 }
 
 func (s labelServiceImpl) LabelsOf(ctx context.Context, scope draft.Scope) (map[int][]appdto.Label, error) {
@@ -192,31 +192,31 @@ func (s labelServiceImpl) LabelsOf(ctx context.Context, scope draft.Scope) (map[
 	return appdto.NewLabelMap(byNumber), nil
 }
 
-// labelsOfCommit is the labels the saved state commitNumber carries, as PUT
-// and DELETE answer: the whole set, ordered by name ignoring case.
-func (s labelServiceImpl) labelsOfCommit(ctx context.Context, scope draft.Scope, commitNumber int) ([]appdto.Label, error) {
+// labelsOfSavedState is the labels the saved state savedStateNumber carries, as
+// PUT and DELETE answer: the whole set, ordered by name ignoring case.
+func (s labelServiceImpl) labelsOfSavedState(ctx context.Context, scope draft.Scope, savedStateNumber int) ([]appdto.Label, error) {
 	byNumber, err := s.LabelsOf(ctx, scope)
 	if err != nil {
 		return nil, err
 	}
-	return byNumber[commitNumber], nil
+	return byNumber[savedStateNumber], nil
 }
 
 // commitOf reads the saved state rawNumber of the Draft of scope, which checks
 // the saved state exists in that scope and the Project or Library is live.
-func (s labelServiceImpl) commitOf(ctx context.Context, scope draft.Scope, rawNumber int) (int, draft.Commit, error) {
+func (s labelServiceImpl) commitOf(ctx context.Context, scope draft.Scope, rawNumber int) (int, draft.SavedState, error) {
 	if !scope.IsProject() && !scope.IsLibrary() {
 		return 0, nil, invalidInput(fmt.Errorf("scope: a project or a library is required"))
 	}
-	number, err := commitNumber(rawNumber)
+	number, err := savedStateNumber(rawNumber)
 	if err != nil {
 		return 0, nil, err
 	}
-	commit, err := s.drafts.FindCommit(ctx, scope, number)
+	savedState, err := s.drafts.FindSavedState(ctx, scope, number)
 	if err != nil {
 		return 0, nil, fmt.Errorf("cannot find the saved state of %s: %w", scope, err)
 	}
-	return number, commit, nil
+	return number, savedState, nil
 }
 
 // find reads the label of the Organization; another Organization's is not

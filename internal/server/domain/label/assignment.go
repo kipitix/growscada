@@ -15,51 +15,51 @@ import (
 // no content and is never a conflict with an Engineer editing a Draft. Value
 // Object.
 type Assignment interface {
-	CommitID() id.ID[draft.Commit]
+	SavedStateID() id.ID[draft.SavedState]
 	Scope() draft.Scope
-	CommitNumber() int
+	SavedStateNumber() int
 	AssignedAt() time.Time
 
 	fmt.Stringer
 }
 
 type assignmentImpl struct {
-	commitID     id.ID[draft.Commit]
-	scope        draft.Scope
-	commitNumber int
-	assignedAt   time.Time
+	savedStateID     id.ID[draft.SavedState]
+	scope            draft.Scope
+	savedStateNumber int
+	assignedAt       time.Time
 }
 
 var _ Assignment = (*assignmentImpl)(nil)
 
-// NewAssignment creates an assignment of a Label to the saved state commitID of
-// scope, numbered commitNumber within its Draft. Returns ErrInvalidAssignment
-// if the number is not positive or the scope names neither a Project nor a
-// Library.
-func NewAssignment(commitID id.ID[draft.Commit], scope draft.Scope, commitNumber int, at time.Time) (Assignment, error) {
-	if commitNumber < 1 {
-		return nil, fmt.Errorf("%w: commit number must be positive, got %d", ErrInvalidAssignment, commitNumber)
+// NewAssignment creates an assignment of a Label to the saved state
+// savedStateID of scope, numbered savedStateNumber within its Draft. Returns
+// ErrInvalidAssignment if the number is not positive or the scope names neither
+// a Project nor a Library.
+func NewAssignment(savedStateID id.ID[draft.SavedState], scope draft.Scope, savedStateNumber int, at time.Time) (Assignment, error) {
+	if savedStateNumber < 1 {
+		return nil, fmt.Errorf("%w: saved state number must be positive, got %d", ErrInvalidAssignment, savedStateNumber)
 	}
 	switch {
-	case commitID.IsZero():
+	case savedStateID.IsZero():
 		return nil, fmt.Errorf("%w: a saved state is required", ErrInvalidAssignment)
 	case scope.IsProject() == scope.IsLibrary():
 		return nil, fmt.Errorf("%w: one project or library is required, got %s", ErrInvalidAssignment, scope)
 	}
 	return &assignmentImpl{
-		commitID:     commitID,
-		scope:        scope,
-		commitNumber: commitNumber,
-		assignedAt:   at.UTC(),
+		savedStateID:     savedStateID,
+		scope:            scope,
+		savedStateNumber: savedStateNumber,
+		assignedAt:       at.UTC(),
 	}, nil
 }
 
-func (a *assignmentImpl) CommitID() id.ID[draft.Commit] { return a.commitID }
-func (a *assignmentImpl) Scope() draft.Scope            { return a.scope }
-func (a *assignmentImpl) CommitNumber() int             { return a.commitNumber }
-func (a *assignmentImpl) AssignedAt() time.Time         { return a.assignedAt }
+func (a *assignmentImpl) SavedStateID() id.ID[draft.SavedState] { return a.savedStateID }
+func (a *assignmentImpl) Scope() draft.Scope                    { return a.scope }
+func (a *assignmentImpl) SavedStateNumber() int                 { return a.savedStateNumber }
+func (a *assignmentImpl) AssignedAt() time.Time                 { return a.assignedAt }
 
 // String implements [fmt.Stringer].
 func (a *assignmentImpl) String() string {
-	return fmt.Sprintf("Assignment: %d of %s at %s", a.commitNumber, a.scope, a.assignedAt.Format(time.RFC3339))
+	return fmt.Sprintf("Assignment: %d of %s at %s", a.savedStateNumber, a.scope, a.assignedAt.Format(time.RFC3339))
 }

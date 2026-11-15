@@ -128,7 +128,7 @@ func libraryWriteError(what string, err error) error {
 func (r libraryRepositoryPostgresImpl) Delete(ctx context.Context, l library.Library) error {
 	return r.store.inTx(ctx, l.PendingEvents(), func(tx *sql.Tx) error {
 		res, err := tx.ExecContext(ctx, `DELETE FROM engineering.libraries WHERE id = $1 AND deleted_at IS NOT NULL`, l.ID().UUID())
-		if isForeignKeyViolation(err, constraintLibraryImportsLibraryID) || isForeignKeyViolation(err, constraintLibraryImportsCommitID) {
+		if isForeignKeyViolation(err, constraintLibraryImportsLibraryID) || isForeignKeyViolation(err, constraintLibraryImportsSavedStateID) {
 			return fmt.Errorf("%w: %s", library.ErrLibraryImported, l.ID())
 		}
 		if err != nil {

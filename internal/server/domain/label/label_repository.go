@@ -33,17 +33,17 @@ type Repository interface {
 	// recorded. A missing label is ErrLabelNotFound.
 	Delete(ctx context.Context, l Label) error
 
-	// Assign stores the mark the label recorded on the saved state commitID and
-	// its events, in one transaction that locks the label's row and keeps the
+	// Assign stores the mark the label recorded on the saved state savedStateID
+	// and its events, in one transaction that locks the label's row and keeps the
 	// saved state from being removed while it runs: a label deleted concurrently
 	// is ErrLabelNotFound, a saved state this server lacks
-	// draft.ErrCommitNotFound. An assignment already stored is not an error and
-	// writes no event (its key makes it one row).
-	Assign(ctx context.Context, l Label, commitID id.ID[draft.Commit]) (Label, error)
-	// Unassign removes the mark of the saved state commitID and writes the events
-	// the label recorded; a mark that is not there is not an error and writes
-	// none.
-	Unassign(ctx context.Context, l Label, commitID id.ID[draft.Commit]) (Label, error)
+	// draft.ErrSavedStateNotFound. An assignment already stored is not an error
+	// and writes no event (its key makes it one row).
+	Assign(ctx context.Context, l Label, savedStateID id.ID[draft.SavedState]) (Label, error)
+	// Unassign removes the mark of the saved state savedStateID and writes the
+	// events the label recorded; a mark that is not there is not an error and
+	// writes none.
+	Unassign(ctx context.Context, l Label, savedStateID id.ID[draft.SavedState]) (Label, error)
 	// LabelsOfScope returns the labels of every saved state of the Draft of scope
 	// that carries one, keyed by the saved state's number and ordered by name
 	// ignoring case: one query for the history of a Draft (task 85_3).

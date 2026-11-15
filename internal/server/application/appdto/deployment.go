@@ -13,10 +13,10 @@ import (
 // or "rollback"; RolledBackFrom names the Deployment a Rollback copied, nil for
 // a Deploy. A Deployment is never changed or removed while its Project lives.
 type Deployment struct {
-	Number         int
-	DeployedAt     time.Time
-	Cause          string
-	RolledBackFrom *int
-	CommitNumber   *int
-	Content        projectv0.ProjectFile
+	Number           int
+	DeployedAt       time.Time
+	Cause            string
+	RolledBackFrom   *int
+	SavedStateNumber *int
+	Content          projectv0.ProjectFile
 }

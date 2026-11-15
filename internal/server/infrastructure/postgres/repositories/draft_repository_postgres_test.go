@@ -113,23 +113,24 @@ func TestDraftCleanVersion_SaveDiscardAndNothingToSave(t *testing.T) {
 		t.Fatalf("a write above the Clean Version is clean")
 	}
 
-	// A Save makes the Draft its Commit's content, and nothing is left to save.
-	if _, err := testDrafts().SaveCommit(ctx, scope, draftVersionOf(t, mainProject),
-		commitTitle(t, "First"), commitAuthor(t), projectCommitContent()); err != nil {
-		t.Fatalf("SaveCommit: %v", err)
+	// A Save makes the Draft its SavedState's content, and nothing is left to
+	// save.
+	if _, err := testDrafts().SaveSavedState(ctx, scope, draftVersionOf(t, mainProject),
+		commitTitle(t, "First"), commitAuthor(t), projectSavedStateContent()); err != nil {
+		t.Fatalf("SaveSavedState: %v", err)
 	}
 	saved := read()
 	if saved.HasUnsavedChanges() || saved.CleanVersion() != saved.Version() {
 		t.Errorf("a saved Draft: %s, clean %s; want it clean", saved.Version(), saved.CleanVersion())
 	}
-	if _, err := testDrafts().SaveCommit(ctx, scope, draftVersionOf(t, mainProject),
-		commitTitle(t, "Again"), commitAuthor(t), projectCommitContent()); !errors.Is(err, draft.ErrNothingToSave) {
+	if _, err := testDrafts().SaveSavedState(ctx, scope, draftVersionOf(t, mainProject),
+		commitTitle(t, "Again"), commitAuthor(t), projectSavedStateContent()); !errors.Is(err, draft.ErrNothingToSave) {
 		t.Fatalf("a Save at the Clean Version: %v, want ErrNothingToSave", err)
 	}
 
-	// A replacement whose content is the Commit's — a Discard — is clean, and a
-	// Save of it is refused too. The clean marker follows the Commit number the
-	// content is, compared with the Draft's last one under the row's lock.
+	// A replacement whose content is the SavedState's — a Discard — is clean, and
+	// a Save of it is refused too. The clean marker follows the SavedState number
+	// the content is, compared with the Draft's last one under the row's lock.
 	result, err := testDrafts().Replace(ctx, scope, 1, func(session *draft.Session) error {
 		return session.Replace(ctx, draft.Content{})
 	})
@@ -139,8 +140,8 @@ func TestDraftCleanVersion_SaveDiscardAndNothingToSave(t *testing.T) {
 	if result.HasUnsavedChanges() {
 		t.Errorf("a clean replacement is unsaved: %s, clean %s", result.Version(), result.CleanVersion())
 	}
-	if _, err := testDrafts().SaveCommit(ctx, scope, draftVersionOf(t, mainProject),
-		commitTitle(t, "After a discard"), commitAuthor(t), projectCommitContent()); !errors.Is(err, draft.ErrNothingToSave) {
+	if _, err := testDrafts().SaveSavedState(ctx, scope, draftVersionOf(t, mainProject),
+		commitTitle(t, "After a discard"), commitAuthor(t), projectSavedStateContent()); !errors.Is(err, draft.ErrNothingToSave) {
 		t.Fatalf("a Save after a Discard: %v, want ErrNothingToSave", err)
 	}
 
@@ -152,14 +153,14 @@ func TestDraftCleanVersion_SaveDiscardAndNothingToSave(t *testing.T) {
 		t.Fatalf("Replace: %v", err)
 	}
 	if !read().HasUnsavedChanges() {
-		t.Errorf("a replacement that is not the Commit's is clean")
+		t.Errorf("a replacement that is not the SavedState's is clean")
 	}
 
-	// A replacement that names a Commit the Draft no longer has as its last one
-	// is not clean either: a Save committed meanwhile overtook it (task 84).
-	if _, err := testDrafts().SaveCommit(ctx, scope, draftVersionOf(t, mainProject),
-		commitTitle(t, "Second"), commitAuthor(t), projectCommitContent()); err != nil && !errors.Is(err, draft.ErrNothingToSave) {
-		t.Fatalf("SaveCommit: %v", err)
+	// A replacement that names a SavedState the Draft no longer has as its last
+	// one is not clean either: a Save committed meanwhile overtook it (task 84).
+	if _, err := testDrafts().SaveSavedState(ctx, scope, draftVersionOf(t, mainProject),
+		commitTitle(t, "Second"), commitAuthor(t), projectSavedStateContent()); err != nil && !errors.Is(err, draft.ErrNothingToSave) {
+		t.Fatalf("SaveSavedState: %v", err)
 	}
 	if _, err := testDrafts().Replace(ctx, scope, 1, func(session *draft.Session) error {
 		return session.Replace(ctx, draft.Content{})
@@ -167,7 +168,7 @@ func TestDraftCleanVersion_SaveDiscardAndNothingToSave(t *testing.T) {
 		t.Fatalf("Replace: %v", err)
 	}
 	if !read().HasUnsavedChanges() {
-		t.Errorf("a replacement of an older Commit than the last one is clean")
+		t.Errorf("a replacement of an older SavedState than the last one is clean")
 	}
 }
 
@@ -617,16 +618,16 @@ func TestDraftPutLibraryPin_SwitchRemovesBrokenBindingsInOneChange(t *testing.T)
 	built := mustCreateWidgetType(t, typeRepo.libraryID, makeWidgetType(t, "gauge", []library.InputPort{
 		library.NewInputPort(portName, "", library.AnyTypeHint()),
 	}, typeRepo))
-	first, err := mustCommit(t, typeRepo.libraryID)
+	first, err := mustSaveState(t, typeRepo.libraryID)
 	if err != nil {
-		t.Fatalf("commit: %v", err)
+		t.Fatalf("saved state: %v", err)
 	}
 	mustImport(t, mainProject, first)
 
 	tagRepo := repositories.NewTagRepositoryPostgres(testDB, mainProject)
 	bound := makeTag(t, "speed", tagRepo)
 	mustSaveTag(t, tagRepo, bound)
-	released := copyOfCommit(t, first, built.ID())
+	released := copyOfSavedState(t, first, built.ID())
 	sceneRepo := repositories.NewSceneRepositoryPostgres(testDB, mainProject)
 	widget := mustWidgetOf(t, sceneRepo, released, map[string]tag.Tag{"value": bound})
 	saved := mustSave(t, sceneRepo, withWidgets(makeScene(t, sceneRepo, "main"), widget))
@@ -642,9 +643,9 @@ func TestDraftPutLibraryPin_SwitchRemovesBrokenBindingsInOneChange(t *testing.T)
 		t.Fatalf("Update: %v", err)
 	}
 	mustUpdateLibraryWidgetType(t, typeRepo.libraryID, narrowed)
-	second, err := mustCommit(t, typeRepo.libraryID)
+	second, err := mustSaveState(t, typeRepo.libraryID)
 	if err != nil {
-		t.Fatalf("commit: %v", err)
+		t.Fatalf("saved state: %v", err)
 	}
 
 	mustUpdate(t, mainProject, "Switch import", func(session *draft.Session) error {
@@ -773,13 +774,13 @@ func TestDraftLibrary_ReplaceRestoresTheSavedStateAndClearsTheStack(t *testing.T
 	scope := draft.LibraryScope(repo.libraryID)
 	a := mustStoreWidgetType(t, makeWidgetType(t, "a", nil, repo), repo)
 	b := mustStoreWidgetType(t, makeWidgetType(t, "b", nil, repo), repo)
-	commit, err := mustCommit(t, repo.libraryID)
+	savedState, err := mustSaveState(t, repo.libraryID)
 	if err != nil {
-		t.Fatalf("commit: %v", err)
+		t.Fatalf("saved state: %v", err)
 	}
-	saved, ok := commit.Content().WidgetTypes()
+	saved, ok := savedState.Content().WidgetTypes()
 	if !ok {
-		t.Fatalf("the commit holds no widget types")
+		t.Fatalf("the saved state holds no widget types")
 	}
 
 	rename := func(wt library.WidgetType, name string) {

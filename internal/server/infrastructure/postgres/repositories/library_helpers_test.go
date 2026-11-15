@@ -50,9 +50,9 @@ func newWidgetTypeRepo(t *testing.T) libraryRepo {
 	return libraryRepo{repositories.NewWidgetTypeRepositoryPostgres(testDB, lib.ID()), lib.ID()}
 }
 
-// mustCommit saves the Draft of the library as a Commit, or returns its last
-// one when the Draft has not changed since it.
-func mustCommit(t *testing.T, libraryID id.ID[library.Library]) (draft.Commit, error) {
+// mustSaveState saves the Draft of the library as a SavedState, or returns its
+// last one when the Draft has not changed since it.
+func mustSaveState(t *testing.T, libraryID id.ID[library.Library]) (draft.SavedState, error) {
 	t.Helper()
 	ctx := context.Background()
 	draftNow, err := repositories.NewWidgetTypeRepositoryPostgres(testDB, libraryID).FindAll(ctx)
@@ -63,7 +63,7 @@ func mustCommit(t *testing.T, libraryID id.ID[library.Library]) (draft.Commit, e
 	for i, wt := range draftNow {
 		copies[i] = library.CopyOf(wt)
 	}
-	title, err := draft.NewCommitTitle("Release")
+	title, err := draft.NewSavedStateTitle("Release")
 	if err != nil {
 		return nil, err
 	}
@@ -71,15 +71,15 @@ func mustCommit(t *testing.T, libraryID id.ID[library.Library]) (draft.Commit, e
 	if err != nil {
 		return nil, err
 	}
-	saved, err := testDrafts().SaveCommit(ctx, draft.LibraryScope(libraryID), libraryDraftVersionOf(t, libraryID),
-		title, author, draft.NewLibraryCommitContent(copies))
+	saved, err := testDrafts().SaveSavedState(ctx, draft.LibraryScope(libraryID), libraryDraftVersionOf(t, libraryID),
+		title, author, draft.NewLibrarySavedStateContent(copies))
 	if err == nil {
 		return saved, nil
 	}
 	if !errors.Is(err, draft.ErrNothingToSave) {
 		return nil, err
 	}
-	last, ok, err := testDrafts().FindLastCommit(ctx, draft.LibraryScope(libraryID))
+	last, ok, err := testDrafts().FindLastSavedState(ctx, draft.LibraryScope(libraryID))
 	if err != nil || !ok {
 		return nil, err
 	}
@@ -88,31 +88,32 @@ func mustCommit(t *testing.T, libraryID id.ID[library.Library]) (draft.Commit, e
 
 // mustImport imports the saved state of the Library in the project through the
 // project's Draft (task 85_6).
-func mustImport(t *testing.T, projectID id.ID[project.Project], commit draft.Commit) libraryimport.LibraryImport {
+func mustImport(t *testing.T, projectID id.ID[project.Project], savedState draft.SavedState) libraryimport.LibraryImport {
 	t.Helper()
 	ctx := context.Background()
 	var saved libraryimport.LibraryImport
 	mustUpdate(t, projectID, "test import", func(session *draft.Session) error {
 		var err error
-		saved, _, err = session.PutLibraryImport(ctx, commit.Scope().LibraryID(), commit.Number())
+		saved, _, err = session.PutLibraryImport(ctx, savedState.Scope().LibraryID(), savedState.Number())
 		return err
 	})
 	return saved
 }
 
-// copyOfCommit returns the copy of the WidgetType typeID the Commit holds.
-func copyOfCommit(t *testing.T, commit draft.Commit, typeID id.ID[library.WidgetType]) library.WidgetTypeCopy {
+// copyOfSavedState returns the copy of the WidgetType typeID the SavedState
+// holds.
+func copyOfSavedState(t *testing.T, savedState draft.SavedState, typeID id.ID[library.WidgetType]) library.WidgetTypeCopy {
 	t.Helper()
-	copies, ok := commit.Content().WidgetTypes()
+	copies, ok := savedState.Content().WidgetTypes()
 	if !ok {
-		t.Fatalf("the commit holds no widget types")
+		t.Fatalf("the saved state holds no widget types")
 	}
 	for _, copy := range copies {
 		if copy.ID() == typeID {
 			return copy
 		}
 	}
-	t.Fatalf("the commit lacks the widget type %s", typeID)
+	t.Fatalf("the saved state lacks the widget type %s", typeID)
 	return library.WidgetTypeCopy{}
 }
 
@@ -130,15 +131,16 @@ func mustImportWidgetType(t *testing.T, projectID id.ID[project.Project], ports 
 	t.Helper()
 	repo := newWidgetTypeRepo(t)
 	saved := mustStoreWidgetType(t, makeWidgetType(t, "type", ports, repo), repo)
-	commit, err := mustCommit(t, repo.libraryID)
+	savedState, err := mustSaveState(t, repo.libraryID)
 	if err != nil {
-		t.Fatalf("commit: %v", err)
+		t.Fatalf("saved state: %v", err)
 	}
-	mustImport(t, projectID, commit)
-	return copyOfCommit(t, commit, saved.ID())
+	mustImport(t, projectID, savedState)
+	return copyOfSavedState(t, savedState, saved.ID())
 }
 
-// cleanLibraries removes every import and library with its Draft and saved states.
+// cleanLibraries removes every import and library with its Draft and saved
+// states.
 func cleanLibraries(t *testing.T) {
 	t.Helper()
 	if _, err := testDB.ExecContext(context.Background(),

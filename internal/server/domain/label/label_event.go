@@ -22,14 +22,14 @@ type LabelEvent interface {
 type LabelAssignmentEvent interface {
 	LabelEvent
 	Scope() draft.Scope
-	CommitNumber() int
+	SavedStateNumber() int
 }
 
 type labelEventImpl struct {
 	event.Base
-	labelID      id.ID[Label]
-	scope        draft.Scope
-	commitNumber int
+	labelID          id.ID[Label]
+	scope            draft.Scope
+	savedStateNumber int
 }
 
 var _ LabelEvent = (*labelEventImpl)(nil)
@@ -66,15 +66,15 @@ type labelAssignedEventImpl struct{ labelEventImpl }
 
 var _ LabelAssignedEvent = (*labelAssignedEventImpl)(nil)
 
-func (e labelAssignedEventImpl) Scope() draft.Scope { return e.scope }
-func (e labelAssignedEventImpl) CommitNumber() int  { return e.commitNumber }
+func (e labelAssignedEventImpl) Scope() draft.Scope    { return e.scope }
+func (e labelAssignedEventImpl) SavedStateNumber() int { return e.savedStateNumber }
 
 type labelUnassignedEventImpl struct{ labelEventImpl }
 
 var _ LabelUnassignedEvent = (*labelUnassignedEventImpl)(nil)
 
-func (e labelUnassignedEventImpl) Scope() draft.Scope { return e.scope }
-func (e labelUnassignedEventImpl) CommitNumber() int  { return e.commitNumber }
+func (e labelUnassignedEventImpl) Scope() draft.Scope    { return e.scope }
+func (e labelUnassignedEventImpl) SavedStateNumber() int { return e.savedStateNumber }
 
 func NewLabelCreatedEvent(anID id.ID[Label], opts ...event.EventOption) LabelCreatedEvent {
 	return &labelCreatedEventImpl{newLabelEvent(event.EventTypeLabelCreated, anID, opts...)}
@@ -88,18 +88,18 @@ func NewLabelDeletedEvent(anID id.ID[Label], opts ...event.EventOption) LabelDel
 	return &labelDeletedEventImpl{newLabelEvent(event.EventTypeLabelDeleted, anID, opts...)}
 }
 
-// NewLabelAssignedEvent records the mark of the saved state commitNumber of
+// NewLabelAssignedEvent records the mark of the saved state savedStateNumber of
 // scope.
-func NewLabelAssignedEvent(anID id.ID[Label], scope draft.Scope, commitNumber int, opts ...event.EventOption) LabelAssignedEvent {
+func NewLabelAssignedEvent(anID id.ID[Label], scope draft.Scope, savedStateNumber int, opts ...event.EventOption) LabelAssignedEvent {
 	e := newLabelEvent(event.EventTypeLabelAssigned, anID, opts...)
-	e.scope, e.commitNumber = scope, commitNumber
+	e.scope, e.savedStateNumber = scope, savedStateNumber
 	return &labelAssignedEventImpl{e}
 }
 
 // NewLabelUnassignedEvent records that the label no longer marks the saved
-// state commitNumber of scope.
-func NewLabelUnassignedEvent(anID id.ID[Label], scope draft.Scope, commitNumber int, opts ...event.EventOption) LabelUnassignedEvent {
+// state savedStateNumber of scope.
+func NewLabelUnassignedEvent(anID id.ID[Label], scope draft.Scope, savedStateNumber int, opts ...event.EventOption) LabelUnassignedEvent {
 	e := newLabelEvent(event.EventTypeLabelUnassigned, anID, opts...)
-	e.scope, e.commitNumber = scope, commitNumber
+	e.scope, e.savedStateNumber = scope, savedStateNumber
 	return &labelUnassignedEventImpl{e}
 }

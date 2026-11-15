@@ -56,8 +56,8 @@ var (
 
 	EventTypeDeploymentCreated = EventType{eventType: 36}
 
-	EventTypeCommitCreated      = EventType{eventType: 37}
-	EventTypeCommitTitleUpdated = EventType{eventType: 38}
+	EventTypeSavedStateCreated      = EventType{eventType: 37}
+	EventTypeSavedStateTitleUpdated = EventType{eventType: 38}
 
 	// 23, 39, 40 and 41 were library_released, release_created,
 	// release_note_updated and library_release_note_updated; they went with
@@ -112,8 +112,8 @@ var eventTypeNames = []struct {
 	{EventTypeEnvironmentDeviceUpdated, "environment_device_updated"},
 	{EventTypeEnvironmentDeviceDeleted, "environment_device_deleted"},
 	{EventTypeDeploymentCreated, "deployment_created"},
-	{EventTypeCommitCreated, "commit_created"},
-	{EventTypeCommitTitleUpdated, "commit_title_updated"},
+	{EventTypeSavedStateCreated, "commit_created"},
+	{EventTypeSavedStateTitleUpdated, "commit_title_updated"},
 	{EventTypeLabelCreated, "label_created"},
 	{EventTypeLabelUpdated, "label_updated"},
 	{EventTypeLabelDeleted, "label_deleted"},

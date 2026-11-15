@@ -8,12 +8,12 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/version"
 )
 
-// CommitFilter narrows the saved state list of a Draft. The zero filter lists
-// every saved state.
-type CommitFilter struct {
+// SavedStateFilter narrows the saved state list of a Draft. The zero filter
+// lists every saved state.
+type SavedStateFilter struct {
 	// LabelID keeps only the saved states the label marks, filtered by the SQL
-	// join over engineering.commit_labels (task 85_3; ADR 0025). uuid.Nil keeps
-	// every saved state.
+	// join over engineering.saved_state_labels (task 85_3; ADR 0025). uuid.Nil
+	// keeps every saved state.
 	LabelID uuid.UUID
 }
 
@@ -42,18 +42,18 @@ type Repository interface {
 	// since task 72_4; ADR 0022 keeps it for the next act that needs it.
 	CheckVersion(ctx context.Context, scope Scope, expected version.Version[Draft]) error
 
-	// Replace runs a write that replaces the whole content of the Draft
-	// (Discard, Load, ADR 0016): it writes the rows change touched, clears the
-	// DraftChanges and the stack and commits, with no DraftChange of its own.
-	// cleanCommit is the number of the saved state whose content change writes, 0
-	// when the content is no saved state's. The Clean Version becomes the new
-	// Version exactly when that saved state is the Draft's last one — compared
-	// under the Draft row's lock, so a Save committed between the caller's read
-	// and this transaction cannot mark another content clean. Otherwise the
-	// marker is untouched, so the raised Version stays above it and the Draft
-	// reports unsaved changes (ADR 0016, amendment 2026-11-10). Returns the
-	// Draft as stored.
-	Replace(ctx context.Context, scope Scope, cleanCommit int, change func(*Session) error) (Draft, error)
+	// Replace runs a write that replaces the whole content of the Draft (Discard,
+	// Load, ADR 0016): it writes the rows change touched, clears the DraftChanges
+	// and the stack and commits, with no DraftChange of its own. cleanSavedState
+	// is the number of the saved state whose content change writes, 0 when the
+	// content is no saved state's. The Clean Version becomes the new Version
+	// exactly when that saved state is the Draft's last one — compared under the
+	// Draft row's lock, so a Save committed between the caller's read and this
+	// transaction cannot mark another content clean. Otherwise the marker is
+	// untouched, so the raised Version stays above it and the Draft reports
+	// unsaved changes (ADR 0016, amendment 2026-11-10). Returns the Draft as
+	// stored.
+	Replace(ctx context.Context, scope Scope, cleanSavedState int, change func(*Session) error) (Draft, error)
 
 	// Purge removes the whole content of the Draft of a deleted Project
 	// (ADR 0006), with no DraftChange.
@@ -84,36 +84,37 @@ type Repository interface {
 	// nothing was undone.
 	Redo(ctx context.Context, scope Scope, expected version.Version[Draft]) (Draft, error)
 
-	// SaveCommit fixes the Draft as a saved state (task 72_2; ADR 0021): it locks
-	// the Draft's row, checks expected — a stale Version is a ConflictError —,
-	// refuses a Draft at its Clean Version (ErrNothingToSave: there is nothing the
-	// last saved state does not hold already), numbers the saved state after the
-	// last one, writes it with the imports of its ProjectFile, raises
-	// last_commit_number and last_commit_draft_version and makes expected the
-	// Clean Version (ADR 0016, amendment 2026-11-10). content is assembled by the
-	// caller from the Draft at expected (a ProjectFile or a Library's
-	// WidgetTypes); no DraftChange is written and the Version is not raised.
-	SaveCommit(ctx context.Context, scope Scope, expected version.Version[Draft], title CommitTitle, author Author, content CommitContent) (Commit, error)
+	// SaveSavedState fixes the Draft as a saved state (task 72_2; ADR 0021): it
+	// locks the Draft's row, checks expected — a stale Version is a ConflictError
+	// —, refuses a Draft at its Clean Version (ErrNothingToSave: there is nothing
+	// the last saved state does not hold already), numbers the saved state after
+	// the last one, writes it with the imports of its ProjectFile, raises
+	// last_saved_state_number and last_saved_state_draft_version and makes
+	// expected the Clean Version (ADR 0016, amendment 2026-11-10). content is
+	// assembled by the caller from the Draft at expected (a ProjectFile or a
+	// Library's WidgetTypes); no DraftChange is written and the Version is not
+	// raised.
+	SaveSavedState(ctx context.Context, scope Scope, expected version.Version[Draft], title SavedStateTitle, author Author, content SavedStateContent) (SavedState, error)
 
-	// RenameCommit changes the title of the saved state number of the Draft and
-	// records commit_title_updated. It states no Draft Version: the title is
-	// not content, so the command works after another Engineer's writes.
-	// Returns ErrCommitNotFound for a number the Draft does not have.
-	RenameCommit(ctx context.Context, scope Scope, number int, title CommitTitle) (Commit, error)
+	// RenameSavedState changes the title of the saved state number of the Draft
+	// and records commit_title_updated. It states no Draft Version: the title is
+	// not content, so the command works after another Engineer's writes. Returns
+	// ErrSavedStateNotFound for a number the Draft does not have.
+	RenameSavedState(ctx context.Context, scope Scope, number int, title SavedStateTitle) (SavedState, error)
 
-	// FindCommits returns the Draft's saved states, newest first, or only those
-	// the filter's label marks. A Project or Library that is not live is
+	// FindSavedStates returns the Draft's saved states, newest first, or only
+	// those the filter's label marks. A Project or Library that is not live is
 	// ErrProjectNotFound or ErrLibraryNotFound.
-	FindCommits(ctx context.Context, scope Scope, filter CommitFilter) ([]Commit, error)
+	FindSavedStates(ctx context.Context, scope Scope, filter SavedStateFilter) ([]SavedState, error)
 
-	// FindLastCommit returns the Draft's newest saved state, and whether it has
-	// one at all: a Draft never saved has none. It is the read of a Discard, which
-	// falls back to it (task 72_4) and needs no other saved state. A Project or
-	// Library that is not live is ErrProjectNotFound or ErrLibraryNotFound.
-	FindLastCommit(ctx context.Context, scope Scope) (Commit, bool, error)
+	// FindLastSavedState returns the Draft's newest saved state, and whether it
+	// has one at all: a Draft never saved has none. It is the read of a Discard,
+	// which falls back to it (task 72_4) and needs no other saved state. A Project
+	// or Library that is not live is ErrProjectNotFound or ErrLibraryNotFound.
+	FindLastSavedState(ctx context.Context, scope Scope) (SavedState, bool, error)
 
-	// FindCommit returns the saved state number of the Draft. A Project or Library
-	// that is not live is ErrProjectNotFound or ErrLibraryNotFound; a number
-	// the Draft does not have is ErrCommitNotFound.
-	FindCommit(ctx context.Context, scope Scope, number int) (Commit, error)
+	// FindSavedState returns the saved state number of the Draft. A Project or
+	// Library that is not live is ErrProjectNotFound or ErrLibraryNotFound; a
+	// number the Draft does not have is ErrSavedStateNotFound.
+	FindSavedState(ctx context.Context, scope Scope, number int) (SavedState, error)
 }

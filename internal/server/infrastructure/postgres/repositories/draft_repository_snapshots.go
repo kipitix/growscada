@@ -516,7 +516,7 @@ func (l *draftLoader) ImportedWidgetType(ctx context.Context, typeID id.ID[libra
 		if err := rows.Scan(&contentJSON); err != nil {
 			return library.WidgetTypeCopy{}, fmt.Errorf("cannot read the imported widget type %s: %w", typeID, err)
 		}
-		var content draft.CommitContent
+		var content draft.SavedStateContent
 		if err := json.Unmarshal(contentJSON, &content); err != nil {
 			return library.WidgetTypeCopy{}, fmt.Errorf("cannot decode the content of an imported saved state: %w", err)
 		}
@@ -678,7 +678,7 @@ func (l *draftLoader) readPairs(ctx context.Context, and string, args ...any) ([
 
 func (l *draftLoader) AllLibraryImports(ctx context.Context) ([]libraryimport.LibraryImport, error) {
 	rows, err := l.tx.QueryContext(ctx,
-		`SELECT library_id, commit_id, commit_number FROM engineering.library_imports WHERE project_id = $1 ORDER BY pk_id`,
+		`SELECT library_id, saved_state_id, saved_state_number FROM engineering.library_imports WHERE project_id = $1 ORDER BY pk_id`,
 		l.project.UUID())
 	if err != nil {
 		return nil, fmt.Errorf("cannot read library imports: %w", err)
@@ -687,28 +687,28 @@ func (l *draftLoader) AllLibraryImports(ctx context.Context) ([]libraryimport.Li
 	found := []libraryimport.LibraryImport{}
 	for rows.Next() {
 		var (
-			rawLibraryID uuid.UUID
-			rawCommitID  uuid.UUID
-			rawCommit    int
+			rawLibraryID    uuid.UUID
+			rawSavedStateID uuid.UUID
+			rawSavedState   int
 		)
-		if err := rows.Scan(&rawLibraryID, &rawCommitID, &rawCommit); err != nil {
+		if err := rows.Scan(&rawLibraryID, &rawSavedStateID, &rawSavedState); err != nil {
 			return nil, err
 		}
 		found = append(found, libraryimport.ReconstituteLibraryImport(l.project,
-			id.NewID(id.IDWithUUID[library.Library](rawLibraryID)), rawCommitID, rawCommit))
+			id.NewID(id.IDWithUUID[library.Library](rawLibraryID)), rawSavedStateID, rawSavedState))
 	}
 	return found, rows.Err()
 }
 
 func (l *draftLoader) LibraryImport(ctx context.Context, libraryID id.ID[library.Library]) (libraryimport.LibraryImport, error) {
 	var (
-		rawLibraryID uuid.UUID
-		rawCommitID  uuid.UUID
-		rawCommit    int
+		rawLibraryID    uuid.UUID
+		rawSavedStateID uuid.UUID
+		rawSavedState   int
 	)
 	err := l.tx.QueryRowContext(ctx,
-		`SELECT library_id, commit_id, commit_number FROM engineering.library_imports WHERE project_id = $1 AND library_id = $2`,
-		l.project.UUID(), libraryID.UUID()).Scan(&rawLibraryID, &rawCommitID, &rawCommit)
+		`SELECT library_id, saved_state_id, saved_state_number FROM engineering.library_imports WHERE project_id = $1 AND library_id = $2`,
+		l.project.UUID(), libraryID.UUID()).Scan(&rawLibraryID, &rawSavedStateID, &rawSavedState)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("%w: library %s", libraryimport.ErrLibraryImportNotFound, libraryID)
 	}
@@ -716,36 +716,36 @@ func (l *draftLoader) LibraryImport(ctx context.Context, libraryID id.ID[library
 		return nil, fmt.Errorf("cannot read library import %s: %w", libraryID, err)
 	}
 	return libraryimport.ReconstituteLibraryImport(l.project,
-		id.NewID(id.IDWithUUID[library.Library](rawLibraryID)), rawCommitID, rawCommit), nil
+		id.NewID(id.IDWithUUID[library.Library](rawLibraryID)), rawSavedStateID, rawSavedState), nil
 }
 
-// LibraryCommit returns the saved state number of the Library, with the
+// LibrarySavedState returns the saved state number of the Library, with the
 // WidgetTypes it holds: what an import names (task 85_6).
-func (l *draftLoader) LibraryCommit(ctx context.Context, libraryID id.ID[library.Library], number int) (libraryimport.Commit, error) {
+func (l *draftLoader) LibrarySavedState(ctx context.Context, libraryID id.ID[library.Library], number int) (libraryimport.SavedState, error) {
 	content, rawID, err := commitContentOfImport(ctx, l.tx, libraryID, number)
 	if err != nil {
-		return libraryimport.Commit{}, err
+		return libraryimport.SavedState{}, err
 	}
 	types, ok := content.WidgetTypes()
 	if !ok {
-		return libraryimport.Commit{}, fmt.Errorf("saved state %d of library %s holds no widget types", number, libraryID)
+		return libraryimport.SavedState{}, fmt.Errorf("saved state %d of library %s holds no widget types", number, libraryID)
 	}
-	return libraryimport.ReconstituteCommit(rawID, libraryID, number, types), nil
+	return libraryimport.ReconstituteSavedState(rawID, libraryID, number, types), nil
 }
 
 // writeLibraryImport writes the row of an import: its saved state is resolved
 // by the Library and the number in this transaction, so a snapshot restored by
 // an undo or built from a ProjectFile needs no saved state identity of its own.
-// A number the Library's Draft does not have is draft.ErrCommitNotFound.
+// A number the Library's Draft does not have is draft.ErrSavedStateNotFound.
 func writeLibraryImport(ctx context.Context, tx *sql.Tx, projectID uuid.UUID, state draft.LibraryImportState) error {
 	res, err := tx.ExecContext(ctx,
-		`INSERT INTO engineering.library_imports (project_id, library_id, commit_number, commit_id)
+		`INSERT INTO engineering.library_imports (project_id, library_id, saved_state_number, saved_state_id)
 		 SELECT $1::uuid, $2::uuid, $3::integer, c.id
-		 FROM engineering.commits c JOIN engineering.drafts d ON d.id = c.draft_id
+		 FROM engineering.saved_states c JOIN engineering.drafts d ON d.id = c.draft_id
 		 WHERE d.library_id = $2::uuid AND c.number = $3::integer
 		 ON CONFLICT (project_id, library_id) DO UPDATE
-		 SET commit_number = EXCLUDED.commit_number, commit_id = EXCLUDED.commit_id`,
-		projectID, state.LibraryID, state.Commit)
+		 SET saved_state_number = EXCLUDED.saved_state_number, saved_state_id = EXCLUDED.saved_state_id`,
+		projectID, state.LibraryID, state.SavedState)
 	if isUniqueViolation(err, constraintLibraryImportsProjectLibrary) {
 		return fmt.Errorf("%w: library %s", libraryimport.ErrLibraryImportExists, state.LibraryID)
 	}
@@ -757,7 +757,7 @@ func writeLibraryImport(ctx context.Context, tx *sql.Tx, projectID uuid.UUID, st
 		return fmt.Errorf("cannot get rows affected on the write of a library import: %w", err)
 	}
 	if n == 0 {
-		return fmt.Errorf("%w: %d of library %s", draft.ErrCommitNotFound, state.Commit, state.LibraryID)
+		return fmt.Errorf("%w: %d of library %s", draft.ErrSavedStateNotFound, state.SavedState, state.LibraryID)
 	}
 	return nil
 }

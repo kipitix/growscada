@@ -295,23 +295,23 @@ func (f fakeLibraries) FindByID(_ context.Context, libraryID id.ID[library.Libra
 	return found, nil
 }
 
-// fakeCommits serves FindCommit from a map, as fakeLibraries does.
-type fakeCommits struct {
+// fakeSavedStates serves FindSavedState from a map, as fakeLibraries does.
+type fakeSavedStates struct {
 	draft.Repository
-	found map[string]draft.Commit
+	found map[string]draft.SavedState
 }
 
-func (f fakeCommits) FindCommit(_ context.Context, scope draft.Scope, number int) (draft.Commit, error) {
+func (f fakeSavedStates) FindSavedState(_ context.Context, scope draft.Scope, number int) (draft.SavedState, error) {
 	found, ok := f.found[scope.LibraryID().UUID().String()+"/"+strconv.Itoa(number)]
 	if !ok {
-		return nil, fmt.Errorf("%w: %d of %s", draft.ErrCommitNotFound, number, scope)
+		return nil, fmt.Errorf("%w: %d of %s", draft.ErrSavedStateNotFound, number, scope)
 	}
 	return found, nil
 }
 
 // importedFile is a document of one Scene with one Widget of an imported
 // saved state.
-func importedFile(t *testing.T, projectID, libraryID uuid.UUID) (projectv0.ProjectFile, draft.Commit) {
+func importedFile(t *testing.T, projectID, libraryID uuid.UUID) (projectv0.ProjectFile, draft.SavedState) {
 	t.Helper()
 	typeID, tagID := uuid.New(), uuid.New()
 	name, err := library.NewWidgetTypeName("gauge")
@@ -339,19 +339,19 @@ func importedFile(t *testing.T, projectID, libraryID uuid.UUID) (projectv0.Proje
 	if err != nil {
 		t.Fatalf("released widget type: %v", err)
 	}
-	title, err := draft.NewCommitTitle("Save")
+	title, err := draft.NewSavedStateTitle("Save")
 	if err != nil {
-		t.Fatalf("commit title: %v", err)
+		t.Fatalf("saved state title: %v", err)
 	}
 	author, err := draft.NewAuthor("system")
 	if err != nil {
 		t.Fatalf("author: %v", err)
 	}
-	commit, err := draft.NewCommit(draft.LibraryScope(id.NewID(id.IDWithUUID[library.Library](libraryID))),
-		id.NewID[draft.Commit](), 1, title, author, time.Date(2026, 11, 5, 10, 0, 0, 0, time.UTC),
-		version.Committed[draft.Draft](), draft.NewLibraryCommitContent([]library.WidgetTypeCopy{released}))
+	savedState, err := draft.NewSavedState(draft.LibraryScope(id.NewID(id.IDWithUUID[library.Library](libraryID))),
+		id.NewID[draft.SavedState](), 1, title, author, time.Date(2026, 11, 5, 10, 0, 0, 0, time.UTC),
+		version.Committed[draft.Draft](), draft.NewLibrarySavedStateContent([]library.WidgetTypeCopy{released}))
 	if err != nil {
-		t.Fatalf("commit: %v", err)
+		t.Fatalf("saved state: %v", err)
 	}
 	file := emptyFile(projectID)
 	file.Tags = []projectv0.TagDefinition{{ID: tagID, Name: "speed", Type: "integer"}}
@@ -369,12 +369,12 @@ func importedFile(t *testing.T, projectID, libraryID uuid.UUID) (projectv0.Proje
 			PortBindings: []projectv0.PortBinding{{PortName: "value", TagID: tagID}},
 		}},
 	}}
-	return file, commit
+	return file, savedState
 }
 
 func TestValidateProjectFile_OpenChecksLocalLibraries(t *testing.T) {
 	projectID, libraryID := uuid.New(), uuid.New()
-	file, commit := importedFile(t, projectID, libraryID)
+	file, savedState := importedFile(t, projectID, libraryID)
 	libraryName, err := library.NewLibraryName("lib")
 	if err != nil {
 		t.Fatalf("library name: %v", err)
@@ -386,7 +386,7 @@ func TestValidateProjectFile_OpenChecksLocalLibraries(t *testing.T) {
 	)
 	validator := projectFileValidator{
 		libraries: fakeLibraries{found: map[uuid.UUID]library.Library{libraryID: found}},
-		drafts:    fakeCommits{found: map[string]draft.Commit{libraryID.String() + "/1": commit}},
+		drafts:    fakeSavedStates{found: map[string]draft.SavedState{libraryID.String() + "/1": savedState}},
 	}
 	if _, err := validator.validate(context.Background(),
 		id.NewID(id.IDWithUUID[project.Project](projectID)), encoded(t, file), true); err != nil {
@@ -404,7 +404,7 @@ func TestValidateProjectFile_OpenChecksLocalLibraries(t *testing.T) {
 
 	// A saved state this server does not have.
 	validator.libraries = fakeLibraries{found: map[uuid.UUID]library.Library{libraryID: found}}
-	validator.drafts = fakeCommits{}
+	validator.drafts = fakeSavedStates{}
 	issues = fileIssues(t, func() error {
 		_, err := validator.validate(context.Background(),
 			id.NewID(id.IDWithUUID[project.Project](projectID)), encoded(t, file), true)
@@ -413,7 +413,7 @@ func TestValidateProjectFile_OpenChecksLocalLibraries(t *testing.T) {
 	wantIssue(t, issues, "library_imports[0]", "has no saved state")
 
 	// A copy that differs from the saved state's WidgetType.
-	validator.drafts = fakeCommits{found: map[string]draft.Commit{libraryID.String() + "/1": commit}}
+	validator.drafts = fakeSavedStates{found: map[string]draft.SavedState{libraryID.String() + "/1": savedState}}
 	file.WidgetTypes[0].HTMLTemplate = "changed"
 	issues = fileIssues(t, func() error {
 		_, err := validator.validate(context.Background(),
@@ -428,7 +428,7 @@ func TestValidateProjectFile_OpenChecksLocalLibraries(t *testing.T) {
 func TestValidateProjectFile_DeployDoesNotCheckLocalLibraries(t *testing.T) {
 	projectID, libraryID := uuid.New(), uuid.New()
 	file, _ := importedFile(t, projectID, libraryID)
-	validator := projectFileValidator{libraries: fakeLibraries{}, drafts: fakeCommits{}}
+	validator := projectFileValidator{libraries: fakeLibraries{}, drafts: fakeSavedStates{}}
 	if _, err := validator.validate(context.Background(),
 		id.NewID(id.IDWithUUID[project.Project](projectID)), encoded(t, file), false); err != nil {
 		t.Fatalf("a valid self-contained document: %v", err)

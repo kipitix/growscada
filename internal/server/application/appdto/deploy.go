@@ -6,8 +6,8 @@ import "github.com/google/uuid"
 // but this server does not have (task 71, task 85_6): the Document was deployed
 // from a file, or its Library was removed after the Deployment was made.
 type MissingImport struct {
-	LibraryID uuid.UUID
-	Commit    int
+	LibraryID  uuid.UUID
+	SavedState int
 }
 
 // DiscardWarning is one Library Import a Discard could not restore (task 71):
@@ -16,7 +16,7 @@ type MissingImport struct {
 // that went with it — the Draft cannot hold them without the import.
 type DiscardWarning struct {
 	LibraryID      uuid.UUID
-	Commit         int
+	SavedState     int
 	DroppedWidgets int
 }
 

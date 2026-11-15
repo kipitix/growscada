@@ -32,9 +32,9 @@ func cleanMain(t *testing.T) {
 		 DELETE FROM runtime.tags WHERE project_id = `+main+`;
 		 DELETE FROM engineering.tags WHERE project_id = `+main+`;
 		 DELETE FROM engineering.scenes WHERE project_id = `+main+`;
-		 DELETE FROM engineering.commits WHERE draft_id IN (SELECT id FROM engineering.drafts WHERE project_id = `+main+`);
+		 DELETE FROM engineering.saved_states WHERE draft_id IN (SELECT id FROM engineering.drafts WHERE project_id = `+main+`);
 		 DELETE FROM engineering.draft_changes WHERE draft_id IN (SELECT id FROM engineering.drafts WHERE project_id = `+main+`);
-		 UPDATE engineering.drafts SET last_commit_number = 0, last_commit_draft_version = 0, stack_position = 0, clean_version = 0
+		 UPDATE engineering.drafts SET last_saved_state_number = 0, last_saved_state_draft_version = 0, stack_position = 0, clean_version = 0
 		 WHERE project_id = `+main); err != nil {
 		t.Fatalf("clean Main: %v", err)
 	}

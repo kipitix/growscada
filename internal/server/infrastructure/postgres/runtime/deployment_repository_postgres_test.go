@@ -1001,10 +1001,10 @@ func findValue(t *testing.T, states tagstate.Repository, projectID id.ID[project
 	return state.Value().String()
 }
 
-// TestCreateDeployment_CommitNumber: a Deploy of a saved state stores and serves
-// its number, refuses a second Deploy of the same saved state, and a Deployment
-// from a file states none (task 85_4).
-func TestCreateDeployment_CommitNumber(t *testing.T) {
+// TestCreateDeployment_SavedStateNumber: a Deploy of a saved state stores and
+// serves its number, refuses a second Deploy of the same saved state, and a
+// Deployment from a file states none (task 85_4).
+func TestCreateDeployment_SavedStateNumber(t *testing.T) {
 	projectID, _ := newProject(t)
 	repo := runtimepg.NewDeploymentRepositoryPostgres(postgres.DB(t))
 	ctx := context.Background()
@@ -1015,19 +1015,19 @@ func TestCreateDeployment_CommitNumber(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateDeployment: %v", err)
 	}
-	if deployment.CommitNumber == nil || *deployment.CommitNumber != 1 {
-		t.Errorf("the new deployment names saved state %v, want 1", deployment.CommitNumber)
+	if deployment.SavedStateNumber == nil || *deployment.SavedStateNumber != 1 {
+		t.Errorf("the new deployment names saved state %v, want 1", deployment.SavedStateNumber)
 	}
 	current, ok, err := repo.FindCurrent(ctx, projectID.UUID())
-	if err != nil || !ok || current.CommitNumber == nil || *current.CommitNumber != 1 {
+	if err != nil || !ok || current.SavedStateNumber == nil || *current.SavedStateNumber != 1 {
 		t.Errorf("FindCurrent: %+v, %t, %v, want saved state 1", current, ok, err)
 	}
 	summaries, err := repo.FindAll(ctx, projectID.UUID())
-	if err != nil || len(summaries) != 1 || summaries[0].CommitNumber == nil || *summaries[0].CommitNumber != 1 {
+	if err != nil || len(summaries) != 1 || summaries[0].SavedStateNumber == nil || *summaries[0].SavedStateNumber != 1 {
 		t.Errorf("FindAll: %+v, %v, want saved state 1", summaries, err)
 	}
 	found, err := repo.FindByNumber(ctx, projectID.UUID(), deployment.Number)
-	if err != nil || found.CommitNumber == nil || *found.CommitNumber != 1 {
+	if err != nil || found.SavedStateNumber == nil || *found.SavedStateNumber != 1 {
 		t.Errorf("FindByNumber: %+v, %v, want saved state 1", found, err)
 	}
 
@@ -1040,14 +1040,15 @@ func TestCreateDeployment_CommitNumber(t *testing.T) {
 		t.Fatalf("a file deployment: %v", err)
 	}
 	fileCurrent, _, err := repo.FindCurrent(ctx, projectID.UUID())
-	if err != nil || fileCurrent.CommitNumber != nil {
-		t.Errorf("a file deployment names saved state %v, want none: %v", fileCurrent.CommitNumber, err)
+	if err != nil || fileCurrent.SavedStateNumber != nil {
+		t.Errorf("a file deployment names saved state %v, want none: %v", fileCurrent.SavedStateNumber, err)
 	}
 }
 
-// TestCreateDeployment_TwoRacingDeploysOfOneSavedState: the check of the running
-// saved state shares the advisory lock with the numbering, so two Deploys of one
-// Commit race into one Deployment and one refusal (task 85_4).
+// TestCreateDeployment_TwoRacingDeploysOfOneSavedState: the check of the
+// running saved state shares the advisory lock with the numbering, so two
+// Deploys of one SavedState race into one Deployment and one refusal (task
+// 85_4).
 func TestCreateDeployment_TwoRacingDeploysOfOneSavedState(t *testing.T) {
 	projectID, _ := newProject(t)
 	repo := runtimepg.NewDeploymentRepositoryPostgres(postgres.DB(t))
@@ -1088,23 +1089,23 @@ func TestCreateDeployment_TwoRacingDeploysOfOneSavedState(t *testing.T) {
 	}
 }
 
-// TestRollback_KeepsTheCommitNumber: a Rollback copies the saved state of the
-// Deployment it names (task 85_4).
-func TestRollback_KeepsTheCommitNumber(t *testing.T) {
+// TestRollback_KeepsTheSavedStateNumber: a Rollback copies the saved state of
+// the Deployment it names (task 85_4).
+func TestRollback_KeepsTheSavedStateNumber(t *testing.T) {
 	projectID, _ := newProject(t)
 	repo := runtimepg.NewDeploymentRepositoryPostgres(postgres.DB(t))
 	ctx := context.Background()
-	firstCommit, secondCommit := 1, 2
+	firstSavedState, secondSavedState := 1, 2
 
 	first, err := repo.CreateDeployment(ctx, projectID.UUID(),
 		documentOf(projectID, withTags(documentTag(definition(t, projectID, "speed", tag.TagTypeInteger)))),
-		runtimeapp.DeploymentCauseDeploy, &firstCommit, time.Now())
+		runtimeapp.DeploymentCauseDeploy, &firstSavedState, time.Now())
 	if err != nil {
 		t.Fatalf("CreateDeployment 1: %v", err)
 	}
 	if _, err := repo.CreateDeployment(ctx, projectID.UUID(),
 		documentOf(projectID, withTags(documentTag(definition(t, projectID, "flow", tag.TagTypeInteger)))),
-		runtimeapp.DeploymentCauseDeploy, &secondCommit, time.Now()); err != nil {
+		runtimeapp.DeploymentCauseDeploy, &secondSavedState, time.Now()); err != nil {
 		t.Fatalf("CreateDeployment 2: %v", err)
 	}
 
@@ -1112,7 +1113,7 @@ func TestRollback_KeepsTheCommitNumber(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Rollback: %v", err)
 	}
-	if rolled.CommitNumber == nil || *rolled.CommitNumber != 1 {
-		t.Errorf("the rollback names saved state %v, want 1", rolled.CommitNumber)
+	if rolled.SavedStateNumber == nil || *rolled.SavedStateNumber != 1 {
+		t.Errorf("the rollback names saved state %v, want 1", rolled.SavedStateNumber)
 	}
 }

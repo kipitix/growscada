@@ -55,7 +55,7 @@ type testServices struct {
 	draftChanges application.DraftChangesService
 	journal      runtimeapp.JournalService
 	operation    runtimeapp.OperationStateService
-	commits      application.CommitService
+	commits      application.SavedStateService
 	settings     application.SettingsService
 	labels       application.LabelService
 }
@@ -107,7 +107,7 @@ func newServicesPublishingTo(publish func(event.Event), opts ...repositories.Opt
 		deviceTokens: deviceTokens,
 		journal:      journal,
 		operation:    runtimeapp.NewOperationStateService(journal, deployments, states, runtimepg.NewCheckpointRepositoryPostgres(db)),
-		commits:      application.NewCommitService(content, libraryContent, application.NewProjectFileBuilder(content), widgetTypes, labelService),
+		commits:      application.NewSavedStateService(content, libraryContent, application.NewProjectFileBuilder(content), widgetTypes, labelService),
 		settings:     application.NewSettingsService(repositories.NewUserSettingsRepositoryPostgres(db), settings.SingleUser(), orgID),
 		labels:       labelService,
 	}

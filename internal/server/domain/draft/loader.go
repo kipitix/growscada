@@ -36,10 +36,10 @@ type Loader interface {
 	// ImportedWidgetType returns the WidgetType with the given ID from the
 	// saved states the Draft's Project imports.
 	ImportedWidgetType(ctx context.Context, typeID id.ID[library.WidgetType]) (library.WidgetTypeCopy, error)
-	// LibraryCommit returns the saved state number of the Library, with the
+	// LibrarySavedState returns the saved state number of the Library, with the
 	// WidgetTypes it holds: what an import names (task 85_6). A number the
-	// Library's Draft does not have is draft.ErrCommitNotFound.
-	LibraryCommit(ctx context.Context, libraryID id.ID[library.Library], number int) (libraryimport.Commit, error)
+	// Library's Draft does not have is draft.ErrSavedStateNotFound.
+	LibrarySavedState(ctx context.Context, libraryID id.ID[library.Library], number int) (libraryimport.SavedState, error)
 	// LockLibrary locks the live Library's row FOR SHARE in the Draft's
 	// transaction: an import of it cannot then be written after its deletion
 	// begins (ADR 0018). A Library that is gone or being deleted is

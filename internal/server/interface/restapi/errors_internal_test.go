@@ -141,7 +141,7 @@ func TestSendError(t *testing.T) {
 		},
 		{
 			name:       "a saved state the body names, not the path",
-			err:        wrapped(application.MissingCommitError{Number: 4}),
+			err:        wrapped(application.MissingSavedStateError{Number: 4}),
 			pathParams: map[string]string{"project_id": errorsTestID, "library_id": errorsTestID},
 			wantStatus: http.StatusNotFound,
 			wantTitle:  "Resource Not Found",
@@ -344,7 +344,7 @@ var domainSentinels = map[string]error{
 	"draft.ErrNothingToUndo":                 draft.ErrNothingToUndo,
 	"draft.ErrNothingToRedo":                 draft.ErrNothingToRedo,
 	"draft.ErrNothingToSave":                 draft.ErrNothingToSave,
-	"draft.ErrCommitNotFound":                draft.ErrCommitNotFound,
+	"draft.ErrSavedStateNotFound":            draft.ErrSavedStateNotFound,
 	"settings.ErrSettingsConflict":           settings.ErrSettingsConflict,
 	"label.ErrLabelNotFound":                 label.ErrLabelNotFound,
 	"label.ErrLabelNameTaken":                label.ErrLabelNameTaken,
@@ -372,7 +372,7 @@ var unmappedSentinels = map[string]string{
 	"draft.ErrDraftNotFound":            "500: only the repository creates a draft's row, and its Project or Library exists",
 	"label.ErrInvalidLabelName":         "400: the service marks it invalid input",
 	"label.ErrInvalidLabelColor":        "400: the service marks it invalid input",
-	"label.ErrInvalidAssignment":        "400: the service marks it invalid input (a commit number that is not positive)",
+	"label.ErrInvalidAssignment":        "400: the service marks it invalid input (a saved state number that is not positive)",
 }
 
 // TestDomainSentinels_AreListed reads the domain sources, so a new sentinel

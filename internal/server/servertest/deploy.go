@@ -24,9 +24,9 @@ import (
 // DeployProject saves the Project's Draft as a saved state and deploys it, as
 // the server does since task 85_4: the Tags with their suppliers, the Devices,
 // the Environments with their pairs, the Scenes with their Widgets and the
-// WidgetTypes their imports hold. A test that needs a Gateway's configuration or a
-// Tag value of the running configuration deploys in its setup: nothing of the
-// Draft reaches the Runtime node before a Deploy.
+// WidgetTypes their imports hold. A test that needs a Gateway's configuration
+// or a Tag value of the running configuration deploys in its setup: nothing of
+// the Draft reaches the Runtime node before a Deploy.
 func DeployProject(t *testing.T, db *sql.DB, projectID uuid.UUID) {
 	t.Helper()
 	ctx := context.Background()
@@ -67,12 +67,12 @@ func DeployProject(t *testing.T, db *sql.DB, projectID uuid.UUID) {
 	// The Deploy makes a saved state, as the order is Save → Deploy: a Draft
 	// already saved at this content keeps its last saved state.
 	scope := draft.ProjectScope(id.NewID(id.IDWithUUID[project.Project](projectID)))
-	commit, err := saveDraft(ctx, drafts, scope, draft.NewProjectCommitContent(file))
+	savedState, err := saveDraft(ctx, drafts, scope, draft.NewProjectSavedStateContent(file))
 	if err != nil {
 		t.Fatalf("save the draft of project %s: %v", projectID, err)
 	}
 	node := inprocess.NewRuntimeNode(states, tokens, deployments)
-	if _, err := application.NewDeployService(content, node).Deploy(ctx, projectID, commit.Number()); err != nil {
+	if _, err := application.NewDeployService(content, node).Deploy(ctx, projectID, savedState.Number()); err != nil {
 		if errors.Is(err, application.ErrNothingToDeploy) {
 			return
 		}
@@ -82,7 +82,7 @@ func DeployProject(t *testing.T, db *sql.DB, projectID uuid.UUID) {
 
 // saveDraft fixes the Draft as a saved state, or returns its last saved state
 // when the Draft is at its Clean Version already.
-func saveDraft(ctx context.Context, drafts draft.Repository, scope draft.Scope, content draft.CommitContent) (draft.Commit, error) {
+func saveDraft(ctx context.Context, drafts draft.Repository, scope draft.Scope, content draft.SavedStateContent) (draft.SavedState, error) {
 	current, ok, err := drafts.Read(ctx, scope)
 	if err != nil {
 		return nil, err
@@ -91,7 +91,7 @@ func saveDraft(ctx context.Context, drafts draft.Repository, scope draft.Scope, 
 	if ok {
 		stated = current.Version()
 	}
-	title, err := draft.NewCommitTitle("Deploy")
+	title, err := draft.NewSavedStateTitle("Deploy")
 	if err != nil {
 		return nil, err
 	}
@@ -99,16 +99,16 @@ func saveDraft(ctx context.Context, drafts draft.Repository, scope draft.Scope, 
 	if err != nil {
 		return nil, err
 	}
-	commit, err := drafts.SaveCommit(ctx, scope, stated, title, author, content)
+	savedState, err := drafts.SaveSavedState(ctx, scope, stated, title, author, content)
 	if !errors.Is(err, draft.ErrNothingToSave) {
-		return commit, err
+		return savedState, err
 	}
-	commit, ok, err = drafts.FindLastCommit(ctx, scope)
+	savedState, ok, err = drafts.FindLastSavedState(ctx, scope)
 	if err != nil {
 		return nil, err
 	}
 	if !ok {
-		return nil, draft.ErrCommitNotFound
+		return nil, draft.ErrSavedStateNotFound
 	}
-	return commit, nil
+	return savedState, nil
 }

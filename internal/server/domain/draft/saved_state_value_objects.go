@@ -6,37 +6,36 @@ import (
 	"unicode/utf8"
 )
 
-// commitTitleMaxRunes is the longest title a saved state takes.
-const commitTitleMaxRunes = 200
+// savedStateTitleMaxRunes is the longest title a saved state takes.
+const savedStateTitleMaxRunes = 200
 
 // authorMaxRunes is the longest Author name a saved state takes.
 const authorMaxRunes = 100
 
-// CommitTitle - the title of a saved state: a non-empty, trimmed, short line
-// naming what the Save fixed. It changes on its own, without touching the
-// snapshot (Commit.WithTitle).
-// Value Object.
-type CommitTitle struct {
+// SavedStateTitle - the title of a saved state: a non-empty, trimmed, short
+// line naming what the Save fixed. It changes on its own, without touching the
+// snapshot (SavedState.WithTitle). Value Object.
+type SavedStateTitle struct {
 	title string
 }
 
-var _ fmt.Stringer = CommitTitle{}
+var _ fmt.Stringer = SavedStateTitle{}
 
-// NewCommitTitle creates a CommitTitle from a string: the surrounding spaces
-// are dropped, the rest must be non-empty and at most 200 characters.
-func NewCommitTitle(aTitle string) (CommitTitle, error) {
+// NewSavedStateTitle creates a SavedStateTitle from a string: the surrounding
+// spaces are dropped, the rest must be non-empty and at most 200 characters.
+func NewSavedStateTitle(aTitle string) (SavedStateTitle, error) {
 	title := strings.TrimSpace(aTitle)
 	if title == "" {
-		return CommitTitle{}, fmt.Errorf("saved state title must not be empty")
+		return SavedStateTitle{}, fmt.Errorf("saved state title must not be empty")
 	}
-	if utf8.RuneCountInString(title) > commitTitleMaxRunes {
-		return CommitTitle{}, fmt.Errorf("saved state title must be at most %d characters", commitTitleMaxRunes)
+	if utf8.RuneCountInString(title) > savedStateTitleMaxRunes {
+		return SavedStateTitle{}, fmt.Errorf("saved state title must be at most %d characters", savedStateTitleMaxRunes)
 	}
-	return CommitTitle{title: title}, nil
+	return SavedStateTitle{title: title}, nil
 }
 
 // String implements [fmt.Stringer].
-func (t CommitTitle) String() string { return t.title }
+func (t SavedStateTitle) String() string { return t.title }
 
 // Author - the name an Engineer declares when saving a Draft (task 72_2). A
 // declared name, not an account: Users come with tasks 49/50.

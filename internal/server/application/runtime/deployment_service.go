@@ -18,12 +18,12 @@ import (
 // node's to assign; the Engineering node reaches the service through its
 // RuntimeNode port.
 type DeploymentService interface {
-	// DeployCommit stores file as the new Deployment of the Project, made from
-	// saved state commitNumber (task 85_4), and publishes deployment_created
-	// once the Deployment is committed. The document must name the Project it
-	// is deployed to. ErrNothingToDeploy if the Project already runs that
-	// saved state.
-	DeployCommit(ctx context.Context, projectID uuid.UUID, commitNumber int, file projectv0.ProjectFile) (Deployment, error)
+	// DeploySavedState stores file as the new Deployment of the Project, made from
+	// saved state savedStateNumber (task 85_4), and publishes deployment_created
+	// once the Deployment is committed. The document must name the Project it is
+	// deployed to. ErrNothingToDeploy if the Project already runs that saved
+	// state.
+	DeploySavedState(ctx context.Context, projectID uuid.UUID, savedStateNumber int, file projectv0.ProjectFile) (Deployment, error)
 	// DeployFile stores file as the new Deployment of the Project with cause
 	// file (ADR 0018): the document is self-contained, so the Runtime node
 	// reads no Draft and no Library. It states no saved state (nil). It
@@ -47,9 +47,9 @@ type DeploymentService interface {
 	// live.
 	Rollback(ctx context.Context, projectID uuid.UUID, n int) (Deployment, error)
 	// DeploymentNamesLibrary reports whether the running Deployment of any live
-	// Project names a saved state of this Library in its ProjectFile (task 71): the
-	// Engineering node asks before a Library is removed. A Project that runs no
-	// Deployment names nothing.
+	// Project names a saved state of this Library in its ProjectFile (task 71):
+	// the Engineering node asks before a Library is removed. A Project that runs
+	// no Deployment names nothing.
 	DeploymentNamesLibrary(ctx context.Context, libraryID uuid.UUID) (bool, error)
 }
 
@@ -70,13 +70,13 @@ func NewDeploymentService(someDeployments DeploymentRepository, publish func(eve
 	return &deploymentServiceImpl{deployments: someDeployments, publish: publish, now: time.Now}
 }
 
-func (s deploymentServiceImpl) DeployCommit(ctx context.Context, rawProjectID uuid.UUID, commitNumber int, file projectv0.ProjectFile) (Deployment, error) {
-	if commitNumber < 1 {
-		return Deployment{}, invalidInput(fmt.Errorf("commit number must be positive, got %d", commitNumber))
+func (s deploymentServiceImpl) DeploySavedState(ctx context.Context, rawProjectID uuid.UUID, savedStateNumber int, file projectv0.ProjectFile) (Deployment, error) {
+	if savedStateNumber < 1 {
+		return Deployment{}, invalidInput(fmt.Errorf("saved state number must be positive, got %d", savedStateNumber))
 	}
-	deployment, err := s.deployContent(ctx, rawProjectID, file, &commitNumber, DeploymentCauseDeploy)
+	deployment, err := s.deployContent(ctx, rawProjectID, file, &savedStateNumber, DeploymentCauseDeploy)
 	if err != nil {
-		return Deployment{}, fmt.Errorf("cannot deploy saved state %d of project %s: %w", commitNumber, rawProjectID, err)
+		return Deployment{}, fmt.Errorf("cannot deploy saved state %d of project %s: %w", savedStateNumber, rawProjectID, err)
 	}
 	return deployment, nil
 }
@@ -94,11 +94,11 @@ func (s deploymentServiceImpl) DeployFile(ctx context.Context, rawProjectID uuid
 // and publishes deployment_created. A Deploy and a file Deploy differ only in
 // what they state (task 85_4).
 func (s deploymentServiceImpl) deployContent(ctx context.Context, rawProjectID uuid.UUID, file projectv0.ProjectFile,
-	commitNumber *int, cause DeploymentCause) (Deployment, error) {
+	savedStateNumber *int, cause DeploymentCause) (Deployment, error) {
 	if file.ProjectID != rawProjectID {
 		return Deployment{}, invalidInput(fmt.Errorf("cannot deploy a document of project %s to project %s", file.ProjectID, rawProjectID))
 	}
-	deployment, err := s.deployments.CreateDeployment(ctx, rawProjectID, file, cause, commitNumber, s.now())
+	deployment, err := s.deployments.CreateDeployment(ctx, rawProjectID, file, cause, savedStateNumber, s.now())
 	if err != nil {
 		return Deployment{}, err
 	}

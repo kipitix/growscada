@@ -51,10 +51,10 @@ func saved(t *testing.T, anID id.ID[library.WidgetType], hint string) library.Wi
 	return wt
 }
 
-// commit returns the saved state number of the test Library holding types.
-func commit(t *testing.T, number int, types ...library.WidgetTypeCopy) libraryimport.Commit {
+// savedState returns the saved state number of the test Library holding types.
+func savedState(t *testing.T, number int, types ...library.WidgetTypeCopy) libraryimport.SavedState {
 	t.Helper()
-	found, err := libraryimport.NewCommit(uuid.New(), testLibrary, number, types)
+	found, err := libraryimport.NewSavedState(uuid.New(), testLibrary, number, types)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -78,8 +78,8 @@ func TestImportImpactOf_OrphanedAndBroken(t *testing.T) {
 	intTag, strTag, goneTag := id.NewID[tag.Tag](), id.NewID[tag.Tag](), id.NewID[tag.Tag]()
 	tagTypes := scene.NewTagTypes(testProject, map[id.ID[tag.Tag]]tag.TagType{intTag: tag.TagTypeInteger, strTag: tag.TagTypeString})
 
-	from := commit(t, 1, saved(t, kept, ""), saved(t, dropped, ""), saved(t, narrowed, ""))
-	to := commit(t, 2, saved(t, kept, "-"), saved(t, narrowed, "integer"))
+	from := savedState(t, 1, saved(t, kept, ""), saved(t, dropped, ""), saved(t, narrowed, ""))
+	to := savedState(t, 2, saved(t, kept, "-"), saved(t, narrowed, "integer"))
 
 	widgets := []libraryimport.PlacedWidget{
 		placed(t, kept, intTag),      // port dropped: broken
@@ -112,9 +112,9 @@ func TestImportImpactOf_OrphanedAndBroken(t *testing.T) {
 }
 
 func TestLibraryImport_SwitchAndDelete(t *testing.T) {
-	first, second := commit(t, 1), commit(t, 2)
+	first, second := savedState(t, 1), savedState(t, 2)
 	imported := libraryimport.CreateLibraryImport(testProject, first)
-	if imported.LibraryID() != testLibrary || imported.CommitNumber() != first.Number() || imported.CommitID() != first.ID() {
+	if imported.LibraryID() != testLibrary || imported.SavedStateNumber() != first.Number() || imported.SavedStateID() != first.ID() {
 		t.Fatalf("unexpected import %s", imported)
 	}
 	if ev, ok := imported.PendingEvents()[0].(libraryimport.LibraryImportEvent); !ok || ev.Type() != event.EventTypeLibraryImportCreated || ev.ProjectID() != testProject || ev.LibraryID() != testLibrary {
@@ -122,7 +122,7 @@ func TestLibraryImport_SwitchAndDelete(t *testing.T) {
 	}
 
 	stored := libraryimport.ReconstituteLibraryImport(testProject, testLibrary, first.ID(), first.Number())
-	other, err := libraryimport.NewCommit(uuid.New(), id.NewID[library.Library](), second.Number(), nil)
+	other, err := libraryimport.NewSavedState(uuid.New(), id.NewID[library.Library](), second.Number(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -130,8 +130,8 @@ func TestLibraryImport_SwitchAndDelete(t *testing.T) {
 		t.Error("a saved state of another Library cannot be imported in place")
 	}
 	switched, err := stored.Switch(second)
-	if err != nil || switched.CommitNumber() != second.Number() || switched.CommitID() != second.ID() ||
-		stored.CommitNumber() != first.Number() {
+	if err != nil || switched.SavedStateNumber() != second.Number() || switched.SavedStateID() != second.ID() ||
+		stored.SavedStateNumber() != first.Number() {
 		t.Fatalf("Switch: %v, %s", err, switched)
 	}
 	if got := switched.PendingEvents(); len(got) != 1 || got[0].Type() != event.EventTypeLibraryImportUpdated {
@@ -146,14 +146,14 @@ func TestLibraryImport_SwitchAndDelete(t *testing.T) {
 	}
 }
 
-func TestNewCommit_Checks(t *testing.T) {
-	if _, err := libraryimport.NewCommit(uuid.Nil, testLibrary, 1, nil); err == nil {
-		t.Error("a commit needs an ID")
+func TestNewSavedState_Checks(t *testing.T) {
+	if _, err := libraryimport.NewSavedState(uuid.Nil, testLibrary, 1, nil); err == nil {
+		t.Error("a saved state needs an ID")
 	}
-	if _, err := libraryimport.NewCommit(uuid.New(), id.ID[library.Library]{}, 1, nil); err == nil {
-		t.Error("a commit needs its library")
+	if _, err := libraryimport.NewSavedState(uuid.New(), id.ID[library.Library]{}, 1, nil); err == nil {
+		t.Error("a saved state needs its library")
 	}
-	if _, err := libraryimport.NewCommit(uuid.New(), testLibrary, 0, nil); err == nil {
-		t.Error("a commit number is positive")
+	if _, err := libraryimport.NewSavedState(uuid.New(), testLibrary, 0, nil); err == nil {
+		t.Error("a saved state number is positive")
 	}
 }

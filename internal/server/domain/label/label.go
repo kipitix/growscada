@@ -39,16 +39,16 @@ type Label interface {
 	// Recolor changes the color and records a LabelUpdatedEvent. An empty
 	// Color clears it.
 	Recolor(Color) (Label, error)
-	// Assign marks the saved state commitID of scope, numbered commitNumber, with
-	// this label and records a LabelAssignedEvent; assigning a saved state the
-	// label marks already changes nothing and records nothing (task 85_3;
-	// ADR 0025). It returns ErrInvalidAssignment for a number that is not
-	// positive or a scope that names neither a Project nor a Library.
-	Assign(commitID id.ID[draft.Commit], scope draft.Scope, commitNumber int, at time.Time) (Label, error)
-	// Unassign removes the mark of the saved state commitID and records a
+	// Assign marks the saved state savedStateID of scope, numbered
+	// savedStateNumber, with this label and records a LabelAssignedEvent;
+	// assigning a saved state the label marks already changes nothing and records
+	// nothing (task 85_3; ADR 0025). It returns ErrInvalidAssignment for a number
+	// that is not positive or a scope that names neither a Project nor a Library.
+	Assign(savedStateID id.ID[draft.SavedState], scope draft.Scope, savedStateNumber int, at time.Time) (Label, error)
+	// Unassign removes the mark of the saved state savedStateID and records a
 	// LabelUnassignedEvent; a saved state the label does not mark changes nothing
 	// and records nothing.
-	Unassign(commitID id.ID[draft.Commit]) (Label, error)
+	Unassign(savedStateID id.ID[draft.SavedState]) (Label, error)
 	// Assignments is the set of saved states the label marks, the read model
 	// of the UI. The repository loads it; a rename does not need it.
 	Assignments() []Assignment
@@ -131,24 +131,24 @@ func (l *labelImpl) Delete() Label {
 	return &deleted
 }
 
-func (l *labelImpl) Assign(commitID id.ID[draft.Commit], scope draft.Scope, commitNumber int, at time.Time) (Label, error) {
-	assignment, err := NewAssignment(commitID, scope, commitNumber, at)
+func (l *labelImpl) Assign(savedStateID id.ID[draft.SavedState], scope draft.Scope, savedStateNumber int, at time.Time) (Label, error) {
+	assignment, err := NewAssignment(savedStateID, scope, savedStateNumber, at)
 	if err != nil {
 		return nil, err
 	}
-	if l.assignmentIndex(commitID) >= 0 {
+	if l.assignmentIndex(savedStateID) >= 0 {
 		// Idempotent: the mark is there already and no event is recorded, so a
 		// repeated request writes no outbox row.
 		return l, nil
 	}
 	assigned := *l
 	assigned.assignments = append(slices.Clone(l.assignments), assignment)
-	assigned.pending = append(slices.Clone(l.pending), NewLabelAssignedEvent(l.id, scope, commitNumber))
+	assigned.pending = append(slices.Clone(l.pending), NewLabelAssignedEvent(l.id, scope, savedStateNumber))
 	return &assigned, nil
 }
 
-func (l *labelImpl) Unassign(commitID id.ID[draft.Commit]) (Label, error) {
-	index := l.assignmentIndex(commitID)
+func (l *labelImpl) Unassign(savedStateID id.ID[draft.SavedState]) (Label, error) {
+	index := l.assignmentIndex(savedStateID)
 	if index < 0 {
 		return l, nil
 	}
@@ -156,7 +156,7 @@ func (l *labelImpl) Unassign(commitID id.ID[draft.Commit]) (Label, error) {
 	unassigned.assignments = slices.Delete(slices.Clone(l.assignments), index, index+1)
 	assignment := l.assignments[index]
 	unassigned.pending = append(slices.Clone(l.pending),
-		NewLabelUnassignedEvent(l.id, assignment.Scope(), assignment.CommitNumber()))
+		NewLabelUnassignedEvent(l.id, assignment.Scope(), assignment.SavedStateNumber()))
 	return &unassigned, nil
 }
 
@@ -164,11 +164,11 @@ func (l *labelImpl) Assignments() []Assignment {
 	return slices.Clone(l.assignments)
 }
 
-// assignmentIndex is the position of the mark of commitID in the label's set,
-// -1 when the label does not mark it.
-func (l *labelImpl) assignmentIndex(commitID id.ID[draft.Commit]) int {
+// assignmentIndex is the position of the mark of savedStateID in the label's
+// set, -1 when the label does not mark it.
+func (l *labelImpl) assignmentIndex(savedStateID id.ID[draft.SavedState]) int {
 	for i, assignment := range l.assignments {
-		if assignment.CommitID() == commitID {
+		if assignment.SavedStateID() == savedStateID {
 			return i
 		}
 	}

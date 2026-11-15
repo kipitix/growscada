@@ -329,7 +329,7 @@ func TestSeedData_AppliesOnTheMigratedSchema(t *testing.T) {
 		t.Errorf("libraries: %d, %v; want 2", libraries, err)
 	}
 	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM engineering.widget_types w WHERE NOT EXISTS
-	          (SELECT 1 FROM engineering.drafts d JOIN engineering.commits c ON c.draft_id = d.id
+	          (SELECT 1 FROM engineering.drafts d JOIN engineering.saved_states c ON c.draft_id = d.id
 	           WHERE d.library_id = w.library_id AND c.number = 1
 	             AND EXISTS (SELECT 1 FROM jsonb_array_elements(c.content -> 'widget_types') wt
 	                         WHERE (wt ->> 'id')::uuid = w.id AND wt ->> 'name' = w.name))`).Scan(&unsaved); err != nil || unsaved != 0 {
@@ -339,7 +339,7 @@ func TestSeedData_AppliesOnTheMigratedSchema(t *testing.T) {
 		t.Errorf("pins: %d, %v; want 3", pins, err)
 	}
 	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM engineering.widgets w WHERE NOT EXISTS
-	          (SELECT 1 FROM engineering.library_imports li JOIN engineering.commits c ON c.id = li.commit_id
+	          (SELECT 1 FROM engineering.library_imports li JOIN engineering.saved_states c ON c.id = li.saved_state_id
 	           WHERE li.project_id = w.project_id
 	             AND EXISTS (SELECT 1 FROM jsonb_array_elements(c.content -> 'widget_types') wt
 	                         WHERE (wt ->> 'id')::uuid = w.type_id))`).Scan(&unpinnedWidgets); err != nil || unpinnedWidgets != 0 {
@@ -1286,5 +1286,134 @@ func TestMigrationLibraryImports_TurnsPinsIntoImports(t *testing.T) {
 	if err := db.QueryRowContext(ctx,
 		`SELECT count(*) FROM engineering.library_pins WHERE project_id = $1`, main).Scan(&pins); err != nil || pins != 0 {
 		t.Errorf("the pins after the down: %d, %v; want none", pins, err)
+	}
+}
+
+// TestMigrationSavedStates_RenamesCommitsAndColumns: a Commit is a saved state
+// (task 88_1; ADR 0026). The tables, the columns, the constraints and the
+// indexes the code names follow, and not one row of a Draft, a Label's
+// assignment, an Import or a Deployment is lost or changed; the Down returns
+// the old names over the same data.
+func TestMigrationSavedStates_RenamesCommitsAndColumns(t *testing.T) {
+	ctx := context.Background()
+	db, dir := migrationDB(t)
+	const main = "b0000000-0000-4000-8000-000000000001"
+	if err := goose.UpToContext(ctx, db, dir, rolesBaseline); err != nil {
+		t.Fatalf("migrate public: %v", err)
+	}
+	engineering, err := goose.NewProvider(goose.DialectPostgres, db, os.DirFS(filepath.Join(dir, "..", "engineering")),
+		goose.WithTableName("engineering.goose_db_version"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := engineering.UpTo(ctx, 20261114000002); err != nil {
+		t.Fatalf("migrate engineering to the saved states: %v", err)
+	}
+	runtimeDir, err := goose.NewProvider(goose.DialectPostgres, db, os.DirFS(filepath.Join(dir, "..", "runtime")),
+		goose.WithTableName("runtime.goose_db_version"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runtimeDir.UpTo(ctx, 20261115000000); err != nil {
+		t.Fatalf("migrate runtime to the saved states: %v", err)
+	}
+	mustExec := func(query string, args ...any) {
+		t.Helper()
+		if _, err := db.ExecContext(ctx, query, args...); err != nil {
+			t.Fatalf("%s: %v", query, err)
+		}
+	}
+	libraryID, savedStateID, labelID := uuid.New(), uuid.New(), uuid.New()
+	mustExec(`INSERT INTO engineering.libraries (id, organization_id, name, version)
+	          SELECT $1, id, 'Renamed', 1 FROM organizations`, libraryID)
+	mustExec(`INSERT INTO engineering.drafts (id, library_id, version) VALUES ($1, $2, 1)`, uuid.New(), libraryID)
+	mustExec(`UPDATE engineering.drafts SET version = 2, clean_version = 2,
+	                 last_commit_number = 1, last_commit_draft_version = 2
+	          WHERE project_id = $1`, main)
+	mustExec(`INSERT INTO engineering.commits (id, draft_id, number, title, author, created_at, draft_version, content)
+	          SELECT $1, d.id, 1, 'Save', 'Ada', now(), 1,
+	                 '{"format": 1, "kind": "library", "widget_types": []}'::jsonb
+	          FROM engineering.drafts d WHERE d.library_id = $2`, savedStateID, libraryID)
+	mustExec(`INSERT INTO engineering.labels (id, organization_id, name, created_at)
+	          SELECT $1, id, 'ready', now() FROM organizations`, labelID)
+	mustExec(`INSERT INTO engineering.commit_labels (label_id, commit_id, assigned_at)
+	          VALUES ($1, $2, now())`, labelID, savedStateID)
+	mustExec(`INSERT INTO engineering.commit_library_imports (commit_id, library_id, commit_number)
+	          VALUES ($1, $2, 1)`, savedStateID, libraryID)
+	mustExec(`INSERT INTO engineering.library_imports (project_id, library_id, commit_number, commit_id)
+	          VALUES ($1, $2, 1, $3)`, main, libraryID, savedStateID)
+	mustExec(`INSERT INTO runtime.deployments (project_id, number, deployed_at, cause, commit_number, config)
+	          VALUES ($1, 1, now(), 'deploy', 1, '{"schema_version": "0.3"}')`, main)
+
+	if _, err := engineering.UpTo(ctx, 20261116000000); err != nil {
+		t.Fatalf("migrate the saved states: %v", err)
+	}
+	if _, err := runtimeDir.UpTo(ctx, 20261116000000); err != nil {
+		t.Fatalf("migrate the saved states of the runtime: %v", err)
+	}
+
+	var number, lastNumber, lastVersion, assigned, committed, imported, deployed int
+	if err := db.QueryRowContext(ctx,
+		`SELECT number FROM engineering.saved_states WHERE id = $1`, savedStateID).Scan(&number); err != nil || number != 1 {
+		t.Errorf("the saved state: number %d, %v; want 1", number, err)
+	}
+	if err := db.QueryRowContext(ctx,
+		`SELECT last_saved_state_number, last_saved_state_draft_version FROM engineering.drafts WHERE project_id = $1`, main,
+	).Scan(&lastNumber, &lastVersion); err != nil || lastNumber != 1 || lastVersion != 2 {
+		t.Errorf("the Draft: last saved state %d of version %d, %v; want 1 and 2", lastNumber, lastVersion, err)
+	}
+	if err := db.QueryRowContext(ctx,
+		`SELECT count(*) FROM engineering.saved_state_labels WHERE saved_state_id = $1`, savedStateID).Scan(&assigned); err != nil || assigned != 1 {
+		t.Errorf("the label's assignments: %d, %v; want 1", assigned, err)
+	}
+	if err := db.QueryRowContext(ctx,
+		`SELECT saved_state_number FROM engineering.saved_state_library_imports WHERE saved_state_id = $1`, savedStateID,
+	).Scan(&committed); err != nil || committed != 1 {
+		t.Errorf("the saved state's import: saved state %d, %v; want 1", committed, err)
+	}
+	var importedID uuid.UUID
+	if err := db.QueryRowContext(ctx,
+		`SELECT saved_state_number, saved_state_id FROM engineering.library_imports WHERE project_id = $1`, main,
+	).Scan(&imported, &importedID); err != nil || imported != 1 || importedID != savedStateID {
+		t.Errorf("the project's import: saved state %d of %s, %v; want 1 of %s", imported, importedID, err, savedStateID)
+	}
+	if err := db.QueryRowContext(ctx,
+		`SELECT saved_state_number FROM runtime.deployments WHERE project_id = $1`, main).Scan(&deployed); err != nil || deployed != 1 {
+		t.Errorf("the Deployment: saved state %d, %v; want 1", deployed, err)
+	}
+
+	// Down: the names come back over the same rows.
+	if _, err := runtimeDir.DownTo(ctx, 20261115000000); err != nil {
+		t.Fatalf("down the saved states of the runtime: %v", err)
+	}
+	if _, err := engineering.DownTo(ctx, 20261114000002); err != nil {
+		t.Fatalf("down the saved states: %v", err)
+	}
+	if err := db.QueryRowContext(ctx,
+		`SELECT number FROM engineering.commits WHERE id = $1`, savedStateID).Scan(&number); err != nil || number != 1 {
+		t.Errorf("the commit after the down: number %d, %v; want 1", number, err)
+	}
+	if err := db.QueryRowContext(ctx,
+		`SELECT last_commit_number, last_commit_draft_version FROM engineering.drafts WHERE project_id = $1`, main,
+	).Scan(&lastNumber, &lastVersion); err != nil || lastNumber != 1 || lastVersion != 2 {
+		t.Errorf("the Draft after the down: last commit %d of version %d, %v; want 1 and 2", lastNumber, lastVersion, err)
+	}
+	if err := db.QueryRowContext(ctx,
+		`SELECT count(*) FROM engineering.commit_labels WHERE commit_id = $1`, savedStateID).Scan(&assigned); err != nil || assigned != 1 {
+		t.Errorf("the label's assignments after the down: %d, %v; want 1", assigned, err)
+	}
+	if err := db.QueryRowContext(ctx,
+		`SELECT count(*) FROM engineering.commit_library_imports WHERE commit_id = $1 AND commit_number = 1`, savedStateID,
+	).Scan(&committed); err != nil || committed != 1 {
+		t.Errorf("the saved state's import after the down: %d, %v; want 1", committed, err)
+	}
+	if err := db.QueryRowContext(ctx,
+		`SELECT commit_number, commit_id FROM engineering.library_imports WHERE project_id = $1`, main,
+	).Scan(&imported, &importedID); err != nil || imported != 1 || importedID != savedStateID {
+		t.Errorf("the project's import after the down: commit %d of %s, %v; want 1 of %s", imported, importedID, err, savedStateID)
+	}
+	if err := db.QueryRowContext(ctx,
+		`SELECT commit_number FROM runtime.deployments WHERE project_id = $1`, main).Scan(&deployed); err != nil || deployed != 1 {
+		t.Errorf("the Deployment after the down: commit %d, %v; want 1", deployed, err)
 	}
 }

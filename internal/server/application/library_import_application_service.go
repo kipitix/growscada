@@ -17,19 +17,19 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/tag"
 )
 
-// MissingCommitError names a saved state a request names — in the body of a
+// MissingSavedStateError names a saved state a request names — in the body of a
 // Library Import — that the Library's Draft does not have. It matches
-// draft.ErrCommitNotFound, and it carries the number, which the path does not:
-// the API's 404 names it (task 85_6).
-type MissingCommitError struct {
+// draft.ErrSavedStateNotFound, and it carries the number, which the path does
+// not: the API's 404 names it (task 85_6).
+type MissingSavedStateError struct {
 	Number int
 }
 
-func (e MissingCommitError) Error() string {
-	return fmt.Sprintf("%v: saved state %d", draft.ErrCommitNotFound, e.Number)
+func (e MissingSavedStateError) Error() string {
+	return fmt.Sprintf("%v: saved state %d", draft.ErrSavedStateNotFound, e.Number)
 }
 
-func (e MissingCommitError) Is(target error) bool { return target == draft.ErrCommitNotFound }
+func (e MissingSavedStateError) Is(target error) bool { return target == draft.ErrSavedStateNotFound }
 
 // LibraryImportService is the service interface for working with the Library
 // Imports of a project's Draft and, through them, the WidgetTypes its Widgets
@@ -39,15 +39,15 @@ func (e MissingCommitError) Is(target error) bool { return target == draft.ErrCo
 // a library that does not exist one wrapping library.ErrLibraryNotFound.
 type LibraryImportService interface {
 	FindLibraryImports(ctx context.Context, projectID uuid.UUID) ([]appdto.LibraryImport, error)
-	// PutLibraryImport imports the saved state numbered commit of the library: it
-	// adds the import when the project imports none of the library, else switches
-	// it, stating the Version of the Draft. The bool reports whether the import
-	// was added.
-	PutLibraryImport(ctx context.Context, projectID, libraryID uuid.UUID, commit, version int) (appdto.LibraryImport, bool, error)
+	// PutLibraryImport imports the saved state numbered savedState of the library:
+	// it adds the import when the project imports none of the library, else
+	// switches it, stating the Version of the Draft. The bool reports whether the
+	// import was added.
+	PutLibraryImport(ctx context.Context, projectID, libraryID uuid.UUID, savedState, version int) (appdto.LibraryImport, bool, error)
 	DeleteLibraryImport(ctx context.Context, projectID, libraryID uuid.UUID, version int) (appdto.LibraryImport, error)
 	// ImportImpact previews switching the import of the library to a saved state,
 	// or removing it for nil.
-	ImportImpact(ctx context.Context, projectID, libraryID uuid.UUID, commit *int) (appdto.ImportImpact, error)
+	ImportImpact(ctx context.Context, projectID, libraryID uuid.UUID, savedState *int) (appdto.ImportImpact, error)
 	// FindImportedWidgetTypes returns the WidgetTypes of every saved state the
 	// project imports: the palette of its Scenes.
 	FindImportedWidgetTypes(ctx context.Context, projectID uuid.UUID) ([]appdto.WidgetTypeCopy, error)
@@ -85,11 +85,11 @@ func (s libraryImportServiceImpl) FindLibraryImports(ctx context.Context, rawPro
 	}
 	result := make([]appdto.LibraryImport, len(list))
 	for i, imported := range list {
-		commit, labels, err := s.provenance(ctx, imported)
+		savedState, labels, err := s.provenance(ctx, imported)
 		if err != nil {
 			return nil, err
 		}
-		result[i] = appdto.NewLibraryImport(imported, version, commit, labels)
+		result[i] = appdto.NewLibraryImport(imported, version, savedState, labels)
 	}
 	return result, nil
 }
@@ -97,35 +97,35 @@ func (s libraryImportServiceImpl) FindLibraryImports(ctx context.Context, rawPro
 // provenance reads the saved state an import names and the labels it carries:
 // the saved state a Project sees of what it imported (task 85_6). A saved state
 // this server cannot read — its Library is being removed — leaves both empty.
-func (s libraryImportServiceImpl) provenance(ctx context.Context, imported libraryimport.LibraryImport) (draft.Commit, []appdto.Label, error) {
-	commit, err := s.libraryCommit(ctx, imported.LibraryID(), imported.CommitNumber())
+func (s libraryImportServiceImpl) provenance(ctx context.Context, imported libraryimport.LibraryImport) (draft.SavedState, []appdto.Label, error) {
+	savedState, err := s.librarySavedState(ctx, imported.LibraryID(), imported.SavedStateNumber())
 	if err != nil {
-		if !errors.Is(err, draft.ErrCommitNotFound) && !errors.Is(err, library.ErrLibraryNotFound) {
+		if !errors.Is(err, draft.ErrSavedStateNotFound) && !errors.Is(err, library.ErrLibraryNotFound) {
 			return nil, nil, err
 		}
 		return nil, nil, nil
 	}
-	labels, err := s.labelsOf(ctx, imported.LibraryID(), imported.CommitNumber())
+	labels, err := s.labelsOf(ctx, imported.LibraryID(), imported.SavedStateNumber())
 	if err != nil {
 		return nil, nil, err
 	}
-	return commit, labels, nil
+	return savedState, labels, nil
 }
 
-// libraryCommit returns the saved state number of the Library, or nil for one
-// this server does not have.
-func (s libraryImportServiceImpl) libraryCommit(ctx context.Context, libraryID id.ID[library.Library], number int) (draft.Commit, error) {
-	commit, err := s.content.Drafts().FindCommit(ctx, draft.LibraryScope(libraryID), number)
+// librarySavedState returns the saved state number of the Library, or nil for
+// one this server does not have.
+func (s libraryImportServiceImpl) librarySavedState(ctx context.Context, libraryID id.ID[library.Library], number int) (draft.SavedState, error) {
+	savedState, err := s.content.Drafts().FindSavedState(ctx, draft.LibraryScope(libraryID), number)
 	if err != nil {
-		if errors.Is(err, draft.ErrCommitNotFound) {
-			return nil, MissingCommitError{Number: number}
+		if errors.Is(err, draft.ErrSavedStateNotFound) {
+			return nil, MissingSavedStateError{Number: number}
 		}
 		if errors.Is(err, library.ErrLibraryNotFound) {
 			return nil, err
 		}
 		return nil, fmt.Errorf("cannot read saved state %d of library %s: %w", number, libraryID, err)
 	}
-	return commit, nil
+	return savedState, nil
 }
 
 func (s libraryImportServiceImpl) FindImportedWidgetTypes(ctx context.Context, rawProjectID uuid.UUID) ([]appdto.WidgetTypeCopy, error) {
@@ -154,7 +154,7 @@ func (s libraryImportServiceImpl) openImport(ctx context.Context, rawProjectID, 
 	return projectID, lib, nil
 }
 
-func (s libraryImportServiceImpl) PutLibraryImport(ctx context.Context, rawProjectID, rawLibraryID uuid.UUID, rawCommit, rawVersion int) (appdto.LibraryImport, bool, error) {
+func (s libraryImportServiceImpl) PutLibraryImport(ctx context.Context, rawProjectID, rawLibraryID uuid.UUID, rawSavedState, rawVersion int) (appdto.LibraryImport, bool, error) {
 	projectID, lib, err := s.openImport(ctx, rawProjectID, rawLibraryID)
 	if err != nil {
 		return appdto.LibraryImport{}, false, err
@@ -163,7 +163,7 @@ func (s libraryImportServiceImpl) PutLibraryImport(ctx context.Context, rawProje
 	if err != nil {
 		return appdto.LibraryImport{}, false, err
 	}
-	commit, err := s.libraryCommit(ctx, lib.ID(), rawCommit)
+	savedState, err := s.librarySavedState(ctx, lib.ID(), rawSavedState)
 	if err != nil {
 		return appdto.LibraryImport{}, false, fmt.Errorf("cannot import library: %w", err)
 	}
@@ -172,22 +172,22 @@ func (s libraryImportServiceImpl) PutLibraryImport(ctx context.Context, rawProje
 	result, err := s.content.Drafts().Update(ctx, s.content.ScopeOf(projectID), expected, "Import library "+lib.Name().String(),
 		func(session *draft.Session) error {
 			var err error
-			saved, added, err = session.PutLibraryImport(ctx, lib.ID(), rawCommit)
+			saved, added, err = session.PutLibraryImport(ctx, lib.ID(), rawSavedState)
 			return err
 		})
 	if err != nil {
 		// The saved state was read before the write and can be gone by it: the
 		// 404 must name the number the body did, which the path does not carry.
-		if errors.Is(err, draft.ErrCommitNotFound) {
-			return appdto.LibraryImport{}, false, MissingCommitError{Number: rawCommit}
+		if errors.Is(err, draft.ErrSavedStateNotFound) {
+			return appdto.LibraryImport{}, false, MissingSavedStateError{Number: rawSavedState}
 		}
 		return appdto.LibraryImport{}, false, fmt.Errorf("cannot save library import: %w", err)
 	}
-	labels, err := s.labelsOf(ctx, lib.ID(), saved.CommitNumber())
+	labels, err := s.labelsOf(ctx, lib.ID(), saved.SavedStateNumber())
 	if err != nil {
 		return appdto.LibraryImport{}, false, err
 	}
-	return appdto.NewLibraryImport(saved, result.Version().Number(), commit, labels), added, nil
+	return appdto.NewLibraryImport(saved, result.Version().Number(), savedState, labels), added, nil
 }
 
 // DeleteLibraryImport removes the import of the library, unless Widgets of the
@@ -211,15 +211,15 @@ func (s libraryImportServiceImpl) DeleteLibraryImport(ctx context.Context, rawPr
 	if err != nil {
 		return appdto.LibraryImport{}, fmt.Errorf("cannot delete library import: %w", err)
 	}
-	commit, err := s.libraryCommit(ctx, deleted.LibraryID(), deleted.CommitNumber())
-	if err != nil && !errors.Is(err, draft.ErrCommitNotFound) && !errors.Is(err, library.ErrLibraryNotFound) {
+	savedState, err := s.librarySavedState(ctx, deleted.LibraryID(), deleted.SavedStateNumber())
+	if err != nil && !errors.Is(err, draft.ErrSavedStateNotFound) && !errors.Is(err, library.ErrLibraryNotFound) {
 		return appdto.LibraryImport{}, err
 	}
-	labels, err := s.labelsOf(ctx, deleted.LibraryID(), deleted.CommitNumber())
+	labels, err := s.labelsOf(ctx, deleted.LibraryID(), deleted.SavedStateNumber())
 	if err != nil {
 		return appdto.LibraryImport{}, err
 	}
-	return appdto.NewLibraryImport(deleted, result.Version().Number(), commit, labels), nil
+	return appdto.NewLibraryImport(deleted, result.Version().Number(), savedState, labels), nil
 }
 
 // labelsOf reads the labels of one saved state of the library; a Library this
@@ -240,7 +240,7 @@ func (s libraryImportServiceImpl) labelsOf(ctx context.Context, libraryID id.ID[
 // refuses the change itself (libraryimport.ImportImpactOf). Removing an import
 // the project does not have is libraryimport.ErrLibraryImportNotFound, as the
 // removal.
-func (s libraryImportServiceImpl) ImportImpact(ctx context.Context, rawProjectID, rawLibraryID uuid.UUID, rawCommit *int) (appdto.ImportImpact, error) {
+func (s libraryImportServiceImpl) ImportImpact(ctx context.Context, rawProjectID, rawLibraryID uuid.UUID, rawSavedState *int) (appdto.ImportImpact, error) {
 	_, scope, err := s.content.open(ctx, rawProjectID)
 	if err != nil {
 		return appdto.ImportImpact{}, err
@@ -249,18 +249,18 @@ func (s libraryImportServiceImpl) ImportImpact(ctx context.Context, rawProjectID
 	if err != nil {
 		return appdto.ImportImpact{}, err
 	}
-	var from, to *libraryimport.Commit
+	var from, to *libraryimport.SavedState
 	found, err := scope.LibraryImports().FindByLibrary(ctx, lib.ID())
 	switch {
 	case err == nil:
-		if from, err = s.importCommitOf(ctx, lib.ID(), found.CommitNumber()); err != nil {
+		if from, err = s.importSavedStateOf(ctx, lib.ID(), found.SavedStateNumber()); err != nil {
 			return appdto.ImportImpact{}, err
 		}
-	case rawCommit == nil || !errors.Is(err, libraryimport.ErrLibraryImportNotFound):
+	case rawSavedState == nil || !errors.Is(err, libraryimport.ErrLibraryImportNotFound):
 		return appdto.ImportImpact{}, fmt.Errorf("error on find library import in repository: %w", err)
 	}
-	if rawCommit != nil {
-		if to, err = s.importCommitOf(ctx, lib.ID(), *rawCommit); err != nil {
+	if rawSavedState != nil {
+		if to, err = s.importSavedStateOf(ctx, lib.ID(), *rawSavedState); err != nil {
 			return appdto.ImportImpact{}, err
 		}
 	}
@@ -284,21 +284,21 @@ func (s libraryImportServiceImpl) ImportImpact(ctx context.Context, rawProjectID
 	return appdto.NewImportImpact(libraryimport.ImportImpactOf(widgets, from, to, tagTypes)), nil
 }
 
-// importCommitOf returns the saved state number of the Library as the value an
-// import names: its identity and the copies of its WidgetTypes.
-func (s libraryImportServiceImpl) importCommitOf(ctx context.Context, libraryID id.ID[library.Library], number int) (*libraryimport.Commit, error) {
-	commit, err := s.content.Drafts().FindCommit(ctx, draft.LibraryScope(libraryID), number)
+// importSavedStateOf returns the saved state number of the Library as the value
+// an import names: its identity and the copies of its WidgetTypes.
+func (s libraryImportServiceImpl) importSavedStateOf(ctx context.Context, libraryID id.ID[library.Library], number int) (*libraryimport.SavedState, error) {
+	savedState, err := s.content.Drafts().FindSavedState(ctx, draft.LibraryScope(libraryID), number)
 	if err != nil {
-		if errors.Is(err, draft.ErrCommitNotFound) {
-			return nil, MissingCommitError{Number: number}
+		if errors.Is(err, draft.ErrSavedStateNotFound) {
+			return nil, MissingSavedStateError{Number: number}
 		}
 		return nil, fmt.Errorf("cannot read saved state %d of library %s: %w", number, libraryID, err)
 	}
-	types, ok := commit.Content().WidgetTypes()
+	types, ok := savedState.Content().WidgetTypes()
 	if !ok {
 		return nil, fmt.Errorf("saved state %d of library %s holds no widget types", number, libraryID)
 	}
-	value := libraryimport.ReconstituteCommit(commit.ID().UUID(), libraryID, number, types)
+	value := libraryimport.ReconstituteSavedState(savedState.ID().UUID(), libraryID, number, types)
 	return &value, nil
 }
 

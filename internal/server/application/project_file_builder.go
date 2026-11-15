@@ -31,12 +31,11 @@ import (
 // That is what tells an unchanged Draft from a changed one and what a Deploy
 // stores.
 type ProjectFileBuilder interface {
-	// Build returns the ProjectFile of the Draft of the live Project
-	// projectID. It is an error wrapping project.ErrProjectNotFound if the
-	// Project is not live, and a build error if a Widget refers to a
-	// WidgetType none of the imported saved states holds or a Tag is supplied by a
-	// Device that is not of the Project: the Draft is inconsistent, and a
-	// Deploy must not paper over it.
+	// Build returns the ProjectFile of the Draft of the live Project projectID. It
+	// is an error wrapping project.ErrProjectNotFound if the Project is not live,
+	// and a build error if a Widget refers to a WidgetType none of the imported
+	// saved states holds or a Tag is supplied by a Device that is not of the
+	// Project: the Draft is inconsistent, and a Deploy must not paper over it.
 	Build(ctx context.Context, projectID uuid.UUID) (projectv0.ProjectFile, error)
 }
 
@@ -156,7 +155,7 @@ func projectFileOfContent(projectID id.ID[project.Project], content draft.Conten
 	}
 	for _, imported := range content.LibraryImports {
 		file.LibraryImports = append(file.LibraryImports, projectv0.LibraryImport{
-			LibraryID: imported.LibraryID().UUID(), Commit: imported.CommitNumber(),
+			LibraryID: imported.LibraryID().UUID(), Commit: imported.SavedStateNumber(),
 		})
 	}
 

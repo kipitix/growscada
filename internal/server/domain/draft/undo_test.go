@@ -135,7 +135,7 @@ func TestSession_UndoOfAnImportSwitchRestoresTheImportAndTheBindings(t *testing.
 	}
 	_, after := session.Changes()
 	imported, ok := after[0].State.(LibraryImportState)
-	if !ok || imported.Commit != 1 {
+	if !ok || imported.SavedState != 1 {
 		t.Errorf("the restored import is %v, want saved state 1", after[0].State)
 	}
 	types := eventTypes(session.Events())
@@ -284,9 +284,9 @@ func pairSnapshot(environmentID, deviceID uuid.UUID) Snapshot {
 	}}
 }
 
-func importSnapshot(libraryID uuid.UUID, commit int) Snapshot {
+func importSnapshot(libraryID uuid.UUID, savedState int) Snapshot {
 	return Snapshot{Kind: KindLibraryImport, ID: libraryID, State: LibraryImportState{
-		LibraryID: libraryID, Commit: commit,
+		LibraryID: libraryID, SavedState: savedState,
 	}}
 }
 

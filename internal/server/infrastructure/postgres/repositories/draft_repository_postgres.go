@@ -42,17 +42,17 @@ func NewDraftRepositoryPostgres(db *sql.DB, opts ...Option) draft.Repository {
 
 // draftRow is a drafts row as stored.
 type draftRow struct {
-	id                     uuid.UUID
-	projectID              uuid.NullUUID
-	libraryID              uuid.NullUUID
-	version                int
-	cleanVersion           int
-	stackPosition          int
-	lastCommitNumber       int
-	lastCommitDraftVersion int
+	id                         uuid.UUID
+	projectID                  uuid.NullUUID
+	libraryID                  uuid.NullUUID
+	version                    int
+	cleanVersion               int
+	stackPosition              int
+	lastSavedStateNumber       int
+	lastSavedStateDraftVersion int
 }
 
-const selectDraftColumns = `id, project_id, library_id, version, clean_version, stack_position, last_commit_number, last_commit_draft_version`
+const selectDraftColumns = `id, project_id, library_id, version, clean_version, stack_position, last_saved_state_number, last_saved_state_draft_version`
 
 func (r draftRepositoryPostgres) Read(ctx context.Context, scope draft.Scope) (draft.Draft, bool, error) {
 	cond, args := scopeCondition(scope)
@@ -139,7 +139,7 @@ func (r draftRepositoryPostgres) CheckVersion(ctx context.Context, scope draft.S
 // Version keeps the Draft unsaved. The comparison is made here, under the row's
 // lock: the saved state the caller read may have been overtaken by a Save
 // meanwhile, and then its content is no longer the Draft's clean state.
-func (r draftRepositoryPostgres) Replace(ctx context.Context, scope draft.Scope, cleanCommit int, change func(*draft.Session) error) (draft.Draft, error) {
+func (r draftRepositoryPostgres) Replace(ctx context.Context, scope draft.Scope, cleanSavedState int, change func(*draft.Session) error) (draft.Draft, error) {
 	var result draft.Draft
 	err := r.inTx(ctx, func(tx *sql.Tx) ([]event.Event, error) {
 		row, err := lockDraftRow(ctx, tx, scope, true, true)
@@ -173,7 +173,7 @@ func (r draftRepositoryPostgres) Replace(ctx context.Context, scope draft.Scope,
 		if err := updateDraftProgress(ctx, tx, row.id, next, 0); err != nil {
 			return nil, err
 		}
-		clean := cleanCommit != 0 && row.lastCommitNumber == cleanCommit
+		clean := cleanSavedState != 0 && row.lastSavedStateNumber == cleanSavedState
 		cleanVersion := versionOfDraft(row.cleanVersion)
 		if clean {
 			if err := updateDraftCleanVersion(ctx, tx, row.id, next); err != nil {
@@ -538,7 +538,7 @@ func versionOfDraft(number int) version.Version[draft.Draft] {
 func scanDraftRow(scan func(...any) error) (*draftRow, error) {
 	var row draftRow
 	if err := scan(&row.id, &row.projectID, &row.libraryID, &row.version, &row.cleanVersion, &row.stackPosition,
-		&row.lastCommitNumber, &row.lastCommitDraftVersion); err != nil {
+		&row.lastSavedStateNumber, &row.lastSavedStateDraftVersion); err != nil {
 		return nil, err
 	}
 	return &row, nil

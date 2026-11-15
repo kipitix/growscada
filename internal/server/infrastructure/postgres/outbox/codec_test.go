@@ -75,8 +75,8 @@ func sampleEvents(t *testing.T) []event.Event {
 		device.NewEnvironmentUpdatedEvent(environmentID, projectID, ts),
 		device.NewEnvironmentDeletedEvent(environmentID, projectID, ts),
 		device.NewEnvironmentDeviceCreatedEvent(environmentID, deviceID, projectID, ts),
-		draft.NewCommitCreatedEvent(draft.ProjectScope(projectID), 2, ts),
-		draft.NewCommitTitleUpdatedEvent(draft.LibraryScope(libraryID), 3, ts),
+		draft.NewSavedStateCreatedEvent(draft.ProjectScope(projectID), 2, ts),
+		draft.NewSavedStateTitleUpdatedEvent(draft.LibraryScope(libraryID), 3, ts),
 		device.NewEnvironmentDeviceUpdatedEvent(environmentID, deviceID, projectID, ts),
 		device.NewEnvironmentDeviceDeletedEvent(environmentID, deviceID, projectID, ts),
 		label.NewLabelCreatedEvent(labelID, ts),
@@ -181,10 +181,10 @@ func assertSameSubject(t *testing.T, original, decoded event.Event) {
 		if got, ok := decoded.(device.EnvironmentEvent); !ok || got.EnvironmentID() != want.EnvironmentID() {
 			t.Errorf("decoded %T, want an event of environment %s", decoded, want.EnvironmentID())
 		}
-	case draft.CommitEvent:
-		got, ok := decoded.(draft.CommitEvent)
-		if !ok || got.Scope().String() != want.Scope().String() || got.CommitNumber() != want.CommitNumber() {
-			t.Errorf("decoded %T, want commit %d of %s", decoded, want.CommitNumber(), want.Scope())
+	case draft.SavedStateEvent:
+		got, ok := decoded.(draft.SavedStateEvent)
+		if !ok || got.Scope().String() != want.Scope().String() || got.SavedStateNumber() != want.SavedStateNumber() {
+			t.Errorf("decoded %T, want saved state %d of %s", decoded, want.SavedStateNumber(), want.Scope())
 		}
 	case scene.SceneEvent:
 		if got := decoded.(scene.SceneEvent); got.SceneID() != want.SceneID() {
@@ -192,8 +192,8 @@ func assertSameSubject(t *testing.T, original, decoded event.Event) {
 		}
 	case label.LabelAssignmentEvent:
 		got, ok := decoded.(label.LabelAssignmentEvent)
-		if !ok || got.LabelID() != want.LabelID() || got.Scope() != want.Scope() || got.CommitNumber() != want.CommitNumber() {
-			t.Errorf("decoded %T, want commit %d of %s of label %s", decoded, want.CommitNumber(), want.Scope(), want.LabelID())
+		if !ok || got.LabelID() != want.LabelID() || got.Scope() != want.Scope() || got.SavedStateNumber() != want.SavedStateNumber() {
+			t.Errorf("decoded %T, want saved state %d of %s of label %s", decoded, want.SavedStateNumber(), want.Scope(), want.LabelID())
 		}
 	case label.LabelEvent:
 		if got, ok := decoded.(label.LabelEvent); !ok || got.LabelID() != want.LabelID() {

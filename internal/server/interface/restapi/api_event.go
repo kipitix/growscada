@@ -59,8 +59,8 @@ var apiEventTypes = map[event.EventType]string{
 	event.EventTypeEnvironmentDeviceUpdated: apiv0.EventEnvironmentDeviceUpdated,
 	event.EventTypeEnvironmentDeviceDeleted: apiv0.EventEnvironmentDeviceDeleted,
 	event.EventTypeDeploymentCreated:        apiv0.EventDeploymentCreated,
-	event.EventTypeCommitCreated:            apiv0.EventCommitCreated,
-	event.EventTypeCommitTitleUpdated:       apiv0.EventCommitTitleUpdated,
+	event.EventTypeSavedStateCreated:        apiv0.EventCommitCreated,
+	event.EventTypeSavedStateTitleUpdated:   apiv0.EventCommitTitleUpdated,
 	event.EventTypeLabelCreated:             apiv0.EventLabelCreated,
 	event.EventTypeLabelUpdated:             apiv0.EventLabelUpdated,
 	event.EventTypeLabelDeleted:             apiv0.EventLabelDeleted,
@@ -80,13 +80,13 @@ func newAPIEvent(e event.Event) apiv0.Event {
 		Timestamp: e.Timestamp().Time().Format(time.RFC3339),
 	}
 	switch e := e.(type) {
-	case draft.CommitEvent:
+	case draft.SavedStateEvent:
 		if e.Scope().IsLibrary() {
 			ev.ID = e.Scope().LibraryID().String()
 		} else {
 			ev.ID = e.Scope().ProjectID().String()
 		}
-		ev.Commit = e.CommitNumber()
+		ev.Commit = e.SavedStateNumber()
 	case tag.TagEvent:
 		ev.ID = e.TagID().String()
 		if updated, ok := e.(tagstate.TagUpdatedEvent); ok {
@@ -115,7 +115,7 @@ func newAPIEvent(e event.Event) apiv0.Event {
 		ev.ID = e.ProjectID().String()
 		ev.Deployment = e.Number()
 		ev.DeployedAt = deployedAt(e.DeployedAt())
-		ev.CommitNumber = e.CommitNumber()
+		ev.CommitNumber = e.SavedStateNumber()
 	case scene.SceneEvent:
 		ev.ID = e.SceneID().String()
 	case project.ProjectEvent:
@@ -129,7 +129,7 @@ func newAPIEvent(e event.Event) apiv0.Event {
 		} else {
 			ev.ID = e.Scope().ProjectID().String()
 		}
-		ev.Commit = e.CommitNumber()
+		ev.Commit = e.SavedStateNumber()
 		ev.Label = e.LabelID().String()
 	case label.LabelEvent:
 		ev.ID = e.LabelID().String()

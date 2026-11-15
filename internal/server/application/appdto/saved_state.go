@@ -8,26 +8,26 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/draft"
 )
 
-// Commit is the application-layer DTO of a saved state (task 72_2; ADR 0021):
-// its number, title, author and time, the Version of the Draft it fixed, and
-// the counts of its snapshot. WidgetTypes is filled by Find of a Library's
+// SavedState is the application-layer DTO of a saved state (task 72_2; ADR
+// 0021): its number, title, author and time, the Version of the Draft it fixed,
+// and the counts of its snapshot. WidgetTypes is filled by Find of a Library's
 // saved state alone: the list never carries content.
-type Commit struct {
+type SavedState struct {
 	ID           uuid.UUID
 	Number       int
 	Title        string
 	Author       string
 	CreatedAt    time.Time
 	DraftVersion int
-	Counts       CommitCounts
+	Counts       SavedStateCounts
 	// Labels are the labels that mark this saved state, ordered by name
 	// ignoring case (task 85_3; ADR 0025).
 	Labels      []Label
 	WidgetTypes []WidgetTypeCopy
 }
 
-// CommitCounts is the size of a saved state's snapshot.
-type CommitCounts struct {
+// SavedStateCounts is the size of a saved state's snapshot.
+type SavedStateCounts struct {
 	Scenes       int
 	Widgets      int
 	Tags         int
@@ -36,43 +36,44 @@ type CommitCounts struct {
 	WidgetTypes  int
 }
 
-// NewCommit creates a saved state DTO from the domain entity, without its
+// NewSavedState creates a saved state DTO from the domain entity, without its
 // content.
-func NewCommit(c draft.Commit) Commit {
-	return Commit{
+func NewSavedState(c draft.SavedState) SavedState {
+	return SavedState{
 		ID:           c.ID().UUID(),
 		Number:       c.Number(),
 		Title:        c.Title().String(),
 		Author:       c.Author().String(),
 		CreatedAt:    c.CreatedAt(),
 		DraftVersion: c.DraftVersion().Number(),
-		Counts:       commitCounts(c.Content()),
+		Counts:       savedStateCounts(c.Content()),
 	}
 }
 
-// NewCommitWithContent creates a saved state DTO with the WidgetTypes of a
+// NewSavedStateWithContent creates a saved state DTO with the WidgetTypes of a
 // Library's snapshot.
-func NewCommitWithContent(c draft.Commit) Commit {
-	dto := NewCommit(c)
+func NewSavedStateWithContent(c draft.SavedState) SavedState {
+	dto := NewSavedState(c)
 	if types, ok := c.Content().WidgetTypes(); ok {
 		dto.WidgetTypes = NewWidgetTypeCopyList(types)
 	}
 	return dto
 }
 
-// NewCommitList creates the DTOs of a list of saved states, without content.
-func NewCommitList(list []draft.Commit) []Commit {
-	result := make([]Commit, len(list))
+// NewSavedStateList creates the DTOs of a list of saved states, without
+// content.
+func NewSavedStateList(list []draft.SavedState) []SavedState {
+	result := make([]SavedState, len(list))
 	for i, c := range list {
-		result[i] = NewCommit(c)
+		result[i] = NewSavedState(c)
 	}
 	return result
 }
 
-// commitCounts counts what a snapshot holds.
-func commitCounts(content draft.CommitContent) CommitCounts {
+// savedStateCounts counts what a snapshot holds.
+func savedStateCounts(content draft.SavedStateContent) SavedStateCounts {
 	if file, ok := content.ProjectFile(); ok {
-		counts := CommitCounts{
+		counts := SavedStateCounts{
 			Scenes:       len(file.Scenes),
 			Tags:         len(file.Tags),
 			Devices:      len(file.Devices),
@@ -85,5 +86,5 @@ func commitCounts(content draft.CommitContent) CommitCounts {
 		return counts
 	}
 	types, _ := content.WidgetTypes()
-	return CommitCounts{WidgetTypes: len(types)}
+	return SavedStateCounts{WidgetTypes: len(types)}
 }

@@ -123,7 +123,7 @@ INSERT INTO engineering.drafts (id, library_id)
 
 -- The saved state of each Library's Draft (task 85_6): its WidgetTypes as
 -- copies, the content the imports name.
-INSERT INTO engineering.commits (id, draft_id, number, title, author, created_at, draft_version, content)
+INSERT INTO engineering.saved_states (id, draft_id, number, title, author, created_at, draft_version, content)
     SELECT gen_random_uuid(), d.id, 1, 'Seed', 'seed', now(), 1,
            jsonb_build_object(
                'format', 1,
@@ -137,7 +137,7 @@ INSERT INTO engineering.commits (id, draft_id, number, title, author, created_at
                        'input_ports', w.input_ports) ORDER BY w.pk_id)
                    FROM engineering.widget_types w WHERE w.library_id = d.library_id), '[]'::jsonb))
     FROM engineering.drafts d WHERE d.library_id IS NOT NULL;
-UPDATE engineering.drafts SET last_commit_number = 1, last_commit_draft_version = 1, clean_version = 1
+UPDATE engineering.drafts SET last_saved_state_number = 1, last_saved_state_draft_version = 1, clean_version = 1
     WHERE library_id IS NOT NULL;
 -- The seed defines the state of every Draft explicitly: a Project's content is
 -- what the seed wrote and has never been saved (unsaved changes), a Library's
@@ -146,16 +146,16 @@ UPDATE engineering.drafts SET last_commit_number = 1, last_commit_draft_version 
 UPDATE engineering.drafts SET version = 1, clean_version = 0, stack_position = 0 WHERE project_id IS NOT NULL;
 
 -- The Library Imports: Main imports both Libraries, Line 2 only Main
-INSERT INTO engineering.library_imports (project_id, library_id, commit_number, commit_id)
+INSERT INTO engineering.library_imports (project_id, library_id, saved_state_number, saved_state_id)
     SELECT i.project_id, i.library_id, 1, c.id
     FROM (VALUES
         ('b0000000-0000-4000-8000-000000000001'::uuid, 'd0000000-0000-4000-8000-000000000001'::uuid),
         ('b0000000-0000-4000-8000-000000000001'::uuid, 'd0000000-0000-4000-8000-000000000002'::uuid),
         ('b0000000-0000-4000-8000-000000000002'::uuid, 'd0000000-0000-4000-8000-000000000001'::uuid)) AS i(project_id, library_id)
     JOIN engineering.drafts d ON d.library_id = i.library_id
-    JOIN engineering.commits c ON c.draft_id = d.id AND c.number = 1
+    JOIN engineering.saved_states c ON c.draft_id = d.id AND c.number = 1
     ON CONFLICT (project_id, library_id) DO UPDATE
-    SET commit_number = EXCLUDED.commit_number, commit_id = EXCLUDED.commit_id;
+    SET saved_state_number = EXCLUDED.saved_state_number, saved_state_id = EXCLUDED.saved_state_id;
 
 -- Add test data for scenes table
 -- version: default committed version is 1

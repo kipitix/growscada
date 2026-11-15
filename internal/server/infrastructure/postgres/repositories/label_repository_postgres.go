@@ -162,19 +162,19 @@ func (r labelRepositoryPostgresImpl) Delete(ctx context.Context, l label.Label) 
 	})
 }
 
-func (r labelRepositoryPostgresImpl) Assign(ctx context.Context, l label.Label, commitID id.ID[draft.Commit]) (label.Label, error) {
-	assignedAt, ok := assignmentTime(l, commitID)
+func (r labelRepositoryPostgresImpl) Assign(ctx context.Context, l label.Label, savedStateID id.ID[draft.SavedState]) (label.Label, error) {
+	assignedAt, ok := assignmentTime(l, savedStateID)
 	if !ok {
-		return nil, fmt.Errorf("cannot assign label %s: the aggregate records no assignment of %s", l.ID(), commitID)
+		return nil, fmt.Errorf("cannot assign label %s: the aggregate records no assignment of %s", l.ID(), savedStateID)
 	}
 	err := r.assignmentTx(ctx, l, func(tx *sql.Tx) ([]event.Event, error) {
-		if err := lockCommitForAssignment(ctx, tx, commitID); err != nil {
+		if err := lockSavedStateForAssignment(ctx, tx, savedStateID); err != nil {
 			return nil, err
 		}
 		res, err := tx.ExecContext(ctx,
-			`INSERT INTO engineering.commit_labels (label_id, commit_id, assigned_at)
+			`INSERT INTO engineering.saved_state_labels (label_id, saved_state_id, assigned_at)
 			 VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`,
-			l.ID().UUID(), commitID.UUID(), assignedAt,
+			l.ID().UUID(), savedStateID.UUID(), assignedAt,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("cannot insert the assignment of label %s: %w", l.ID(), err)
@@ -196,11 +196,11 @@ func (r labelRepositoryPostgresImpl) Assign(ctx context.Context, l label.Label, 
 	return l, nil
 }
 
-func (r labelRepositoryPostgresImpl) Unassign(ctx context.Context, l label.Label, commitID id.ID[draft.Commit]) (label.Label, error) {
+func (r labelRepositoryPostgresImpl) Unassign(ctx context.Context, l label.Label, savedStateID id.ID[draft.SavedState]) (label.Label, error) {
 	err := r.assignmentTx(ctx, l, func(tx *sql.Tx) ([]event.Event, error) {
 		res, err := tx.ExecContext(ctx,
-			`DELETE FROM engineering.commit_labels WHERE label_id = $1 AND commit_id = $2`,
-			l.ID().UUID(), commitID.UUID(),
+			`DELETE FROM engineering.saved_state_labels WHERE label_id = $1 AND saved_state_id = $2`,
+			l.ID().UUID(), savedStateID.UUID(),
 		)
 		if err != nil {
 			return nil, fmt.Errorf("cannot delete the assignment of label %s: %w", l.ID(), err)
@@ -231,7 +231,7 @@ func (r labelRepositoryPostgresImpl) LabelsOfScope(ctx context.Context, organiza
 			if assignment.Scope() != scope {
 				continue
 			}
-			byNumber[assignment.CommitNumber()] = append(byNumber[assignment.CommitNumber()], l)
+			byNumber[assignment.SavedStateNumber()] = append(byNumber[assignment.SavedStateNumber()], l)
 		}
 	}
 	return byNumber, nil
@@ -275,28 +275,28 @@ func (r labelRepositoryPostgresImpl) assignmentTx(ctx context.Context, l label.L
 	return nil
 }
 
-// lockCommitForAssignment keeps a saved state from being removed while its mark
-// is written: deleting a Project or a Library deletes its saved states, so the
-// insert would fail on the foreign key otherwise. A saved state this server
-// lacks is draft.ErrCommitNotFound.
-func lockCommitForAssignment(ctx context.Context, tx *sql.Tx, commitID id.ID[draft.Commit]) error {
+// lockSavedStateForAssignment keeps a saved state from being removed while its
+// mark is written: deleting a Project or a Library deletes its saved states, so
+// the insert would fail on the foreign key otherwise. A saved state this server
+// lacks is draft.ErrSavedStateNotFound.
+func lockSavedStateForAssignment(ctx context.Context, tx *sql.Tx, savedStateID id.ID[draft.SavedState]) error {
 	var locked int
 	err := tx.QueryRowContext(ctx,
-		`SELECT 1 FROM engineering.commits WHERE id = $1 FOR SHARE`, commitID.UUID()).Scan(&locked)
+		`SELECT 1 FROM engineering.saved_states WHERE id = $1 FOR SHARE`, savedStateID.UUID()).Scan(&locked)
 	if errors.Is(err, sql.ErrNoRows) {
-		return fmt.Errorf("%w: %s", draft.ErrCommitNotFound, commitID)
+		return fmt.Errorf("%w: %s", draft.ErrSavedStateNotFound, savedStateID)
 	}
 	if err != nil {
-		return fmt.Errorf("cannot lock saved state %s: %w", commitID, err)
+		return fmt.Errorf("cannot lock saved state %s: %w", savedStateID, err)
 	}
 	return nil
 }
 
-// assignmentTime is the moment the label marks commitID, as the aggregate
+// assignmentTime is the moment the label marks savedStateID, as the aggregate
 // recorded it.
-func assignmentTime(l label.Label, commitID id.ID[draft.Commit]) (time.Time, bool) {
+func assignmentTime(l label.Label, savedStateID id.ID[draft.SavedState]) (time.Time, bool) {
 	for _, assignment := range l.Assignments() {
-		if assignment.CommitID() == commitID {
+		if assignment.SavedStateID() == savedStateID {
 			return assignment.AssignedAt(), true
 		}
 	}
@@ -306,9 +306,9 @@ func assignmentTime(l label.Label, commitID id.ID[draft.Commit]) (time.Time, boo
 // assignmentsByLabel reads the marks of the Organization's labels, keyed by
 // the label. With labelID set, only that label's.
 func (r labelRepositoryPostgresImpl) assignments(ctx context.Context, organizationID id.ID[organization.Organization], labelID *id.ID[label.Label]) (map[uuid.UUID][]label.Assignment, error) {
-	query := `SELECT cl.label_id, cl.commit_id, cl.assigned_at, c.number, d.project_id, d.library_id
-		 FROM engineering.commit_labels cl
-		 JOIN engineering.commits c ON c.id = cl.commit_id
+	query := `SELECT cl.label_id, cl.saved_state_id, cl.assigned_at, c.number, d.project_id, d.library_id
+		 FROM engineering.saved_state_labels cl
+		 JOIN engineering.saved_states c ON c.id = cl.saved_state_id
 		 JOIN engineering.drafts d ON d.id = c.draft_id
 		 JOIN engineering.labels l ON l.id = cl.label_id
 		 WHERE l.organization_id = $1`
@@ -326,12 +326,12 @@ func (r labelRepositoryPostgresImpl) assignments(ctx context.Context, organizati
 	byLabel := map[uuid.UUID][]label.Assignment{}
 	for rows.Next() {
 		var (
-			rawLabelID, rawCommitID uuid.UUID
-			assignedAt              time.Time
-			number                  int
-			projectID, libraryID    uuid.NullUUID
+			rawLabelID, rawSavedStateID uuid.UUID
+			assignedAt                  time.Time
+			number                      int
+			projectID, libraryID        uuid.NullUUID
 		)
-		if err := rows.Scan(&rawLabelID, &rawCommitID, &assignedAt, &number, &projectID, &libraryID); err != nil {
+		if err := rows.Scan(&rawLabelID, &rawSavedStateID, &assignedAt, &number, &projectID, &libraryID); err != nil {
 			return nil, fmt.Errorf("cannot scan label assignment: %w", err)
 		}
 		scope, err := scopeOfRow(projectID, libraryID)
@@ -339,7 +339,7 @@ func (r labelRepositoryPostgresImpl) assignments(ctx context.Context, organizati
 			return nil, err
 		}
 		assignment, err := label.NewAssignment(
-			id.NewID(id.IDWithUUID[draft.Commit](rawCommitID)), scope, number, assignedAt)
+			id.NewID(id.IDWithUUID[draft.SavedState](rawSavedStateID)), scope, number, assignedAt)
 		if err != nil {
 			return nil, fmt.Errorf("cannot read label assignment: %w", err)
 		}
@@ -351,7 +351,7 @@ func (r labelRepositoryPostgresImpl) assignments(ctx context.Context, organizati
 	return byLabel, nil
 }
 
-// scopeOfRow is the Draft's scope a commits row belongs to: its Draft names
+// scopeOfRow is the Draft's scope a savedStates row belongs to: its Draft names
 // exactly one Project or Library.
 func scopeOfRow(projectID, libraryID uuid.NullUUID) (draft.Scope, error) {
 	switch {

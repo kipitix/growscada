@@ -56,32 +56,32 @@ type Deployment struct {
 	DeployedAt     time.Time
 	Cause          DeploymentCause
 	RolledBackFrom *int
-	// CommitNumber is the saved state the Deployment made running (task
+	// SavedStateNumber is the saved state the Deployment made running (task
 	// 85_4): nil for a Deployment from a file, or one made before saved
 	// states were deployed.
-	CommitNumber *int
-	Content      projectv0.ProjectFile
+	SavedStateNumber *int
+	Content          projectv0.ProjectFile
 }
 
 // DeploymentSummary is a Deployment without its document: what a list of them
 // shows — the number, the time, the cause and the saved state.
 type DeploymentSummary struct {
-	Number         int
-	DeployedAt     time.Time
-	Cause          DeploymentCause
-	RolledBackFrom *int
-	CommitNumber   *int
+	Number           int
+	DeployedAt       time.Time
+	Cause            DeploymentCause
+	RolledBackFrom   *int
+	SavedStateNumber *int
 }
 
 // Summary returns the Deployment without its document: what a list of Deployments
 // carries.
 func (r Deployment) Summary() DeploymentSummary {
 	return DeploymentSummary{
-		Number:         r.Number,
-		DeployedAt:     r.DeployedAt,
-		Cause:          r.Cause,
-		RolledBackFrom: r.RolledBackFrom,
-		CommitNumber:   r.CommitNumber,
+		Number:           r.Number,
+		DeployedAt:       r.DeployedAt,
+		Cause:            r.Cause,
+		RolledBackFrom:   r.RolledBackFrom,
+		SavedStateNumber: r.SavedStateNumber,
 	}
 }
 
@@ -92,10 +92,10 @@ func (r Deployment) Summary() DeploymentSummary {
 type DeploymentRepository interface {
 	// CreateDeployment numbers and stores the Deployment of the Project: one
 	// transaction takes the next number, writes the document with cause and
-	// commitNumber and brings the Runtime node's copies of the Tag
+	// savedStateNumber and brings the Runtime node's copies of the Tag
 	// definitions, the Devices, the Environments and their pairs into line
 	// with it. The cause is deploy for a Deploy of a saved state and file for
-	// a project file (ADR 0018); a Rollback has its own method. commitNumber
+	// a project file (ADR 0018); a Rollback has its own method. savedStateNumber
 	// is the saved state the document came from, nil for a file deployment.
 	// A Deploy of the saved state the Project already runs is
 	// ErrNothingToDeploy, checked under the same lock that numbers the
@@ -103,7 +103,7 @@ type DeploymentRepository interface {
 	// a Tag whose TagType changed is reset to it, an unchanged Tag keeps its
 	// state — and so do the Device Tokens. Concurrent Deploys of one Project
 	// are serialized.
-	CreateDeployment(ctx context.Context, projectID uuid.UUID, file projectv0.ProjectFile, cause DeploymentCause, commitNumber *int, now time.Time) (Deployment, error)
+	CreateDeployment(ctx context.Context, projectID uuid.UUID, file projectv0.ProjectFile, cause DeploymentCause, savedStateNumber *int, now time.Time) (Deployment, error)
 
 	// Rollback copies the Deployment n of the Project into a new one numbered
 	// after the greatest stored: one transaction locks the Project — refusing
@@ -130,8 +130,8 @@ type DeploymentRepository interface {
 	FindByNumber(ctx context.Context, projectID uuid.UUID, n int) (Deployment, error)
 
 	// DeploymentNamesLibrary reports whether the running Deployment of any live
-	// Project names a saved state of this Library in its ProjectFile (task 71): the
-	// Engineering node asks before a Library is removed, because a Revert of
+	// Project names a saved state of this Library in its ProjectFile (task 71):
+	// the Engineering node asks before a Library is removed, because a Revert of
 	// such a Deployment could not restore the import. A Project that runs no
 	// Deployment names nothing.
 	DeploymentNamesLibrary(ctx context.Context, libraryID uuid.UUID) (bool, error)

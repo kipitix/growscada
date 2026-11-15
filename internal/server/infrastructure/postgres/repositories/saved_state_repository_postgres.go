@@ -18,12 +18,12 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/version"
 )
 
-// SaveCommit fixes the Draft as a saved state (see draft.Repository, task 72_2,
-// ADR 0021). The content is assembled by the caller before the transaction;
-// the Draft's row lock and the Version check make the snapshot the Draft at
-// expected, and a write that landed during the build is a conflict.
-func (r draftRepositoryPostgres) SaveCommit(ctx context.Context, scope draft.Scope, expected version.Version[draft.Draft], title draft.CommitTitle, author draft.Author, content draft.CommitContent) (draft.Commit, error) {
-	var result draft.Commit
+// SaveSavedState fixes the Draft as a saved state (see draft.Repository, task
+// 72_2, ADR 0021). The content is assembled by the caller before the
+// transaction; the Draft's row lock and the Version check make the snapshot the
+// Draft at expected, and a write that landed during the build is a conflict.
+func (r draftRepositoryPostgres) SaveSavedState(ctx context.Context, scope draft.Scope, expected version.Version[draft.Draft], title draft.SavedStateTitle, author draft.Author, content draft.SavedStateContent) (draft.SavedState, error) {
+	var result draft.SavedState
 	err := r.inTx(ctx, func(tx *sql.Tx) ([]event.Event, error) {
 		row, err := lockDraftRow(ctx, tx, scope, true, true)
 		if err != nil {
@@ -37,37 +37,37 @@ func (r draftRepositoryPostgres) SaveCommit(ctx context.Context, scope draft.Sco
 		if row.cleanVersion == row.version {
 			return nil, fmt.Errorf("%w: %s", draft.ErrNothingToSave, scope)
 		}
-		number := row.lastCommitNumber + 1
-		commit, err := draft.NewCommit(scope, id.NewID(id.IDWithUUID[draft.Commit](uuid.New())), number,
+		number := row.lastSavedStateNumber + 1
+		savedState, err := draft.NewSavedState(scope, id.NewID(id.IDWithUUID[draft.SavedState](uuid.New())), number,
 			title, author, time.Now().UTC(), expected, content)
 		if err != nil {
 			return nil, err
 		}
-		encoded, err := json.Marshal(commit.Content())
+		encoded, err := json.Marshal(savedState.Content())
 		if err != nil {
-			return nil, fmt.Errorf("cannot encode the content of %s: %w", commit, err)
+			return nil, fmt.Errorf("cannot encode the content of %s: %w", savedState, err)
 		}
 		var storedAt time.Time
 		if err := tx.QueryRowContext(ctx,
-			`INSERT INTO engineering.commits (id, draft_id, number, title, author, created_at, draft_version, content)
+			`INSERT INTO engineering.saved_states (id, draft_id, number, title, author, created_at, draft_version, content)
 			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)
 			 RETURNING created_at`,
-			commit.ID().UUID(), row.id, number, title.String(), author.String(), commit.CreatedAt(), expected.Number(), encoded,
+			savedState.ID().UUID(), row.id, number, title.String(), author.String(), savedState.CreatedAt(), expected.Number(), encoded,
 		).Scan(&storedAt); err != nil {
 			return nil, fmt.Errorf("cannot insert the saved state of %s: %w", scope, err)
 		}
-		if err := insertCommitImports(ctx, tx, commit); err != nil {
+		if err := insertSavedStateImports(ctx, tx, savedState); err != nil {
 			return nil, err
 		}
 		if _, err := tx.ExecContext(ctx,
-			`UPDATE engineering.drafts SET last_commit_number = $2, last_commit_draft_version = $3, clean_version = $4, updated_at = now() WHERE id = $1`,
+			`UPDATE engineering.drafts SET last_saved_state_number = $2, last_saved_state_draft_version = $3, clean_version = $4, updated_at = now() WHERE id = $1`,
 			row.id, number, expected.Number(), expected.Number()); err != nil {
 			return nil, fmt.Errorf("cannot record the last saved state of %s: %w", scope, err)
 		}
 		// The event was recorded when the saved state was made; the returned saved
 		// state carries the time as stored.
-		pending := commit.PendingEvents()
-		result, err = draft.ReconstituteCommit(scope, commit.ID(), number, title, author, storedAt, expected, commit.Content())
+		pending := savedState.PendingEvents()
+		result, err = draft.ReconstituteSavedState(scope, savedState.ID(), number, title, author, storedAt, expected, savedState.Content())
 		if err != nil {
 			return nil, err
 		}
@@ -79,41 +79,41 @@ func (r draftRepositoryPostgres) SaveCommit(ctx context.Context, scope draft.Sco
 	return result, nil
 }
 
-// insertCommitImports writes the Library Imports a Project's ProjectFile
+// insertSavedStateImports writes the Library Imports a Project's ProjectFile
 // carries: they are the provenance of the saved state and what keeps an
 // imported Library from being deleted (task 71, task 85_6). A Library's saved
 // state has neither.
-func insertCommitImports(ctx context.Context, tx *sql.Tx, commit draft.Commit) error {
-	file, ok := commit.Content().ProjectFile()
+func insertSavedStateImports(ctx context.Context, tx *sql.Tx, savedState draft.SavedState) error {
+	file, ok := savedState.Content().ProjectFile()
 	if !ok {
 		return nil
 	}
 	for _, imported := range file.LibraryImports {
 		if _, err := tx.ExecContext(ctx,
-			`INSERT INTO engineering.commit_library_imports (commit_id, library_id, commit_number) VALUES ($1, $2, $3)`,
-			commit.ID().UUID(), imported.LibraryID, imported.Commit,
+			`INSERT INTO engineering.saved_state_library_imports (saved_state_id, library_id, saved_state_number) VALUES ($1, $2, $3)`,
+			savedState.ID().UUID(), imported.LibraryID, imported.Commit,
 		); err != nil {
-			return fmt.Errorf("cannot insert a library import of %s: %w", commit, err)
+			return fmt.Errorf("cannot insert a library import of %s: %w", savedState, err)
 		}
 	}
 	return nil
 }
 
-// RenameCommit changes the title of the saved state number of the Draft (see
-// draft.Repository).
-func (r draftRepositoryPostgres) RenameCommit(ctx context.Context, scope draft.Scope, number int, title draft.CommitTitle) (draft.Commit, error) {
-	var result draft.Commit
+// RenameSavedState changes the title of the saved state number of the Draft
+// (see draft.Repository).
+func (r draftRepositoryPostgres) RenameSavedState(ctx context.Context, scope draft.Scope, number int, title draft.SavedStateTitle) (draft.SavedState, error) {
+	var result draft.SavedState
 	err := r.inTx(ctx, func(tx *sql.Tx) ([]event.Event, error) {
 		if err := checkScopeLive(ctx, tx, scope); err != nil {
 			return nil, err
 		}
-		found, err := readCommit(ctx, tx, scope, number)
+		found, err := readSavedState(ctx, tx, scope, number)
 		if err != nil {
 			return nil, err
 		}
 		renamed := found.WithTitle(title)
 		if _, err := tx.ExecContext(ctx,
-			`UPDATE engineering.commits SET title = $2 WHERE id = $1`, found.ID().UUID(), title.String()); err != nil {
+			`UPDATE engineering.saved_states SET title = $2 WHERE id = $1`, found.ID().UUID(), title.String()); err != nil {
 			return nil, fmt.Errorf("cannot rename %s: %w", found, err)
 		}
 		result = renamed
@@ -125,21 +125,21 @@ func (r draftRepositoryPostgres) RenameCommit(ctx context.Context, scope draft.S
 	return result, nil
 }
 
-// FindCommits returns the Draft's saved states, newest first (see
+// FindSavedStates returns the Draft's saved states, newest first (see
 // draft.Repository). The filter's label keeps only the saved states it marks:
 // the join is in the query, never in memory.
-func (r draftRepositoryPostgres) FindCommits(ctx context.Context, scope draft.Scope, filter draft.CommitFilter) ([]draft.Commit, error) {
+func (r draftRepositoryPostgres) FindSavedStates(ctx context.Context, scope draft.Scope, filter draft.SavedStateFilter) ([]draft.SavedState, error) {
 	if err := checkScopeLive(ctx, r.db, scope); err != nil {
 		return nil, err
 	}
 	column, value := scopeColumn(scope)
 	args := []any{value}
 	query := `SELECT c.id, c.number, c.title, c.author, c.created_at, c.draft_version, c.content
-		 FROM engineering.commits c JOIN engineering.drafts d ON d.id = c.draft_id
+		 FROM engineering.saved_states c JOIN engineering.drafts d ON d.id = c.draft_id
 		 WHERE d.` + column + ` = $1`
 	if filter.LabelID != uuid.Nil {
-		query += ` AND EXISTS (SELECT 1 FROM engineering.commit_labels cl
-			WHERE cl.commit_id = c.id AND cl.label_id = $2)`
+		query += ` AND EXISTS (SELECT 1 FROM engineering.saved_state_labels cl
+			WHERE cl.saved_state_id = c.id AND cl.label_id = $2)`
 		args = append(args, filter.LabelID)
 	}
 	rows, err := r.db.QueryContext(ctx, query+` ORDER BY c.number DESC`, args...)
@@ -147,70 +147,70 @@ func (r draftRepositoryPostgres) FindCommits(ctx context.Context, scope draft.Sc
 		return nil, fmt.Errorf("cannot read the saved states of %s: %w", scope, err)
 	}
 	defer func() { _ = rows.Close() }()
-	commits := []draft.Commit{}
+	savedStates := []draft.SavedState{}
 	for rows.Next() {
-		commit, err := scanCommitRow(scope, rows.Scan)
+		savedState, err := scanSavedStateRow(scope, rows.Scan)
 		if err != nil {
 			return nil, fmt.Errorf("cannot read the saved states of %s: %w", scope, err)
 		}
-		commits = append(commits, commit)
+		savedStates = append(savedStates, savedState)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("cannot read the saved states of %s: %w", scope, err)
 	}
-	return commits, nil
+	return savedStates, nil
 }
 
-// FindLastCommit returns the Draft's newest saved state, if it has one (see
+// FindLastSavedState returns the Draft's newest saved state, if it has one (see
 // draft.Repository). It is one row: a Discard needs no other saved state.
-func (r draftRepositoryPostgres) FindLastCommit(ctx context.Context, scope draft.Scope) (draft.Commit, bool, error) {
+func (r draftRepositoryPostgres) FindLastSavedState(ctx context.Context, scope draft.Scope) (draft.SavedState, bool, error) {
 	if err := checkScopeLive(ctx, r.db, scope); err != nil {
 		return nil, false, err
 	}
 	column, value := scopeColumn(scope)
 	row := r.db.QueryRowContext(ctx,
 		`SELECT c.id, c.number, c.title, c.author, c.created_at, c.draft_version, c.content
-		 FROM engineering.commits c JOIN engineering.drafts d ON d.id = c.draft_id
+		 FROM engineering.saved_states c JOIN engineering.drafts d ON d.id = c.draft_id
 		 WHERE d.`+column+` = $1 ORDER BY c.number DESC LIMIT 1`, value)
-	commit, err := scanCommitRow(scope, row.Scan)
+	savedState, err := scanSavedStateRow(scope, row.Scan)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, false, nil
 	}
 	if err != nil {
 		return nil, false, fmt.Errorf("cannot read the last saved state of %s: %w", scope, err)
 	}
-	return commit, true, nil
+	return savedState, true, nil
 }
 
-// FindCommit returns the saved state number of the Draft (see
+// FindSavedState returns the saved state number of the Draft (see
 // draft.Repository).
-func (r draftRepositoryPostgres) FindCommit(ctx context.Context, scope draft.Scope, number int) (draft.Commit, error) {
+func (r draftRepositoryPostgres) FindSavedState(ctx context.Context, scope draft.Scope, number int) (draft.SavedState, error) {
 	if err := checkScopeLive(ctx, r.db, scope); err != nil {
 		return nil, err
 	}
-	return readCommit(ctx, r.db, scope, number)
+	return readSavedState(ctx, r.db, scope, number)
 }
 
-// readCommit reads one saved state of the Draft of scope.
-func readCommit(ctx context.Context, q queryRower, scope draft.Scope, number int) (draft.Commit, error) {
+// readSavedState reads one saved state of the Draft of scope.
+func readSavedState(ctx context.Context, q queryRower, scope draft.Scope, number int) (draft.SavedState, error) {
 	column, value := scopeColumn(scope)
 	row := q.QueryRowContext(ctx,
 		`SELECT c.id, c.number, c.title, c.author, c.created_at, c.draft_version, c.content
-		 FROM engineering.commits c JOIN engineering.drafts d ON d.id = c.draft_id
+		 FROM engineering.saved_states c JOIN engineering.drafts d ON d.id = c.draft_id
 		 WHERE d.`+column+` = $1 AND c.number = $2`, value, number)
-	commit, err := scanCommitRow(scope, row.Scan)
+	savedState, err := scanSavedStateRow(scope, row.Scan)
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, fmt.Errorf("%w: %d of %s", draft.ErrCommitNotFound, number, scope)
+		return nil, fmt.Errorf("%w: %d of %s", draft.ErrSavedStateNotFound, number, scope)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("cannot read saved state %d of %s: %w", number, scope, err)
 	}
-	return commit, nil
+	return savedState, nil
 }
 
-// scanCommitRow rebuilds a saved state from a row: id, number, title, author,
-// created_at, draft_version and the encoded content.
-func scanCommitRow(scope draft.Scope, scan func(...any) error) (draft.Commit, error) {
+// scanSavedStateRow rebuilds a saved state from a row: id, number, title,
+// author, created_at, draft_version and the encoded content.
+func scanSavedStateRow(scope draft.Scope, scan func(...any) error) (draft.SavedState, error) {
 	var (
 		rawID        uuid.UUID
 		number       int
@@ -223,7 +223,7 @@ func scanCommitRow(scope draft.Scope, scan func(...any) error) (draft.Commit, er
 	if err := scan(&rawID, &number, &rawTitle, &rawAuthor, &createdAt, &draftVersion, &contentJSON); err != nil {
 		return nil, err
 	}
-	title, err := draft.NewCommitTitle(rawTitle)
+	title, err := draft.NewSavedStateTitle(rawTitle)
 	if err != nil {
 		return nil, fmt.Errorf("stored saved state %d: %w", number, err)
 	}
@@ -231,7 +231,7 @@ func scanCommitRow(scope draft.Scope, scan func(...any) error) (draft.Commit, er
 	if err != nil {
 		return nil, fmt.Errorf("stored saved state %d: %w", number, err)
 	}
-	var content draft.CommitContent
+	var content draft.SavedStateContent
 	if err := json.Unmarshal(contentJSON, &content); err != nil {
 		return nil, fmt.Errorf("stored saved state %d: %w", number, err)
 	}
@@ -239,7 +239,7 @@ func scanCommitRow(scope draft.Scope, scan func(...any) error) (draft.Commit, er
 	if err != nil {
 		return nil, fmt.Errorf("stored saved state %d: %w", number, err)
 	}
-	return draft.ReconstituteCommit(scope, id.NewID(id.IDWithUUID[draft.Commit](rawID)), number,
+	return draft.ReconstituteSavedState(scope, id.NewID(id.IDWithUUID[draft.SavedState](rawID)), number,
 		title, author, createdAt, version, content)
 }
 
