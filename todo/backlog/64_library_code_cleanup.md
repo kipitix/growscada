@@ -4,13 +4,21 @@ Priority: 3
 
 Появилось при ревью задачи 33 (находки №10–13). Это не ошибки в поведении (кроме недетерминированного сообщения growctl), а места, где код легко разойдётся при следующих изменениях.
 
-- **Порядок проверки обязательных полей в growctl** (`internal/growctl/manifest.go`, `validateWidgetType`, и `spec.libraryPins` в `validateProject`). Обязательные поля проверяются обходом map, порядок которого в Go случаен. Если в документе нет ни `html`, ни `width`, growctl сообщает то одно, то другое, и тесты на текст ошибки нестабильны. Проверять в фиксированном порядке (срез полей) и, лучше, сообщать обо всех пропущенных полях сразу.
-- **`library.WithNumber`** (`domain/library/library_release.go`) используется только в тесте репозитория. По комментарию она нужна для повтора при гонке за номер, но `LibraryService.Release` собирает релиз заново, а сама функция обходит проверку `DraftDiffers`. Удалить её; в тесте собрать релиз нужного номера через `CreateRelease` поверх последнего.
-- **Дубль CAS в репозитории закреплений** (`postgres/repositories/library_pin_repository_postgres.go`). `Save` и `Delete` заново реализуют шаг версии (Initial→Committed, Next) и транзакцию из `aggregateStore.save`/`delete`, хотя у `aggregateStore` есть хук `lock` как раз для такой блокировки. Перевести закрепления на `aggregateStore`, передав `lockForChange` хуком, чтобы изменения CAS и классификации конфликтов доходили и до них.
-- **Разбор версии клиента в шести местах** (`application/`: `libraryVersion` в `LibraryService`, inline в `LibraryPinService`, `WidgetTypeService`, `ProjectService`, `SceneService`). Правило одно: «отрицательная версия — это ошибка ввода клиента (400), а не конфликт». Свести к обобщённой `clientVersion[T](raw int) (version.Version[T], error)` с одной формулировкой ошибки.
+## Что осталось
+
+- **Порядок проверки обязательных полей в growctl** (`internal/growctl/manifest.go`): `validateWidgetType` обходит map при проверке `html`/`script`/`width`/`height`, а `validateProject` — `spec.libraryImports`; порядок в Go случаен. Если в документе нет двух полей, growctl сообщает то одно, то другое, и тесты на текст ошибки нестабильны. Проверять в фиксированном порядке (срез полей) и, лучше, сообщать обо всех пропущенных сразу.
+- **Разбор версии клиента в четырёх местах** (`application/`): `libraryVersion` в `LibraryService`, inline в `TagService` (`draftVersion`), `ProjectService` и `runtime/tag_state_service.go`. Правило одно: «отрицательная версия — это ошибка ввода клиента (400), а не конфликт». Свести к обобщённой `clientVersion[T](raw int) (version.Version[T], error)` с одной формулировкой ошибки.
 - `make build`, `make test`, `make bruno_test` проходят без изменений в API.
+
+## Закрыто до этой задачи
+
+- `library.WithNumber` и `library_release.go` удалены задачей 85_7; `DraftDiffers` и Release-путь тоже.
+- CAS в репозитории закреплений: `library_pin_repository_postgres.go` больше нет — импорты стали сущностями Draft'а (`library_import_repository_postgres.go` только читает), поэтому дубль CAS исчез вместе с пинами.
+- `spec.libraryPins` переименован в `spec.libraryImports` (85_6), проверка обязательных полей у него осталась.
+- N+1 в `LibraryService.describeAll` (`FindLastCommit` + чтение Draft'а на каждую библиотеку) передан в задачу 63: это поведение `GET /libraries` и событий, а не чистка growctl.
 
 ## Comments
 
-- 2026-11-07: `WithNumber`, `DraftDiffers` и Release-путь меняются в 72_2/72_5 (Release из Commit). Выполнять после 72_5, иначе чистка разойдётся с новой моделью.
-- 2026-11-15: `library_release.go`, `WithNumber` и Release-путь удалены задачей 85_7, а `spec.libraryPins` стал `spec.libraryImports`; оставшиеся находки пересмотреть перед выполнением.
+- 2026-11-07: `WithNumber`, `DraftDiffers` и Release-путь меняются в 72_2/72_5 (Release из saved state). Выполнять после 72_5, иначе чистка разойдётся с новой моделью.
+- 2026-11-15: сверено с кодом. Задачи 72_5 и 85_7 закрыты: два пункта из четырёх отпали (см. «Закрыто»), разбор версии сократился с шести мест до четырёх, дубль CAS ушёл вместе с пинами. Остались порядок полей в growctl и разбор версии; N+1 по решению от 2026-11-15 живёт в 63.
+

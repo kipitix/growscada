@@ -6,10 +6,10 @@ Priority: 3
 
 ## Что не так сейчас
 
-- Сервисы application (`SceneService`, `TagService`, `WidgetTypeService`) смешивают `Find…` и мутации в одном интерфейсе.
-- Репозитории агрегатов обслуживают обе стороны. `SceneRepository.FindAll` поднимает полные Scene со всеми Widgets, хотя списку вкладок нужны только id, имя и Version. `FindWidgetsBySceneID` грузит Scene целиком ради её Widgets.
+- Сервисы application (`TagService`, `SceneService`, `WidgetTypeService`, `DeviceService`, `EnvironmentService`) смешивают `Find…` и мутации в одном интерфейсе.
+- Репозитории агрегатов обслуживают обе стороны. `SceneRepository.FindAll` поднимает полные Scene со всеми Widgets, хотя списку Scenes нужны только id, имя и Version. `FindWidgetsBySceneID` грузит Scene целиком ради её Widgets; `TagRepository.FindAll` и `FindAllInLiveProject` читают определения Tag'ов, чтобы отдать список.
 - Чтение проходит через `Reconstitute` и value objects — инварианты записи оплачиваются на каждом GET.
-- Форма ответа выводится из агрегата (`appdto`), а не из нужд экрана. Operation собирает одну Scene с живыми значениями из четырёх запросов: `/widget-types`, `/scenes`, `/scenes/{id}/widgets`, `/tags`.
+- Форма ответа выводится из агрегата (`appdto`), а не из нужд экрана. Редактор Project собирает экран из `/libraries/{id}/widget-types`, `/projects/{id}/scenes`, `…/scenes/{id}/widgets` и `/projects/{id}/tags`; Library — из своего Draft'а и списка WidgetTypes.
 
 ## Что сделать
 
@@ -23,7 +23,7 @@ Priority: 3
 ## Ограничения
 
 - Ступень 2 (отдельные read-таблицы, обновляемые проектором по событиям) — не здесь. Если понадобится, проектор строится на механизме `policy_jobs` (задача 21, ADR 0008): задание с ключом агрегата пересобирает строку проекции из текущего состояния (Event Notification, не event sourcing — ADR 0002).
-- Revision/ProjectFile (модель чтения Runtime node), Commit с лейблами и фильтром (read-модель Engineering node, 72_2, 85_2–85_3) и Journal + Checkpoint (модель чтения History и Player) — уже отдельные модели. Эта задача касается модели Draft на Engineering node и временного Operation поверх текущих таблиц.
+- Уже отдельные модели чтения: Operation (`GET …/operation`, `OperationStateService`, ADR 0020) и History/Player (Journal + Checkpoint, ADR 0019/0023); Deployment/ProjectFile (модель чтения Runtime node); сохранённые состояния с лейблами и фильтром (`GET …/commits`, ADR 0021/0025) — но они читаются репозиторием Draft'а, а не `readmodel`. Эта задача касается модели Draft на Engineering node и экранов поверх текущих таблиц.
 
 ## Приёмка
 
@@ -34,3 +34,4 @@ Priority: 3
 ## Comments
 
 - 2026-10-11 (grilling задачи 21): делать, когда первому экрану станет неудобна форма агрегата — вероятнее всего, Operation/Player (задача 43). До тех пор выгода мала: объёмы CRUD-ные.
+- 2026-11-15: сверено с кодом после цепочки 85. Operation получил собственную read-модель (`GET /projects/{id}/operation`) и больше не собирает сцену из четырёх запросов — прежний пример устарел. Оставшаяся боль — экраны Draft'а (Project и Library) и `FindAll` репозиториев, поэтому задача в силе, но мотивация теперь у них, а не у Operation.

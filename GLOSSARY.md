@@ -141,12 +141,12 @@ One Engineer intent applied to the Draft — possibly touching several parts of 
 _Avoid_: edit, step, command, operation
 
 **Commit**:
-An immutable, numbered snapshot of the whole Draft, fixed by a Save: its canonical ProjectFile for a Project, its WidgetTypes for a Library, with a title, the Author and the time (task 72_2; ADR 0021). It is an entity of the Draft, not a DraftChange: writing it raises no Version and clears no undo stack. A Project's Commit can be deployed; a Library's can be imported by a Project. The UI calls it a **saved state** (task 84) — the code and the REST API keep the name Commit, and the two name one thing.
-_Avoid_: revision, version, checkpoint, snapshot (unqualified)
+The former name of a saved state. The term is gone: prose says saved state, and the identifiers are being renamed to `SavedState`/`saved_state` by task 88 — until that chain lands, the code, the tables and the REST API still carry `draft.Commit`, `/commits`, `commit_number` and `commit_*` events. Do not use it in new prose, names or APIs.
+_Avoid_: Commit (use saved state), revision, version, checkpoint, snapshot
 
 **Saved state**:
-The name the PWA gives a Commit (task 84): what a Save fixes, what the History lists, and what a person may load back into the Draft (`POST …/commits/{n}/load`) or choose in Deploy and Import. It is a name for people, not a second concept: the domain, the tables and the API say Commit, and a document that speaks of the API may say either.
-_Avoid_: snapshot, checkpoint, revision, save point
+The immutable, numbered snapshot of the whole Draft, fixed by a Save: its canonical ProjectFile for a Project, its WidgetTypes for a Library, with a title, the Author and the time (task 72_2; ADR 0021). It is an entity of the Draft, not a DraftChange: writing it raises no Version and clears no undo stack. A Project's saved state can be deployed; a Library's can be imported by a Project. It is the one name for the concept — in prose, the code (`draft.SavedState`), the tables (`saved_states`), the REST API (`/saved-states`, `saved_state_number`) and the UI (`Saved state #N`). It was called Commit before task 88.
+_Avoid_: commit, snapshot, checkpoint, revision, save point
 
 **Label**:
 A named mark with an optional color that an Engineer puts on saved states to group and filter them: a saved state may carry any number of labels, and one label may mark any number of saved states. Its name is unique in the Organization without regard to case. It belongs to the Organization, not to a Project or a Library, and it is not content: no Draft, Commit's ProjectFile or Deployment carries it. A Label owns its assignments.

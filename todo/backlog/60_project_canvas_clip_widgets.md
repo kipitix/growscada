@@ -1,5 +1,6 @@
 # Обрезать виджеты по краю Scene на холсте Project
 Status: needs-triage
+Priority: 3
 
 Появилось на код-ревью задачи 27. Холст Operation (`livescene.View`) обрезает всё по краю Scene (`overflow: hidden`), а холст Project (`project/render_scene.go`, `renderSceneCanvas`) — нет. Виджет, частично вынесенный за край Scene, в Project рисуется целиком поверх `var(--bg-inset)` вокруг холста, а в Operation обрезан по краю фона. Engineer снова не видит то, что увидит Operator.
 
@@ -11,3 +12,7 @@ Status: needs-triage
 ## Приёмка
 
 - Виджет, вынесенный за правый/нижний край Scene, в Project обрезан по краю так же, как в Operation; у выделенного такого виджета ручки видны за краем и работают.
+
+## Comments
+
+- 2026-11-15: сверено с кодом после цепочки 85. Контекст верен: `uiutil.SceneWidgetLayer` — отдельный слой без обрезки (`isolation: isolate`), `renderCanvas` — область с `overflow: auto`, содержимое виджета обрезается своим `overflow: hidden` (это не край Scene). Задача в силе.

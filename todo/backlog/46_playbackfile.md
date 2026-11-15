@@ -12,3 +12,4 @@ Blocked by: 45
 ## Comments
 
 - 2026-10-04: бывший тикет 11 задачи 36. Решения Q23–Q25: PlaybackFile (Deployments + Journal + Checkpoints за период) на сервере открывается только для просмотра в History.
+- 2026-11-15: сверено с кодом. `contract/record/v0` описывает Journal и Checkpoint (MINOR 0.6, с `commit_number`), PlaybackFile пока только назван в комментарии пакета и `GLOSSARY.md` — формат не смоделирован.

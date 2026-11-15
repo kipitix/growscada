@@ -1,5 +1,6 @@
 # 410 Gone на старых путях контента вместо голого 404
 Status: needs-triage
+Priority: 3
 
 Появилось при ревью задачи 31 (находка №1). В REST API 0.4 Tags и Scenes (вместе с Widgets) переехали под `/api/v0/projects/{project_id}/…`. На старые пути `/api/v0/tags…` и `/api/v0/scenes…` `http.ServeMux` отвечает своим текстовым 404: не Problem Details и без подсказки, куда переехал ресурс. По правилам проекта версию подняли верно (MINOR, пока MAJOR = 0), но старые клиенты ломаются молча:
 
@@ -11,9 +12,13 @@ Status: needs-triage
 
 Требования:
 
-- Маршруты `/api/v0/tags`, `/api/v0/tags/`, `/api/v0/scenes`, `/api/v0/scenes/` (любой метод) отвечают 410 Gone в формате Problem Details (`NewGone`). Деталь говорит, что ресурс переехал под `/api/v0/projects/{project_id}/…`. Образец — `preVersioningGone` для `/api/v1` в `restapi/router.go`.
+- Маршруты `/api/v0/tags`, `/api/v0/tags/`, `/api/v0/scenes`, `/api/v0/scenes/` (любой метод) отвечают 410 Gone в формате Problem Details (`NewGone`). Деталь говорит, что ресурс переехал под `/api/v0/projects/{project_id}/…`. Образец — `preVersioningGone` для `/api/v1` и `removed_routes.go` (EditLock, Revision, Deploy Draft'а) в `restapi/router.go`.
 - У старого `devicelink` 410 — не `ErrNotFound` и не временная ошибка: запись завершается ошибкой и повторяется на следующем тике, а не теряет тег. Проверить это тестом.
 - Шим удаляется вместе с `/api/v1` при выходе API 1.0. Отметить это в комментарии, как у `preVersioningPathPrefix`.
-- Решить, нужен ли общий 404 в формате Problem Details для любого неизвестного пути под `/api/v0/`. К переезду он не относится, но вписывается в ту же правку.
+- Решить, нужен ли общий 404 в формате Problem Details для любого неизвестного пути под `/api/v0/`. Сейчас его нет: `ServeMux` отдаёт текстовый 404, поэтому к переезду это не относится, но вписывается в ту же правку.
 - Bruno: каждый новый маршрут покрыть запросом с проверкой 410, заголовка `GrowSCADA-Schema-Version` и `application/problem+json` (по образцу `get_pre_versioning_path.yml`); статическая проверка `TestBrunoCollection` требует покрытия каждого маршрута.
 - Контракт и форма ответов не меняются: SchemaVersion не поднимать.
+
+## Comments
+
+- 2026-11-15: сверено с кодом после цепочки 85 (API MINOR 0.42). Заглушек для `/api/v0/tags` и `/api/v0/scenes` по-прежнему нет, `GET /api/v0/events` без `?project=` открывает только серверный поток — задача в силе. Заглушки `removed_routes.go` и `preVersioningGone` дают готовый образец.
