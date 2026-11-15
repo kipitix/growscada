@@ -241,7 +241,7 @@ func (r *Root) chooseEntity(ctx app.Context, mode Mode, item picker.Item) {
 	r.SetMode(mode)
 	r.storeMode()
 	if m := r.modeView(mode); m != nil && m.picker != nil {
-		m.picker.Show(ctx, item.ID)
+		m.picker.Select(ctx, item.ID)
 	}
 }
 

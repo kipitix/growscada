@@ -222,9 +222,12 @@ func (p *Picker) Reload(ctx app.Context) {
 // Items returns the list as last loaded, in the server's order.
 func (p *Picker) Items() []Item { return p.items }
 
-// Show marks the entity id as the page's own selection without announcing it:
-// the main menu opened it, and Root has announced it already (task 89).
-func (p *Picker) Show(ctx app.Context, id uuid.UUID) {
+// Select marks the entity id as the page's own selection without announcing
+// it: the main menu opened it, and Root has announced it already. The drafts
+// of the entity the page showed go with it — a field edited in place, a new
+// entity not yet created, a delete to confirm — so nothing typed for one is
+// applied to another (task 89).
+func (p *Picker) Select(ctx app.Context, id uuid.UUID) {
 	if p.selected == id {
 		return
 	}
@@ -232,6 +235,7 @@ func (p *Picker) Show(ctx app.Context, id uuid.UUID) {
 	if item, ok := p.find(id); ok {
 		p.selectedName = item.Name
 	}
+	p.resetEdits()
 	p.screen = screenDetails
 	uiutil.StoreID(ctx, p.key, id)
 	if p.mounted {
@@ -442,12 +446,19 @@ func (p *Picker) selectByID(ctx app.Context, id uuid.UUID) {
 // sent anywhere, and closes the inline edit of the one shown: the field belongs
 // to that entity, not to the one picked now.
 func (p *Picker) selectItem(ctx app.Context, item Item) {
-	p.creating, p.createName, p.createError = false, "", ""
-	p.field, p.value, p.editError = fieldNone, "", ""
-	p.deleting, p.deleteValue, p.deleteError = false, "", ""
+	p.resetEdits()
 	p.report(ctx, item)
 	p.screen = screenDetails
 	ctx.Update()
+}
+
+// resetEdits drops the drafts of the page: a field edited in place, an entity
+// being created, a delete waiting for its confirmation. They belong to the
+// entity the page showed, not to the one picked next (task 82, task 89).
+func (p *Picker) resetEdits() {
+	p.creating, p.createName, p.createError = false, "", ""
+	p.field, p.value, p.editError = fieldNone, "", ""
+	p.deleting, p.deleteValue, p.deleteError = false, "", ""
 }
 
 // open shows the editor of id: the Open button of the details pane, or a

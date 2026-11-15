@@ -871,7 +871,7 @@ type modeView struct {
 type listPage interface {
 	app.UI
 	Reload(app.Context)
-	Show(app.Context, uuid.UUID)
+	Select(app.Context, uuid.UUID)
 }
 
 // renderLabelsButton opens the one Labels window of the header (task 85_2);

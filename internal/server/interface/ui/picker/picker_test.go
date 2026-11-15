@@ -782,3 +782,40 @@ func TestPicker_SelectingShowsTheDetailsOfOne(t *testing.T) {
 		t.Errorf("the selection was not reported: %v", f.selected)
 	}
 }
+
+// TestPicker_SelectDropsTheEditOfAnotherEntity: the main menu opens an entity
+// while the page edits another. The selection follows the entity opened, and
+// the field, the draft and the confirmation of the former entity go with it —
+// nothing typed for one is sent to the other (task 89).
+func TestPicker_SelectDropsTheEditOfAnotherEntity(t *testing.T) {
+	f := startProjects(t, func(api *apiclient.Client) {
+		for _, name := range []string{"Alpha", "Beta"} {
+			if _, err := api.CreateProject(context.Background(), apiv0.CreateProjectRequest{Name: name}); err != nil {
+				t.Fatalf("create %q: %v", name, err)
+			}
+		}
+	})
+	f.run()
+
+	f.selectByName("Alpha")
+	f.p.startEdit(f.p.compoCtx, fieldName)
+	f.p.value = "Typed for Alpha"
+	var beta Item
+	for _, item := range f.p.items {
+		if item.Name == "Beta" {
+			beta = item
+		}
+	}
+	f.p.Select(f.p.compoCtx, beta.ID)
+	f.run()
+
+	if f.p.selected != beta.ID {
+		t.Errorf("the page selects %v, want Beta", f.p.selected)
+	}
+	if f.p.field != fieldNone || f.p.value != "" || f.p.editError != "" {
+		t.Errorf("the edit of Alpha stays: field %q, value %q", f.p.field, f.p.value)
+	}
+	if f.p.creating || f.p.createName != "" || f.p.deleting {
+		t.Errorf("a draft of another entity stays: creating %t, deleting %t", f.p.creating, f.p.deleting)
+	}
+}
