@@ -55,7 +55,7 @@ type testServices struct {
 	draftChanges application.DraftChangesService
 	journal      runtimeapp.JournalService
 	operation    runtimeapp.OperationStateService
-	commits      application.SavedStateService
+	savedStates  application.SavedStateService
 	settings     application.SettingsService
 	labels       application.LabelService
 }
@@ -107,7 +107,7 @@ func newServicesPublishingTo(publish func(event.Event), opts ...repositories.Opt
 		deviceTokens: deviceTokens,
 		journal:      journal,
 		operation:    runtimeapp.NewOperationStateService(journal, deployments, states, runtimepg.NewCheckpointRepositoryPostgres(db)),
-		commits:      application.NewSavedStateService(content, libraryContent, application.NewProjectFileBuilder(content), widgetTypes, labelService),
+		savedStates:  application.NewSavedStateService(content, libraryContent, application.NewProjectFileBuilder(content), widgetTypes, labelService),
 		settings:     application.NewSettingsService(repositories.NewUserSettingsRepositoryPostgres(db), settings.SingleUser(), orgID),
 		labels:       labelService,
 	}
@@ -122,7 +122,7 @@ func (s testServices) services() restapi.Services {
 		Draft: s.draft, DraftChanges: s.draftChanges,
 		Discard: s.discard, Deploy: s.deploy, ProjectFiles: s.projectFiles, Deployments: s.deployments,
 		DeviceConfig: s.deviceConfig, DeviceTokens: s.deviceTokens,
-		Journal: s.journal, Operation: s.operation, SavedStates: s.commits,
+		Journal: s.journal, Operation: s.operation, SavedStates: s.savedStates,
 		Settings: s.settings, Labels: s.labels,
 	}
 }
@@ -142,15 +142,15 @@ func deployDeployment(t *testing.T, service runtimeapp.DeploymentService, file p
 	}
 }
 
-// deployDraftThroughServices saves the Draft as a Commit and deploys that
-// saved state: the order a Deploy takes since task 85_4.
+// deployDraftThroughServices saves the Draft as a saved state and deploys it:
+// the order a Deploy takes since task 85_4.
 func deployDraftThroughServices(t *testing.T, services testServices) {
 	t.Helper()
 	ctx := context.Background()
 	scope := draft.ProjectScope(mainProjectID)
-	saved, err := services.commits.Save(ctx, scope, services.draftVersion(t), "Save", "Ada")
+	saved, err := services.savedStates.Save(ctx, scope, services.draftVersion(t), "Save", "Ada")
 	if err != nil {
-		t.Fatalf("save commit: %v", err)
+		t.Fatalf("save a saved state: %v", err)
 	}
 	if _, err := services.deploy.Deploy(ctx, mainProject, saved.Number); err != nil {
 		t.Fatalf("deploy saved state: %v", err)
@@ -166,9 +166,9 @@ func deployDraftForProject(t *testing.T, services testServices, projectID uuid.U
 		t.Fatalf("draft state: %v", err)
 	}
 	scope := draft.ProjectScope(id.NewID(id.IDWithUUID[project.Project](projectID)))
-	saved, err := services.commits.Save(ctx, scope, state.Version, "Save", "Ada")
+	saved, err := services.savedStates.Save(ctx, scope, state.Version, "Save", "Ada")
 	if err != nil {
-		t.Fatalf("save commit: %v", err)
+		t.Fatalf("save a saved state: %v", err)
 	}
 	if _, err := services.deploy.Deploy(ctx, projectID, saved.Number); err != nil {
 		t.Fatalf("deploy saved state: %v", err)

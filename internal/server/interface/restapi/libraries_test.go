@@ -42,14 +42,14 @@ func TestLibraries_DraftSaveDiscard(t *testing.T) {
 	// A Save fixes the Draft as its saved state.
 	rec = serve(router, http.MethodPost, lp+"/saved-states", apiv0.CreateSavedStateRequest{Version: wt.Version, Title: "First", Author: "Ada"})
 	if rec.Code != http.StatusCreated {
-		t.Fatalf("POST commits: %d %s", rec.Code, rec.Body)
+		t.Fatalf("POST saved-states: %d %s", rec.Code, rec.Body)
 	}
-	commit := decodeBody[apiv0.SavedStateResponse](t, rec)
-	if commit.Number != 1 || commit.Title != "First" || commit.Author != "Ada" || commit.ContentCounts.WidgetTypes != 1 {
-		t.Errorf("saved state: %+v", commit)
+	saved := decodeBody[apiv0.SavedStateResponse](t, rec)
+	if saved.Number != 1 || saved.Title != "First" || saved.Author != "Ada" || saved.ContentCounts.WidgetTypes != 1 {
+		t.Errorf("saved state: %+v", saved)
 	}
-	if commits := decodeBody[apiv0.GetSavedStatesResponse](t, serve(router, http.MethodGet, lp+"/saved-states", nil)); len(commits.SavedStates) != 1 {
-		t.Errorf("GET commits: %+v", commits)
+	if list := decodeBody[apiv0.GetSavedStatesResponse](t, serve(router, http.MethodGet, lp+"/saved-states", nil)); len(list.SavedStates) != 1 {
+		t.Errorf("GET saved-states: %+v", list)
 	}
 
 	rec = serve(router, http.MethodPut, lp, apiv0.UpdateLibraryRequest{Name: name + "-renamed", Description: ptr("Renamed"), Version: created.Version})
@@ -57,7 +57,7 @@ func TestLibraries_DraftSaveDiscard(t *testing.T) {
 		t.Fatalf("PUT library: %d %s", rec.Code, rec.Body)
 	}
 	found := decodeBody[apiv0.GetLibrariesResponse](t, serve(router, http.MethodGet, p+"/libraries?name="+name+"-renamed", nil))
-	if len(found.Libraries) != 1 || found.Libraries[0].LatestSavedState != commit.Number || found.Libraries[0].HasUnsavedChanges {
+	if len(found.Libraries) != 1 || found.Libraries[0].LatestSavedState != saved.Number || found.Libraries[0].HasUnsavedChanges {
 		t.Errorf("GET ?name=: %+v", found)
 	}
 	if got := found.Libraries[0].Description; got != "Renamed" {
@@ -112,13 +112,13 @@ func TestLibraryImports_AddPreviewSwitchRemove(t *testing.T) {
 	if rec := serve(router, http.MethodPut, imports, apiv0.PutLibraryImportRequest{SavedState: 1}); rec.Code != http.StatusNotFound {
 		t.Errorf("importing a saved state that does not exist: %d, want 404", rec.Code)
 	}
-	commit := createLibrarySavedStateViaService(t, router, wtLibrary, wt.Version)
-	rec := serve(router, http.MethodPut, imports, apiv0.PutLibraryImportRequest{SavedState: commit.Number})
+	saved := createLibrarySavedStateViaService(t, router, wtLibrary, wt.Version)
+	rec := serve(router, http.MethodPut, imports, apiv0.PutLibraryImportRequest{SavedState: saved.Number})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("add import: %d %s", rec.Code, rec.Body)
 	}
 	added := decodeBody[apiv0.LibraryImportResponse](t, rec)
-	if added.SavedStateNumber != commit.Number || added.Title != "Save" || added.Author != "Ada" {
+	if added.SavedStateNumber != saved.Number || added.Title != "Save" || added.Author != "Ada" {
 		t.Errorf("the provenance of the import: %+v, want saved state 1 titled Save by Ada", added)
 	}
 
@@ -182,9 +182,9 @@ func TestLibraryImports_AddPreviewSwitchRemove(t *testing.T) {
 	}
 }
 
-func hasImport(list apiv0.GetLibraryImportsResponse, libraryID uuid.UUID, commit int) bool {
+func hasImport(list apiv0.GetLibraryImportsResponse, libraryID uuid.UUID, savedState int) bool {
 	for _, imported := range list.LibraryImports {
-		if imported.LibraryID == libraryID && imported.SavedStateNumber == commit {
+		if imported.LibraryID == libraryID && imported.SavedStateNumber == savedState {
 			return true
 		}
 	}
@@ -198,7 +198,7 @@ func createLibrarySavedStateViaService(t *testing.T, router servingRouter, libra
 	path := apiv0.PathPrefix + apiv0.LibraryPath(libraryID.String()) + "/saved-states"
 	rec := serve(router, http.MethodPost, path, apiv0.CreateSavedStateRequest{Version: version, Title: "Save", Author: "Ada"})
 	if rec.Code != http.StatusCreated {
-		t.Fatalf("POST commits: %d %s", rec.Code, rec.Body)
+		t.Fatalf("POST saved-states: %d %s", rec.Code, rec.Body)
 	}
 	return decodeBody[apiv0.SavedStateResponse](t, rec)
 }

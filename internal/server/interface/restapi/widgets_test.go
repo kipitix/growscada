@@ -73,8 +73,8 @@ func ensureTestWidgetType(t *testing.T) {
 	}
 }
 
-// saveAndImport saves the Draft of the library as a Commit and imports that
-// Commit in mainProject, in place of the import so far.
+// saveAndImport saves the Draft of the library as a saved state and imports
+// that saved state in mainProject, in place of the import so far.
 func saveAndImport(t *testing.T, libraryID uuid.UUID) {
 	t.Helper()
 	ctx := context.Background()
@@ -83,12 +83,12 @@ func saveAndImport(t *testing.T, libraryID uuid.UUID) {
 	if err != nil {
 		t.Fatalf("DraftState: %v", err)
 	}
-	commit, err := services.commits.Save(ctx,
+	saved, err := services.savedStates.Save(ctx,
 		draft.LibraryScope(id.NewID(id.IDWithUUID[library.Library](libraryID))), state.Version, "Save", "Ada")
 	if err != nil {
-		t.Fatalf("Save commit: %v", err)
+		t.Fatalf("save a saved state: %v", err)
 	}
-	if _, _, err := services.imports.PutLibraryImport(ctx, mainProject, libraryID, commit.Number, testDraftVersion(t, mainProject)); err != nil {
+	if _, _, err := services.imports.PutLibraryImport(ctx, mainProject, libraryID, saved.Number, testDraftVersion(t, mainProject)); err != nil {
 		t.Fatalf("PutLibraryImport: %v", err)
 	}
 }

@@ -224,11 +224,11 @@ func TestEventsHandlers_DeploymentCreated_CarriesTheDeploymentAndStaysInItsProje
 	waitFor(t, time.Second, func() bool { return strings.Contains(other.body(), ": connected") })
 
 	at := time.Date(2026, 11, 3, 10, 0, 0, 0, time.UTC)
-	commitNumber := 2
+	savedStateNumber := 2
 	bus.Publish(runtimeapp.NewDeploymentCreatedEvent(runtimeapp.Deployment{
 		Number:           3,
 		DeployedAt:       at,
-		SavedStateNumber: &commitNumber,
+		SavedStateNumber: &savedStateNumber,
 		Content:          projectv0.ProjectFile{Header: projectv0.Header{ProjectID: mainProject}},
 	}))
 	waitFor(t, time.Second, func() bool { return strings.Contains(rec.body(), "deployment_created") })

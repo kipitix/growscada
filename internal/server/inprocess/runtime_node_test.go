@@ -155,9 +155,9 @@ func (r *recordingDeployments) FindCurrent(context.Context, uuid.UUID) (runtimea
 	return r.current, r.hasCurrent, r.err
 }
 
-// TestRuntimeNode_DeployCommit_HandsOverTheSavedStateAndConvertsTheDeployment:
+// TestRuntimeNode_DeploySavedState_HandsOverTheSavedStateAndConvertsTheDeployment:
 // the Engineering node's DTO of a Deployment is the Runtime node's.
-func TestRuntimeNode_DeployCommit_HandsOverTheSavedStateAndConvertsTheDeployment(t *testing.T) {
+func TestRuntimeNode_DeploySavedState_HandsOverTheSavedStateAndConvertsTheDeployment(t *testing.T) {
 	projectID := uuid.New()
 	at := time.Date(2026, 11, 3, 10, 0, 0, 0, time.UTC)
 	file := projectv0.ProjectFile{Header: projectv0.Header{ProjectID: projectID}}
