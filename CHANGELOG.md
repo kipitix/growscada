@@ -1,5 +1,20 @@
 # growscada [CHANGELOG](https://keepachangelog.com/en/1.1.0/)
 
+## [0.0.104] - 2026-11-15
+
+### Changed
+
+- **Контракты, REST, события и клиент говорят saved state** (задача 88_2; ADR 0026 отменяет решение задачи 84 оставить `Commit` в API)
+  - `contract/api/v0` MINOR 0.42 → 0.43: `SavedStatePath`/`SavedStateLoadPath`/`SavedStateDeployPath`/`SavedStateLabelsPath` и путь `/saved-states`; `SavedStateResponse`/`GetSavedStatesResponse`/`SavedStateContentCounts`, `CreateSavedStateRequest`/`RenameSavedStateRequest`/`LoadSavedStateResponse`/`SavedStateLabelsResponse`; `PutLibraryImportRequest.saved_state`, `LibraryImportResponse.saved_state_number`, `LibraryResponse.latest_saved_state`, `DeploymentResponse` и `DeploymentSummaryResponse.saved_state_number`, `DiscardWarningResponse.saved_state`, `Event.saved_state`/`Event.saved_state_number`; события `saved_state_created`/`saved_state_title_updated` (номера типов не менялись, старые имена не публикуются); превью импорта — `?saved_state=`
+  - `contract/record/v0` MINOR 0.6 → 0.7: `Deployment.SavedStateNumber` (`saved_state_number`); кодек читает старый `commit_number`, поэтому Journal и Checkpoint, которые миграция не переписала, не теряются
+  - `contract/project/v0` MINOR 0.3 → 0.4: `LibraryImport.SavedState` (`library_imports[].saved_state`); строгий декод старого `commit` — 400 `file_issues`, а не импорт с потерянным номером
+  - REST: хендлеры, `routes()`, `apiEventTypes` и DTO названы saved state; старые маршруты `/commits…` (все методы, `load`, `deploy`, `projectfile`, `labels`) отвечают 410 `application/problem+json` с указанием нового пути и удаляются вместе с API 1.0
+  - миграции `engineering/20261116000001_saved_state_documents` и `runtime/20261116000001_saved_state_documents`: `saved_states.content`, `deployments.config`, Journal и Checkpoint переписаны на `saved_state`, у изменённых документов поднят `schema_version` (project 0.4, record 0.7); Down возвращает старые ключи поверх тех же строк
+  - DraftChange и outbox читают имена, которые были до переименования (`commit` в снимке импорта, тип `commit_created`/`commit_title_updated`), пока стек и очередь не опустеют: undo старого изменения восстанавливает импорт, а не падает на нулевом номере
+  - `apiclient` (типы, методы, пути, e2e), growctl и UI переведены на новые имена механически; пользовательские команды, флаги и колонка growctl, файлы и `data-*` UI — задача 88_3, проза и документы — 88_4
+  - Bruno: запросы и папки `…/commits…` переименованы, тела, `seq` и заголовки обновлены, добавлены 410-запросы старых путей; `make schemas` перегенерировал схемы, старые версии заморожены
+  - Проверки: `make build`, `make test`, `make bruno_test` (235 + 6 запросов); ручной обход PWA — Project (Save, saved states, rename, label, load, Deploy, Deployments, Import libraries, project file), Library (saved states, load), Labels, Operation
+
 ## [0.0.103] - 2026-11-15
 
 ### Changed
