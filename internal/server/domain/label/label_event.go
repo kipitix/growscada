@@ -16,7 +16,7 @@ type LabelEvent interface {
 }
 
 // LabelAssignmentEvent is recorded by Assign and Unassign: the label marks a
-// saved state, or stops marking it. It names the Draft's scope and the Commit's
+// saved state, or stops marking it. It names the Draft's scope and the saved state's
 // number, so a client can reload the history of the right Library or Project
 // (task 85_3; ADR 0025).
 type LabelAssignmentEvent interface {
@@ -88,14 +88,14 @@ func NewLabelDeletedEvent(anID id.ID[Label], opts ...event.EventOption) LabelDel
 	return &labelDeletedEventImpl{newLabelEvent(event.EventTypeLabelDeleted, anID, opts...)}
 }
 
-// NewLabelAssignedEvent records the mark of the Commit commitNumber of scope.
+// NewLabelAssignedEvent records the mark of the saved state commitNumber of scope.
 func NewLabelAssignedEvent(anID id.ID[Label], scope draft.Scope, commitNumber int, opts ...event.EventOption) LabelAssignedEvent {
 	e := newLabelEvent(event.EventTypeLabelAssigned, anID, opts...)
 	e.scope, e.commitNumber = scope, commitNumber
 	return &labelAssignedEventImpl{e}
 }
 
-// NewLabelUnassignedEvent records that the label no longer marks the Commit
+// NewLabelUnassignedEvent records that the label no longer marks the saved state
 // commitNumber of scope.
 func NewLabelUnassignedEvent(anID id.ID[Label], scope draft.Scope, commitNumber int, opts ...event.EventOption) LabelUnassignedEvent {
 	e := newLabelEvent(event.EventTypeLabelUnassigned, anID, opts...)

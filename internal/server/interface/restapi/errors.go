@@ -51,7 +51,7 @@ var (
 	deviceTokenResource = resource{name: "DeviceToken", pathParam: "device_id"}
 	// A Deployment is named by its number within its Project.
 	deploymentResource = resource{name: "Deployment", pathParam: "deployment_number"}
-	// A Commit is named by its number within its Draft. The name is what a
+	// A saved state is named by its number within its Draft. The name is what a
 	// person reads in a 404 and in a 409's title, so it says "Saved state", the
 	// UI's word for it (task 84); the path and the DTOs keep Commit.
 	commitResource = resource{name: "Saved state", pathParam: "commit_number"}
@@ -93,7 +93,7 @@ var errorMappings = []errorMapping{
 	{application.ErrNoDeploymentToDiscard, http.StatusConflict, projectResource,
 		"Nothing to revert: the project runs no deployment"},
 	{application.ErrNothingToDiscard, http.StatusConflict, projectResource,
-		"Nothing to discard: the project has no Commit to fall back to"},
+		"Nothing to discard: the project has no saved state to fall back to"},
 	{application.ErrNothingToOpen, http.StatusConflict, projectResource,
 		"Nothing to open: the Draft of the project is the project file"},
 	{application.ErrDraftNotDeployable, http.StatusConflict, projectResource,
@@ -119,7 +119,7 @@ var errorMappings = []errorMapping{
 	{library.ErrLibraryImported, http.StatusConflict, libraryResource, "Library is imported by Projects; remove the import first"},
 	{application.ErrLibraryInRunningDeployment, http.StatusConflict, libraryResource,
 		"Library is named by the running Deployment of a project; deploy a configuration without it first"},
-	{library.ErrNothingToDiscard, http.StatusConflict, libraryResource, "Library has no Commit: there is nothing to discard"},
+	{library.ErrNothingToDiscard, http.StatusConflict, libraryResource, "Library has no saved state: there is nothing to discard"},
 	{library.ErrWidgetTypeNotFound, http.StatusNotFound, widgetTypeResource, ""},
 	{library.ErrWidgetTypeNameTaken, http.StatusConflict, widgetTypeResource, "WidgetType name is already taken in the library"},
 	{libraryimport.ErrLibraryImportNotFound, http.StatusNotFound, libraryImportResource, ""},

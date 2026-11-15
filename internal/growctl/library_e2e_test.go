@@ -71,7 +71,7 @@ func TestLibrary_ApplyImportDiscardDelete(t *testing.T) {
 	assertOutput(t, out, "library/Gauges created", "widgettype/Gauges/Lamp created")
 
 	out, _, err = execGrowctl(t, srv, "", "save", "Gauges", "--title", "First", "--author", "tester")
-	if err != nil || out != "library/Gauges saved commit 1\n" {
+	if err != nil || out != "library/Gauges saved state 1\n" {
 		t.Fatalf("save: %q, %v", out, err)
 	}
 
@@ -91,7 +91,7 @@ func TestLibrary_ApplyImportDiscardDelete(t *testing.T) {
 		t.Fatalf("apply the edit: %q, %v", out, err)
 	}
 	if out, _, err = execGrowctl(t, srv, "", "save", "Gauges", "--title", "Wider", "--author", "tester"); err != nil ||
-		out != "library/Gauges saved commit 2\n" {
+		out != "library/Gauges saved state 2\n" {
 		t.Fatalf("save 2: %q, %v", out, err)
 	}
 	out, _, err = execGrowctl(t, srv, "", "commits", "Gauges", "--library")

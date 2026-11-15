@@ -58,7 +58,7 @@ func (l *Library) handleServerEvents(ctx app.Context) {
 		}
 		if targets.Commits && mine {
 			l.loadCommits(ctx)
-			l.loadUnsavedChanges(ctx) // a Save makes the Draft its Commit's content
+			l.loadUnsavedChanges(ctx) // a Save makes the Draft its saved state's content
 		}
 		if eventlog.IsLabelEvent(ev.Type) {
 			// The chips of the history and the labels its menu offers follow a
@@ -72,7 +72,7 @@ func (l *Library) handleServerEvents(ctx app.Context) {
 	})
 }
 
-// eventOfSelectedLibrary reports whether an event of a Library's Commit or a
+// eventOfSelectedLibrary reports whether an event of a Library's saved state or a
 // WidgetType of its Draft concerns the selected library. The
 // event names the library in ev.ID, and a WidgetType event in ev.LibraryID;
 // an event that names none concerns every one (task 72_7).

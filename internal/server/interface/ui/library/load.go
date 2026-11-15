@@ -84,7 +84,7 @@ func (l *Library) loadLibraries(ctx app.Context) {
 }
 
 // libraryGone handles a 404 of a read of the selected library — its Draft, the
-// state of the Draft, its stack of DraftChanges or its Commits:
+// state of the Draft, its stack of DraftChanges or its saved states:
 // the library was deleted, so it is left instead of an error being shown (ADR
 // 0007). The read is the one that is 404 only for a deleted library; a
 // command's 404 stays its own error. Root handles the action, leaves the
@@ -115,7 +115,7 @@ func (l *Library) loadList(ctx app.Context) {
 // loadDraftState (re)loads the state of the selected library's Draft: its
 // Version — the Draft of a library without a WidgetType carries it in no
 // content DTO, and every write of the Draft states it (ADR 0016) — and whether
-// it holds changes its last Commit does not (task 74). It is read on mount, on
+// it holds changes its last saved state does not (task 74). It is read on mount, on
 // a resync, after each content event and after each command.
 func (l *Library) loadDraftState(ctx app.Context) {
 	if l.libraryID == uuid.Nil {
@@ -146,7 +146,7 @@ func (l *Library) applyDraftState(mark uiutil.Mark, state apiv0.DraftStateRespon
 }
 
 // loadUnsavedChanges (re)loads whether the selected library's Draft holds
-// changes its last Commit does not, from the Draft's state, after a content
+// changes its last saved state does not, from the Draft's state, after a content
 // event of another tab. The answer states the server's Version too, but that is
 // not the Version the shown WidgetTypes were read at: advancing it would let an
 // edit of the stale content overwrite the other tab's change instead of being

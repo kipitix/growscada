@@ -12,7 +12,7 @@ import (
 const LibraryImportImpactQueryCommit = "commit"
 
 // LibraryImportResponse is the HTTP DTO of a Library Import: the saved state —
-// the Commit — of the Library the project uses, with its title, Author, time,
+// the saved state — of the Library the project uses, with its title, Author, time,
 // labels and the Version of the Project's Draft it was read at (task 85_6).
 type LibraryImportResponse struct {
 	LibraryID    uuid.UUID       `json:"library_id"`
@@ -32,7 +32,7 @@ type GetLibraryImportsResponse struct {
 
 // PutLibraryImportRequest is the HTTP DTO of PUT
 // /projects/{id}/library-imports/{library_id}: import the saved state numbered
-// Commit. A Project that imports no saved state of the library gets the
+// saved state. A Project that imports no saved state of the library gets the
 // import, one that imports another switches it; Version is the Version of the
 // Project's Draft the client saw (ADR 0016).
 type PutLibraryImportRequest struct {

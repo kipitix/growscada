@@ -171,9 +171,9 @@ type InputPort struct {
 	TypeHint    string `json:"type_hint"`
 }
 
-// LibraryImport is the saved state — the Commit — of a Library a Project's
+// LibraryImport is the saved state of a Library a Project's
 // Draft uses, by number: the provenance from which Discard restores the
-// Project's imports, and the Commits the copies of the WidgetTypes come from
+// Project's imports, and the saved states the copies of the WidgetTypes come from
 // (task 85_6).
 type LibraryImport struct {
 	LibraryID uuid.UUID `json:"library_id"`

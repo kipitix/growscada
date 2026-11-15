@@ -12,7 +12,7 @@ import (
 
 // DraftService reads the state of a Project's Draft (ADR 0016): the Version
 // every content write states and whether the Draft holds changes its last
-// Commit does not. It is what a client that has read no content yet — a Project
+// saved state does not. It is what a client that has read no content yet — a Project
 // with no Scenes and no Tags — reads the Version from.
 type DraftService interface {
 	// State returns the Version of the live Project's Draft and its
@@ -43,7 +43,7 @@ func (s draftServiceImpl) State(ctx context.Context, rawProjectID uuid.UUID) (ap
 	if !ok {
 		// A Draft whose row does not exist yet is a fresh one at version 1: the
 		// Version its first write states. It has no content to differ from a
-		// Commit, so it is clean.
+		// saved state, so it is clean.
 		return appdto.DraftState{Version: 1}, nil
 	}
 	return appdto.DraftState{Version: found.Version().Number(), HasUnsavedChanges: found.HasUnsavedChanges()}, nil

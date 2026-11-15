@@ -20,29 +20,29 @@ import (
 )
 
 // DiscardService is the Engineering node's resets of a Project's Draft
-// (ADR 0016, task 72_4, task 84): Discard replaces it with its last Commit —
-// the saved state, dropping unsaved work —, Load with a Commit the client
+// (ADR 0016, task 72_4, task 84): Discard replaces it with its last saved state —
+// the saved state, dropping unsaved work —, Load with a saved state the client
 // names, and Revert with the Deployment the Project runs. Each is one
 // transaction over the Draft.
 type DiscardService interface {
-	// Discard resets the live Project projectID's Draft to its last Commit,
+	// Discard resets the live Project projectID's Draft to its last saved state,
 	// dropping the unsaved changes. The written Draft is one change: its
 	// content is replaced, its DraftChange stack is cleared and its Version
-	// raised. A Library Import the Commit names but this server cannot write
+	// raised. A Library Import the saved state names but this server cannot write
 	// is dropped with the Widgets of its WidgetTypes, and reported in the
 	// answer's warnings: the Draft stays writable (task 71).
-	// Returns ErrNothingToDiscard if the Project has no Commit, and an error
+	// Returns ErrNothingToDiscard if the Project has no saved state, and an error
 	// wrapping project.ErrProjectNotFound if it is not live.
 	Discard(ctx context.Context, projectID uuid.UUID) (appdto.DiscardedDraft, error)
 	// Revert resets the Draft to the Deployment the Project runs, as Discard
 	// did before task 72_4. It refuses with ErrNoDeploymentToDiscard when the
 	// Project runs none.
 	Revert(ctx context.Context, projectID uuid.UUID) (appdto.DiscardedDraft, error)
-	// Load replaces the Draft with the content of the Project's Commit number,
+	// Load replaces the Draft with the content of the Project's saved state number,
 	// in one transaction: the saved state becomes what is edited, the
 	// DraftChange stack is cleared and the Version raised, as a Discard does.
-	// The Draft is clean exactly when that Commit is its last one. A Library
-	// Import the Commit names but this server cannot write is dropped with the
+	// The Draft is clean exactly when that saved state is its last one. A Library
+	// Import the saved state names but this server cannot write is dropped with the
 	// Widgets of its WidgetTypes and named in the answer (task 71).
 	// Returns draft.ErrCommitNotFound for a number the Project does not have and
 	// an error wrapping project.ErrProjectNotFound if it is not live.
@@ -71,11 +71,11 @@ func (s discardServiceImpl) Discard(ctx context.Context, rawProjectID uuid.UUID)
 	if err != nil {
 		return appdto.DiscardedDraft{}, err
 	}
-	// The newest Commit is what the Draft falls back to when its unsaved
+	// The newest saved state is what the Draft falls back to when its unsaved
 	// changes go.
 	last, found, err := s.content.Drafts().FindLastCommit(ctx, s.content.ScopeOf(projectID))
 	if err != nil {
-		return appdto.DiscardedDraft{}, fmt.Errorf("cannot read the last commit of project %s: %w", projectID, err)
+		return appdto.DiscardedDraft{}, fmt.Errorf("cannot read the last saved state of project %s: %w", projectID, err)
 	}
 	if !found {
 		return appdto.DiscardedDraft{}, fmt.Errorf("%w: %s", ErrNothingToDiscard, projectID)
@@ -87,8 +87,8 @@ func (s discardServiceImpl) Discard(ctx context.Context, rawProjectID uuid.UUID)
 	return appdto.DiscardedDraft{Version: result.Version().Number(), Warnings: warnings}, nil
 }
 
-// Load makes the Draft of the live Project the content of one of its Commits
-// (task 84): the same reset a Discard makes, to the Commit the client named
+// Load makes the Draft of the live Project the content of one of its saved states
+// (task 84): the same reset a Discard makes, to the saved state the client named
 // rather than the last one.
 func (s discardServiceImpl) Load(ctx context.Context, rawProjectID uuid.UUID, number int) (appdto.LoadedDraft, error) {
 	projectID, _, err := s.content.open(ctx, rawProjectID)
@@ -98,10 +98,10 @@ func (s discardServiceImpl) Load(ctx context.Context, rawProjectID uuid.UUID, nu
 	scope := s.content.ScopeOf(projectID)
 	commit, err := s.content.Drafts().FindCommit(ctx, scope, number)
 	if err != nil {
-		return appdto.LoadedDraft{}, fmt.Errorf("cannot read commit %d of project %s: %w", number, projectID, err)
+		return appdto.LoadedDraft{}, fmt.Errorf("cannot read saved state %d of project %s: %w", number, projectID, err)
 	}
 	// The loaded content is the Draft's clean state only when it is the last
-	// Commit: an older one leaves the Draft with unsaved changes (task 74).
+	// saved state: an older one leaves the Draft with unsaved changes (task 74).
 	// The comparison is the repository's, under the Draft's lock.
 	result, warnings, err := s.resetTo(ctx, projectID, commit, commit.Number())
 	if err != nil {
@@ -114,22 +114,22 @@ func (s discardServiceImpl) Load(ctx context.Context, rawProjectID uuid.UUID, nu
 	}, nil
 }
 
-// resetTo replaces the whole Draft of projectID with the content of commit in
+// resetTo replaces the whole Draft of projectID with the content of a saved state in
 // one transaction: the imports the content keeps are locked FOR SHARE in it, the
 // DraftChange stack is cleared and the Version raised, and no DraftChange is
-// written. cleanCommit is the number of the Commit whose content is written:
-// the Draft is clean exactly when that is its last Commit, compared under the
+// written. cleanCommit is the number of the saved state whose content is written:
+// the Draft is clean exactly when that is its last saved state, compared under the
 // Draft's lock (task 74). The Library Imports the content names but this server
 // lacks are dropped with the Widgets of their WidgetTypes and returned as
-// warnings, and they make the content no Commit's (task 71).
+// warnings, and they make the content no saved state's (task 71).
 func (s discardServiceImpl) resetTo(ctx context.Context, projectID id.ID[project.Project], commit draft.Commit, cleanCommit int) (draft.Draft, []appdto.DiscardWarning, error) {
 	file, ok := commit.Content().ProjectFile()
 	if !ok {
-		return nil, nil, fmt.Errorf("commit %d of project %s holds no project file", commit.Number(), projectID)
+		return nil, nil, fmt.Errorf("saved state %d of project %s holds no project file", commit.Number(), projectID)
 	}
 	content, err := contentOfProjectFile(projectID, file)
 	if err != nil {
-		return nil, nil, fmt.Errorf("cannot read commit %d of project %s: %w", commit.Number(), projectID, err)
+		return nil, nil, fmt.Errorf("cannot read saved state %d of project %s: %w", commit.Number(), projectID, err)
 	}
 	missing, err := missingLibraryImports(ctx, s.libraries, s.content.Drafts(), file)
 	if err != nil {
@@ -137,7 +137,7 @@ func (s discardServiceImpl) resetTo(ctx context.Context, projectID id.ID[project
 	}
 	content, warnings := dropMissingLibraryImports(content, file, missing)
 	if len(warnings) > 0 {
-		// What is written is no longer the Commit's content: the Draft keeps
+		// What is written is no longer the saved state's content: the Draft keeps
 		// its unsaved mark (task 71).
 		cleanCommit = 0
 	}
@@ -148,7 +148,7 @@ func (s discardServiceImpl) resetTo(ctx context.Context, projectID id.ID[project
 		return session.Replace(ctx, content)
 	})
 	if err != nil {
-		return nil, nil, fmt.Errorf("cannot load commit %d of project %s: %w", commit.Number(), projectID, err)
+		return nil, nil, fmt.Errorf("cannot load saved state %d of project %s: %w", commit.Number(), projectID, err)
 	}
 	return result, warnings, nil
 }
@@ -179,7 +179,7 @@ func (s discardServiceImpl) Revert(ctx context.Context, rawProjectID uuid.UUID) 
 		return appdto.DiscardedDraft{}, fmt.Errorf("cannot check the library imports of project %s: %w", projectID, err)
 	}
 	content, warnings := dropMissingLibraryImports(content, deployment.Content, missing)
-	// The Draft the Revert writes is its last Commit's content only when the
+	// The Draft the Revert writes is its last saved state's content only when the
 	// Deployment is exactly that and nothing of it was dropped: then it is
 	// clean, as after a Discard. A Deployment of another saved state, of a file or
 	// of an older state is a different content (task 74).
@@ -202,17 +202,17 @@ func (s discardServiceImpl) Revert(ctx context.Context, rawProjectID uuid.UUID) 
 	return appdto.DiscardedDraft{Version: result.Version().Number(), Warnings: warnings}, nil
 }
 
-// revertIsTheLastCommit returns the number of the Project's last Commit when
-// the document of the Deployment it runs is that Commit's content, and 0
-// otherwise: the Draft a Revert writes is then that Commit again and clean, as
-// after a Discard (task 74). A Project with no Commit, or a Deployment of
+// revertIsTheLastCommit returns the number of the Project's last saved state when
+// the document of the Deployment it runs is that saved state's content, and 0
+// otherwise: the Draft a Revert writes is then that saved state again and clean, as
+// after a Discard (task 74). A Project with no saved state, or a Deployment of
 // another content, is 0. The repository compares the number with the one it
 // holds under the Draft's lock, so a Save committed meanwhile keeps the Draft
 // unsaved.
 func (s discardServiceImpl) revertIsTheLastCommit(ctx context.Context, projectID id.ID[project.Project], document projectv0.ProjectFile) (int, error) {
 	last, found, err := s.content.Drafts().FindLastCommit(ctx, s.content.ScopeOf(projectID))
 	if err != nil {
-		return 0, fmt.Errorf("cannot read the last commit of project %s: %w", projectID, err)
+		return 0, fmt.Errorf("cannot read the last saved state of project %s: %w", projectID, err)
 	}
 	if !found {
 		return 0, nil
@@ -223,7 +223,7 @@ func (s discardServiceImpl) revertIsTheLastCommit(ctx context.Context, projectID
 	}
 	same, err := sameProjectFile(document, file)
 	if err != nil {
-		return 0, fmt.Errorf("cannot compare the deployment and the last commit of project %s: %w", projectID, err)
+		return 0, fmt.Errorf("cannot compare the deployment and the last saved state of project %s: %w", projectID, err)
 	}
 	if !same {
 		return 0, nil
@@ -256,7 +256,7 @@ func (s discardServiceImpl) lockDiscardedImports(ctx context.Context, content dr
 }
 
 // contentOfProjectFile rebuilds the content of a Project's Draft from the
-// ProjectFile a Deployment runs or a Commit fixed: the entities keep the
+// ProjectFile a Deployment runs or a saved state fixed: the entities keep the
 // identity they had when they were stored.
 func contentOfProjectFile(projectID id.ID[project.Project], file projectv0.ProjectFile) (draft.Content, error) {
 	var content draft.Content

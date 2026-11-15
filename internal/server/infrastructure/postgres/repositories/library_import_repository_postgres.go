@@ -19,8 +19,8 @@ import (
 // libraryImportRepositoryPostgresImpl reads the Library Imports of one
 // Project: every query names project_id. They are entities of the Project's
 // Draft (ADR 0016): their writes go through draftRepositoryPostgres. The
-// WidgetTypes they give the Project are the copies the imported Commits hold,
-// decoded from the Commit's content (task 85_6).
+// WidgetTypes they give the Project are the copies the imported saved states hold,
+// decoded from the saved state's content (task 85_6).
 type libraryImportRepositoryPostgresImpl struct {
 	db      *sql.DB
 	project id.ID[project.Project]
@@ -79,7 +79,7 @@ func (r libraryImportRepositoryPostgresImpl) readImports(ctx context.Context, an
 	return imports, nil
 }
 
-// importedWidgetTypesQuery selects the content of the Commits the Project $1
+// importedWidgetTypesQuery selects the content of the saved states the Project $1
 // imports, in the order of its imports.
 const importedWidgetTypesQuery = `SELECT c.content
 	FROM engineering.library_imports li
@@ -87,14 +87,14 @@ const importedWidgetTypesQuery = `SELECT c.content
 	WHERE li.project_id = $1
 	ORDER BY li.pk_id`
 
-// FindImportedWidgetTypes returns the WidgetTypes of every Commit the Project
-// imports, in the order of the imports and of each Commit's copies.
+// FindImportedWidgetTypes returns the WidgetTypes of every saved state the Project
+// imports, in the order of the imports and of each saved state's copies.
 func (r libraryImportRepositoryPostgresImpl) FindImportedWidgetTypes(ctx context.Context) ([]library.WidgetTypeCopy, error) {
 	return r.readImported(ctx, nil)
 }
 
 // FindImportedWidgetTypesByID returns the imported WidgetTypes with the given
-// IDs; an ID none of the Commits holds is left out.
+// IDs; an ID none of the saved states holds is left out.
 func (r libraryImportRepositoryPostgresImpl) FindImportedWidgetTypesByID(ctx context.Context, typeIDs []id.ID[library.WidgetType]) ([]library.WidgetTypeCopy, error) {
 	wanted := make(map[uuid.UUID]struct{}, len(typeIDs))
 	for _, typeID := range typeIDs {
@@ -103,7 +103,7 @@ func (r libraryImportRepositoryPostgresImpl) FindImportedWidgetTypesByID(ctx con
 	return r.readImported(ctx, wanted)
 }
 
-// readImported reads the WidgetTypes of the imported Commits, all of them or
+// readImported reads the WidgetTypes of the imported saved states, all of them or
 // only those whose IDs are in wanted.
 func (r libraryImportRepositoryPostgresImpl) readImported(ctx context.Context, wanted map[uuid.UUID]struct{}) ([]library.WidgetTypeCopy, error) {
 	rows, err := r.db.QueryContext(ctx, importedWidgetTypesQuery, r.project.UUID())
@@ -115,15 +115,15 @@ func (r libraryImportRepositoryPostgresImpl) readImported(ctx context.Context, w
 	for rows.Next() {
 		var contentJSON []byte
 		if err := rows.Scan(&contentJSON); err != nil {
-			return nil, fmt.Errorf("error scanning the content of an imported commit: %w", err)
+			return nil, fmt.Errorf("error scanning the content of an imported saved state: %w", err)
 		}
 		var content draft.CommitContent
 		if err := json.Unmarshal(contentJSON, &content); err != nil {
-			return nil, fmt.Errorf("cannot decode the content of an imported commit: %w", err)
+			return nil, fmt.Errorf("cannot decode the content of an imported saved state: %w", err)
 		}
 		held, ok := content.WidgetTypes()
 		if !ok {
-			return nil, fmt.Errorf("an imported commit of project %s holds no widget types", r.project)
+			return nil, fmt.Errorf("an imported saved state of project %s holds no widget types", r.project)
 		}
 		for _, wt := range held {
 			if wanted != nil {
@@ -140,7 +140,7 @@ func (r libraryImportRepositoryPostgresImpl) readImported(ctx context.Context, w
 	return types, nil
 }
 
-// FindImportedWidgetType returns the WidgetType typeID held by a Commit the
+// FindImportedWidgetType returns the WidgetType typeID held by a saved state the
 // Project imports.
 func (r libraryImportRepositoryPostgresImpl) FindImportedWidgetType(ctx context.Context, typeID id.ID[library.WidgetType]) (library.WidgetTypeCopy, error) {
 	types, err := r.FindImportedWidgetTypesByID(ctx, []id.ID[library.WidgetType]{typeID})
@@ -153,7 +153,7 @@ func (r libraryImportRepositoryPostgresImpl) FindImportedWidgetType(ctx context.
 	return types[0], nil
 }
 
-// commitContentOfImport reads the content of a Commit an import names, inside
+// commitContentOfImport reads the content of a saved state an import names, inside
 // the Draft's transaction: the loader decodes the copies an import switch and
 // a removal are checked against.
 func commitContentOfImport(ctx context.Context, q rowQuerier, libraryID id.ID[library.Library], number int) (draft.CommitContent, uuid.UUID, error) {
@@ -170,11 +170,11 @@ func commitContentOfImport(ctx context.Context, q rowQuerier, libraryID id.ID[li
 		return draft.CommitContent{}, uuid.Nil, fmt.Errorf("%w: %d of library %s", draft.ErrCommitNotFound, number, libraryID)
 	}
 	if err != nil {
-		return draft.CommitContent{}, uuid.Nil, fmt.Errorf("cannot read commit %d of library %s: %w", number, libraryID, err)
+		return draft.CommitContent{}, uuid.Nil, fmt.Errorf("cannot read saved state %d of library %s: %w", number, libraryID, err)
 	}
 	var content draft.CommitContent
 	if err := json.Unmarshal(contentJSON, &content); err != nil {
-		return draft.CommitContent{}, uuid.Nil, fmt.Errorf("cannot decode commit %d of library %s: %w", number, libraryID, err)
+		return draft.CommitContent{}, uuid.Nil, fmt.Errorf("cannot decode saved state %d of library %s: %w", number, libraryID, err)
 	}
 	return content, rawID, nil
 }

@@ -77,7 +77,7 @@ func (p *Project) handleServerEvents(ctx app.Context) {
 		}
 		if targets.Commits {
 			p.loadCommits(ctx)
-			p.loadUnsavedChanges(ctx) // a Save makes the Draft its Commit's content
+			p.loadUnsavedChanges(ctx) // a Save makes the Draft its saved state's content
 			if p.deployDialog {
 				p.loadDeployCommits(ctx) // the window lists the saved states too
 			}

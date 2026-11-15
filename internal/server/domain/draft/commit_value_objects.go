@@ -6,13 +6,13 @@ import (
 	"unicode/utf8"
 )
 
-// commitTitleMaxRunes is the longest title a Commit takes.
+// commitTitleMaxRunes is the longest title a saved state takes.
 const commitTitleMaxRunes = 200
 
-// authorMaxRunes is the longest Author name a Commit takes.
+// authorMaxRunes is the longest Author name a saved state takes.
 const authorMaxRunes = 100
 
-// CommitTitle - the title of a Commit: a non-empty, trimmed, short line
+// CommitTitle - the title of a saved state: a non-empty, trimmed, short line
 // naming what the Save fixed. It changes on its own, without touching the
 // snapshot (Commit.WithTitle).
 // Value Object.
@@ -27,10 +27,10 @@ var _ fmt.Stringer = CommitTitle{}
 func NewCommitTitle(aTitle string) (CommitTitle, error) {
 	title := strings.TrimSpace(aTitle)
 	if title == "" {
-		return CommitTitle{}, fmt.Errorf("commit title must not be empty")
+		return CommitTitle{}, fmt.Errorf("saved state title must not be empty")
 	}
 	if utf8.RuneCountInString(title) > commitTitleMaxRunes {
-		return CommitTitle{}, fmt.Errorf("commit title must be at most %d characters", commitTitleMaxRunes)
+		return CommitTitle{}, fmt.Errorf("saved state title must be at most %d characters", commitTitleMaxRunes)
 	}
 	return CommitTitle{title: title}, nil
 }

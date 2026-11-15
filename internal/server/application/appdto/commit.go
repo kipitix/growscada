@@ -8,9 +8,9 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/draft"
 )
 
-// Commit is the application-layer DTO of a Commit (task 72_2; ADR 0021): its
+// Commit is the application-layer DTO of a saved state (task 72_2; ADR 0021): its
 // number, title, author and time, the Version of the Draft it fixed, and the
-// counts of its snapshot. WidgetTypes is filled by Find of a Library's Commit
+// counts of its snapshot. WidgetTypes is filled by Find of a Library's saved state
 // alone: the list never carries content.
 type Commit struct {
 	ID           uuid.UUID
@@ -26,7 +26,7 @@ type Commit struct {
 	WidgetTypes []WidgetTypeCopy
 }
 
-// CommitCounts is the size of a Commit's snapshot.
+// CommitCounts is the size of a saved state's snapshot.
 type CommitCounts struct {
 	Scenes       int
 	Widgets      int
@@ -36,7 +36,7 @@ type CommitCounts struct {
 	WidgetTypes  int
 }
 
-// NewCommit creates a Commit DTO from the domain entity, without its content.
+// NewCommit creates a saved state DTO from the domain entity, without its content.
 func NewCommit(c draft.Commit) Commit {
 	return Commit{
 		ID:           c.ID().UUID(),
@@ -49,7 +49,7 @@ func NewCommit(c draft.Commit) Commit {
 	}
 }
 
-// NewCommitWithContent creates a Commit DTO with the WidgetTypes of a
+// NewCommitWithContent creates a saved state DTO with the WidgetTypes of a
 // Library's snapshot.
 func NewCommitWithContent(c draft.Commit) Commit {
 	dto := NewCommit(c)
@@ -59,7 +59,7 @@ func NewCommitWithContent(c draft.Commit) Commit {
 	return dto
 }
 
-// NewCommitList creates the DTOs of a list of Commits, without content.
+// NewCommitList creates the DTOs of a list of saved states, without content.
 func NewCommitList(list []draft.Commit) []Commit {
 	result := make([]Commit, len(list))
 	for i, c := range list {

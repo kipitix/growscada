@@ -44,7 +44,7 @@ type Event struct {
 	// it is absent for a Deployment from a file or one made before saved
 	// states were deployed.
 	CommitNumber *int `json:"commit_number,omitempty"`
-	// Commit is the number of the Commit a commit_created or
+	// Commit is the number of the saved state a commit_created or
 	// commit_title_updated is about; ID is the Project's or the Library's.
 	Commit int `json:"commit,omitempty"`
 	// Label is the ID of the label on label_assigned and label_unassigned; ID

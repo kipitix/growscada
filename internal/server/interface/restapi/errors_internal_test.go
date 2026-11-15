@@ -129,7 +129,7 @@ func TestSendError(t *testing.T) {
 			err:        wrapped(library.ErrNothingToDiscard),
 			wantStatus: http.StatusConflict,
 			wantTitle:  "Conflict: Library",
-			wantDetail: "Library has no Commit: there is nothing to discard",
+			wantDetail: "Library has no saved state: there is nothing to discard",
 		},
 		{
 			name:       "library pin not found",

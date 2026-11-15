@@ -65,7 +65,7 @@ func DeployProject(t *testing.T, db *sql.DB, projectID uuid.UUID) {
 		}
 	}
 	// The Deploy makes a saved state, as the order is Save → Deploy: a Draft
-	// already saved at this content keeps its last Commit.
+	// already saved at this content keeps its last saved state.
 	scope := draft.ProjectScope(id.NewID(id.IDWithUUID[project.Project](projectID)))
 	commit, err := saveDraft(ctx, drafts, scope, draft.NewProjectCommitContent(file))
 	if err != nil {
@@ -80,7 +80,7 @@ func DeployProject(t *testing.T, db *sql.DB, projectID uuid.UUID) {
 	}
 }
 
-// saveDraft fixes the Draft as a Commit, or returns its last Commit when the
+// saveDraft fixes the Draft as a saved state, or returns its last saved state when the
 // Draft is at its Clean Version already.
 func saveDraft(ctx context.Context, drafts draft.Repository, scope draft.Scope, content draft.CommitContent) (draft.Commit, error) {
 	current, ok, err := drafts.Read(ctx, scope)

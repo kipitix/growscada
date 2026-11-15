@@ -145,7 +145,7 @@ type InputPortState struct {
 
 // LibraryImportState is an import's row; its ID is the Library's. Commit is
 // the number of the Library's saved state it names: the identity of that
-// Commit (the row's commit_id) is resolved from the Library and the number in
+// saved state (the row's commit_id) is resolved from the Library and the number in
 // the write, so a snapshot restored by an undo or built from a ProjectFile
 // carries the number alone.
 type LibraryImportState struct {
@@ -373,7 +373,7 @@ func (s Snapshot) WidgetType(libraryID id.ID[library.Library]) (library.WidgetTy
 }
 
 // LibraryImport returns the import the snapshot carries, at the Project
-// projectID. The Commit it names is resolved by the Library and the number
+// projectID. The saved state it names is resolved by the Library and the number
 // when the row is written.
 func (s Snapshot) LibraryImport(projectID id.ID[project.Project]) (libraryimport.LibraryImport, error) {
 	state, ok := s.State.(LibraryImportState)
@@ -381,7 +381,7 @@ func (s Snapshot) LibraryImport(projectID id.ID[project.Project]) (libraryimport
 		return nil, fmt.Errorf("snapshot of %s carries %T, not a library import", s.ID, s.State)
 	}
 	if state.Commit < 1 {
-		return nil, fmt.Errorf("snapshot of import %s: commit number %d is not positive", state.LibraryID, state.Commit)
+		return nil, fmt.Errorf("snapshot of import %s: saved state number %d is not positive", state.LibraryID, state.Commit)
 	}
 	return libraryimport.ReconstituteLibraryImport(projectID,
 		id.NewID(id.IDWithUUID[library.Library](state.LibraryID)), uuid.Nil, state.Commit), nil

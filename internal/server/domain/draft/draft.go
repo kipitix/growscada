@@ -22,7 +22,7 @@ import (
 //
 // Draft is immutable: every change returns a new Draft. A content change
 // keeps the Version; the repository raises it once when it stores the change,
-// and a Save or a reset to a Commit's content moves the Clean Version with it.
+// and a Save or a reset to a saved state's content moves the Clean Version with it.
 type Draft interface {
 	ID() id.ID[Draft]
 	// Scope is the Project or the Library the Draft belongs to; it never
@@ -32,12 +32,12 @@ type Draft interface {
 	// of it states and raises.
 	Version() version.Version[Draft]
 	// CleanVersion is the Version at which the Draft's content last equalled
-	// its last Commit's: a Save puts the Draft there, and so does a reset whose
+	// its last saved state's: a Save puts the Draft there, and so does a reset whose
 	// target is that content (ADR 0016, amendment 2026-11-10). 0 for a Draft
-	// whose content never equalled a Commit's — one never saved.
+	// whose content never equalled a saved state's — one never saved.
 	CleanVersion() version.Version[Draft]
 	// HasUnsavedChanges reports whether the Draft's Version is above its Clean
-	// Version: its content moved since it last equalled its last Commit. A
+	// Version: its content moved since it last equalled its last saved state. A
 	// Draft never written has no Version above its Clean one, so it is clean.
 	HasUnsavedChanges() bool
 	// StackPosition is the number of DraftChanges applied; the next undo
@@ -48,7 +48,7 @@ type Draft interface {
 	// stores and answers after a write.
 	WithVersion(version.Version[Draft]) Draft
 	// WithCleanVersion returns the Draft at the given Clean Version: what a
-	// Save and a reset to a Commit's content store.
+	// Save and a reset to a saved state's content store.
 	WithCleanVersion(version.Version[Draft]) Draft
 	// WithStackPosition returns the Draft at the given stack position.
 	WithStackPosition(position int) Draft

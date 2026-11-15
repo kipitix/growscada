@@ -40,12 +40,12 @@ var ErrRaceLost = errors.New("write race lost on every attempt")
 var ErrNothingToDeploy = errors.New("nothing to deploy")
 
 // ErrNothingToDiscard matches (errors.Is) a Discard refused because the
-// Project has no Commit to reset its Draft to (task 72_4).
-var ErrNothingToDiscard = errors.New("nothing to discard: the project has no commit")
+// Project has no saved state to reset its Draft to (task 72_4).
+var ErrNothingToDiscard = errors.New("nothing to discard: the project has no saved state")
 
 // ErrNoDeploymentToDiscard matches (errors.Is) a Revert refused because the
 // Project has no Deployment to reset its Draft to (task 72_4; a Discard falls
-// back to the last Commit).
+// back to the last saved state).
 var ErrNoDeploymentToDiscard = errors.New("nothing to revert: the project runs no deployment")
 
 // ErrInvalidProjectFile matches (errors.Is) a project file that does not
@@ -69,13 +69,13 @@ var ErrDeploymentNotDiscardable = errors.New("the deployment cannot be discarded
 
 // ErrDraftNotSaveable matches (errors.Is) a Save refused because the Draft
 // cannot be assembled into a snapshot: the same inconsistency that refuses a
-// Deploy refuses a Commit (task 72_2; ADR 0021).
+// Deploy refuses a saved state (task 72_2; ADR 0021).
 var ErrDraftNotSaveable = errors.New("the draft is not saveable")
 
 // ErrLibraryInRunningDeployment matches (errors.Is) a Library deletion refused
 // because the running Deployment of a Project names one of its saved states in
 // its ProjectFile (task 71): a Discard of that Deployment would find no saved
-// state to restore. Old Commits do not refuse it — their documents
+// state to restore. Old saved states do not refuse it — their documents
 // carry the WidgetType copies they need.
 var ErrLibraryInRunningDeployment = errors.New("the library is named by a running deployment")
 

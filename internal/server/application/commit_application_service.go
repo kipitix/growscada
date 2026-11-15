@@ -14,27 +14,27 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/version"
 )
 
-// CommitService is the Engineering node's service of Commits (task 72_2;
+// CommitService is the Engineering node's service of saved states (task 72_2;
 // ADR 0021): a Save fixes the whole Draft as an immutable, numbered snapshot,
 // the history is listed and read, and a title is renamed without touching the
 // snapshot. It serves both a Project's Draft and a Library's, named by a
 // draft.Scope. The labels that mark a saved state come from the Label
 // repository, read for a whole history at once (task 85_3; ADR 0025).
 type CommitService interface {
-	// Save fixes the Draft of scope at version as a Commit with the title and
+	// Save fixes the Draft of scope at version as a saved state with the title and
 	// author, and returns it. Returns ErrNothingToSave if the Draft is at the
-	// Version of its last Commit, a DraftNotSaveableError if the Draft cannot
+	// Version of its last saved state, a DraftNotSaveableError if the Draft cannot
 	// be assembled, and draft.ConflictError if version is stale. An empty
 	// title or author is invalid input.
 	Save(ctx context.Context, scope draft.Scope, version int, title, author string) (appdto.Commit, error)
-	// List returns the Draft's Commits, newest first, without their content;
-	// labelID (uuid.Nil: every) keeps only the Commits it marks.
+	// List returns the Draft's saved states, newest first, without their content;
+	// labelID (uuid.Nil: every) keeps only the saved states it marks.
 	List(ctx context.Context, scope draft.Scope, labelID uuid.UUID) ([]appdto.Commit, error)
-	// Find returns one Commit; a Library's carries its WidgetTypes.
+	// Find returns one saved state; a Library's carries its WidgetTypes.
 	Find(ctx context.Context, scope draft.Scope, number int) (appdto.Commit, error)
-	// Rename changes the title of a Commit, stating no Draft Version.
+	// Rename changes the title of a saved state, stating no Draft Version.
 	Rename(ctx context.Context, scope draft.Scope, number int, title string) (appdto.Commit, error)
-	// ProjectFile returns the ProjectFile of a Project's Commit as a download.
+	// ProjectFile returns the ProjectFile of a Project's saved state as a download.
 	// It is refused with invalid input for a Library's scope.
 	ProjectFile(ctx context.Context, scope draft.Scope, number int) (ProjectFileDownload, error)
 }
@@ -49,7 +49,7 @@ type commitServiceImpl struct {
 
 var _ CommitService = (*commitServiceImpl)(nil)
 
-// NewCommitService returns the service of the Commits of the Projects aContent
+// NewCommitService returns the service of the saved states of the Projects aContent
 // serves and of the Libraries aLibraries serves, assembling a Project's
 // snapshot with aBuilder, reading a Library's Draft through someWidgetTypes,
 // and reading the labels of a saved state through someLabels, the service that
@@ -213,7 +213,7 @@ func (s commitServiceImpl) Rename(ctx context.Context, scope draft.Scope, rawNum
 
 func (s commitServiceImpl) ProjectFile(ctx context.Context, scope draft.Scope, rawNumber int) (ProjectFileDownload, error) {
 	if !scope.IsProject() {
-		return ProjectFileDownload{}, invalidInput(fmt.Errorf("commits of a library have no project file"))
+		return ProjectFileDownload{}, invalidInput(fmt.Errorf("saved states of a library have no project file"))
 	}
 	number, err := commitNumber(rawNumber)
 	if err != nil {
@@ -229,7 +229,7 @@ func (s commitServiceImpl) ProjectFile(ctx context.Context, scope draft.Scope, r
 	}
 	file, ok := commit.Content().ProjectFile()
 	if !ok {
-		return ProjectFileDownload{}, fmt.Errorf("commit %d of %s holds no project file", number, scope)
+		return ProjectFileDownload{}, fmt.Errorf("saved state %d of %s holds no project file", number, scope)
 	}
 	name, err := projectDownloadName(ctx, s.content, projectID)
 	if err != nil {
@@ -238,8 +238,8 @@ func (s commitServiceImpl) ProjectFile(ctx context.Context, scope draft.Scope, r
 	return ProjectFileDownload{File: file, ProjectName: name}, nil
 }
 
-// commitNumber parses the number of a Commit a client names; a number below 1
-// is the client's input, not a missing Commit.
+// commitNumber parses the number of a saved state a client names; a number below 1
+// is the client's input, not a missing saved state.
 func commitNumber(raw int) (int, error) {
 	if raw < 1 {
 		return 0, invalidInput(fmt.Errorf("commit number must be positive, got %d", raw))

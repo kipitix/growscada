@@ -181,7 +181,7 @@ func (l *Library) listenShortcuts() {
 		code := ev.Get("code").String()
 		ctrl, meta, shift := ev.Get("ctrlKey").Bool(), ev.Get("metaKey").Bool(), ev.Get("shiftKey").Bool()
 		// Ctrl+S takes the browser's Save Page away wherever it is pressed
-		// while the mode is shown; the Draft is fixed as a Commit when no
+		// while the mode is shown; the Draft is fixed as a saved state when no
 		// dialog of the mode is open, like the other commands (task 72_7).
 		if uiutil.ShortcutKey(key, code, ctrl, meta, shift, false) == uiutil.KeySave {
 			if !l.shown() {
@@ -209,7 +209,7 @@ func (l *Library) listenShortcuts() {
 
 // keyActionAllowed reports whether a shortcut may act now: no dialog of the
 // mode is open. An undo behind the Save dialog would change the Draft the Save
-// is about to fix as a Commit.
+// is about to fix as a saved state.
 func (l *Library) keyActionAllowed() bool {
 	return !l.saveDialog && !l.historyScreen
 }

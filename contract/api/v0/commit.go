@@ -8,26 +8,26 @@ import (
 )
 
 // CommitPath is the path, under a Project's or a Library's path, of its
-// Commits: the immutable snapshots a Save fixes (task 72_2; ADR 0021).
+// saved states: the immutable snapshots a Save fixes (task 72_2; ADR 0021).
 const CommitPath = "/commits"
 
-// CommitPathOf is the path of the Commit number of a Project or Library.
+// CommitPathOf is the path of the saved state number of a Project or Library.
 func CommitPathOf(number int) string { return CommitPath + "/" + strconv.Itoa(number) }
 
 // CommitLoadPath is the command, under CommitPathOf, that makes the Draft the
-// content of that Commit (task 84): the saved state becomes what is edited, the
+// content of that saved state (task 84): the saved state becomes what is edited, the
 // DraftChange stack is cleared and the Version raised, as a Discard does. It
 // states no Version — it is a reset of the Draft, not a write of its content
 // (ADR 0016).
 const CommitLoadPath = "/load"
 
-// CommitLoadPathOf is the path of the command that loads the Commit number of a
+// CommitLoadPathOf is the path of the command that loads the saved state number of a
 // Project or Library into its Draft.
 func CommitLoadPathOf(number int) string { return CommitPathOf(number) + CommitLoadPath }
 
 // CommitDeployPath is the command, under CommitPathOf, that makes the saved
 // state the Project's running Deployment (task 85_4): the Deployment is the
-// Commit's ProjectFile, and the Draft is not read.
+// saved state's ProjectFile, and the Draft is not read.
 const CommitDeployPath = "/deploy"
 
 // CommitDeployPathOf is the path of the command that deploys the saved state
@@ -58,9 +58,9 @@ type CommitLabelsResponse struct {
 }
 
 // LoadCommitResponse is the answer of POST …/commits/{n}/load: the Draft after
-// the Commit's content replaced it, in one transaction.
+// the saved state's content replaced it, in one transaction.
 //
-// HasUnsavedChanges is true unless the loaded Commit is the Draft's last one:
+// HasUnsavedChanges is true unless the loaded saved state is the Draft's last one:
 // the Draft then differs from what a Save would fix. Warnings name the saved
 // states of Libraries the loaded content used but this server does not have —
 // their imports and the Widgets of their WidgetTypes were dropped from the
@@ -72,10 +72,10 @@ type LoadCommitResponse struct {
 }
 
 // CreateCommitRequest is the HTTP DTO of POST …/commits: a Save that fixes the
-// Draft at version as a Commit with a title and the Author who made it.
+// Draft at version as a saved state with a title and the Author who made it.
 type CreateCommitRequest struct {
 	// Version is the Version of the Draft the client saw; a stale one is 409
-	// draft_conflict, and one equal to the last Commit's is 409
+	// draft_conflict, and one equal to the last saved state's is 409
 	// nothing_to_save.
 	Version int    `json:"version"`
 	Title   string `json:"title"`
@@ -83,12 +83,12 @@ type CreateCommitRequest struct {
 }
 
 // RenameCommitRequest is the HTTP DTO of PATCH …/commits/{n}: the new title of
-// a Commit. It states no Draft Version: a title is not content.
+// a saved state. It states no Draft Version: a title is not content.
 type RenameCommitRequest struct {
 	Title string `json:"title"`
 }
 
-// CommitContentCounts is the size of a Commit's snapshot: Scenes, Widgets,
+// CommitContentCounts is the size of a saved state's snapshot: Scenes, Widgets,
 // Tags, Devices and Environments of a Project's ProjectFile, WidgetTypes of a
 // Library's Draft. The fields of the other kind are zero.
 type CommitContentCounts struct {
@@ -100,11 +100,11 @@ type CommitContentCounts struct {
 	WidgetTypes  int `json:"widget_types"`
 }
 
-// CommitResponse is the HTTP DTO of a Commit without its content: its number
+// CommitResponse is the HTTP DTO of a saved state without its content: its number
 // within the Draft, its title, its author, the time it was made, the Version
 // of the Draft it fixed and the counts of its snapshot (task 85_7).
-// WidgetTypes is filled for the Commit of a Library alone, by GET …/commits/{n};
-// a Project's Commit is read as a ProjectFile from …/commits/{n}/projectfile.
+// WidgetTypes is filled for the saved state of a Library alone, by GET …/commits/{n};
+// a Project's saved state is read as a ProjectFile from …/commits/{n}/projectfile.
 type CommitResponse struct {
 	ID            uuid.UUID                `json:"id"`
 	Number        int                      `json:"number"`

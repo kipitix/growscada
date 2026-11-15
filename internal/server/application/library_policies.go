@@ -43,7 +43,7 @@ func parseLibraryKey(key string) (id.ID[library.Library], error) {
 const LibraryCleanupPolicyName = "remove_deleted_library"
 
 // libraryCleanupPolicy removes a Library marked deleted with its Draft, its
-// Commits and its WidgetTypes; a library_deleted event's job does it. It was
+// saved states and its WidgetTypes; a library_deleted event's job does it. It was
 // marked only while no live Project imported it, and no import is added to it
 // since; the imports of Projects marked deleted hold it until their cleanup
 // removes them,

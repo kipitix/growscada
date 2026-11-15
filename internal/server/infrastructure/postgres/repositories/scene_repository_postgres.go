@@ -210,9 +210,9 @@ func reconstructScene(projectID id.ID[project.Project], row rawSceneRow, someWid
 	return scene.ReconstituteScene(newID, projectID, newName, newSize, scene.NewBackgroundHTML(row.backgroundHTML), someWidgets), nil
 }
 
-// checkImported reports whether the WidgetType typeID is held by a Commit the
+// checkImported reports whether the WidgetType typeID is held by a saved state the
 // Project projectID imports: what a write of a Scene checks in the Draft's
-// transaction (ADR 0012, task 85_6). The copies are the imported Commits'
+// transaction (ADR 0012, task 85_6). The copies are the imported saved states'
 // content, so the check reads those documents.
 func checkImported(ctx context.Context, q rowQuerier, projectID id.ID[project.Project], typeID id.ID[library.WidgetType]) error {
 	var imported bool

@@ -93,7 +93,7 @@ type Project struct {
 	// what says whether a reread state is newer than the one shown.
 	draftVersions uiutil.Versions
 
-	// ── Commits (task 72_2; ADR 0021) ──────────────────────────────────────
+	// ── saved states (task 72_2; ADR 0021) ─────────────────────────────────
 	// commits is the history of the Draft, newest first; commitsLoaded is
 	// false until its first answer. saveDialog is true while the Save dialog
 	// is open, saveTitle and saveAuthor its fields; savingCommit marks the

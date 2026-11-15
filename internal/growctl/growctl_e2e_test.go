@@ -1016,11 +1016,11 @@ func TestSaveDeploy_Project(t *testing.T) {
 	}
 
 	out, stderr, err := execGrowctl(t, srv, "", "commits", "Main")
-	if err != nil || out != "" || !strings.Contains(stderr, "has no commits") {
+	if err != nil || out != "" || !strings.Contains(stderr, "has no saved states") {
 		t.Fatalf("commits before the save: %q, %q, %v", out, stderr, err)
 	}
 	out, _, err = execGrowctl(t, srv, "", "save", "Main", "--title", "Before the demo", "--author", "Grace")
-	if err != nil || out != "project/Main saved commit 1\n" {
+	if err != nil || out != "project/Main saved state 1\n" {
 		t.Fatalf("save: %q, %v", out, err)
 	}
 	if _, stderr, err := execGrowctl(t, srv, "", "save", "Main", "--title", "Again", "--author", "Grace"); err == nil {
@@ -1053,7 +1053,7 @@ func TestSave_AuthorFromTheEnvironment(t *testing.T) {
 	}
 	t.Setenv(growctl.AuthorEnv, "From the environment")
 	out, _, err := execGrowctl(t, srv, "", "save", "Main", "--title", "Env author")
-	if err != nil || out != "project/Main saved commit 1\n" {
+	if err != nil || out != "project/Main saved state 1\n" {
 		t.Fatalf("save: %q, %v", out, err)
 	}
 	out, _, err = execGrowctl(t, srv, "", "commits", "Main")

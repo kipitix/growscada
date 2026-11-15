@@ -452,7 +452,7 @@ func (s *Session) DeleteEnvironmentDevice(ctx context.Context, environmentID id.
 // PutLibraryImport imports a saved state of a Library in the Draft: it adds
 // the import when the Project imports no saved state of the Library, else
 // switches it. A switch removes, in the same change, the PortBindings the new
-// Commit breaks; Widgets left without their WidgetType refuse it (ADR 0012).
+// saved state breaks; Widgets left without their WidgetType refuse it (ADR 0012).
 // The bool reports whether the import was added.
 func (s *Session) PutLibraryImport(ctx context.Context, libraryID id.ID[library.Library], commitNumber int) (libraryimport.LibraryImport, bool, error) {
 	commit, err := s.loader.LibraryCommit(ctx, libraryID, commitNumber)
@@ -523,7 +523,7 @@ func (s *Session) checkImportImpact(ctx context.Context, from, to *libraryimport
 	return libraryimport.ImportImpactOf(placedWidgets(scenes), from, to, tagTypes).Check()
 }
 
-// reconcileScenes removes the PortBindings the new Commit breaks from every
+// reconcileScenes removes the PortBindings the new saved state breaks from every
 // Scene of the Project (ADR 0010, ADR 0012).
 func (s *Session) reconcileScenes(ctx context.Context, commit *libraryimport.Commit) error {
 	if commit == nil {
@@ -639,7 +639,7 @@ func (s *Session) DeleteWidgetType(ctx context.Context, typeID id.ID[library.Wid
 }
 
 // ReplaceWidgetTypes resets the Draft's Library to the saved WidgetTypes
-// (Discard or Load to a Commit; ADR 0016, ADR 0021): every
+// (Discard or Load to a saved state; ADR 0016, ADR 0021): every
 // WidgetType the Draft holds goes, with its events, and every copy is
 // recreated under its ID, with its events. The stack and the DraftChanges go
 // with the caller's transaction, not here.

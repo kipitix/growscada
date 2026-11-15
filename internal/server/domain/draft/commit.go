@@ -17,14 +17,14 @@ import (
 // of the Draft, like DraftChange: a Save writes no DraftChange and raises no
 // Version, because it changes no content.
 //
-// Commit is immutable: renaming its title returns a new Commit and records
+// Commit is immutable: renaming its title returns a new saved state and records
 // commit_title_updated; its content never changes. A Save that finds the
 // Draft at its Clean Version is refused (ErrNothingToSave).
 type Commit interface {
 	ID() id.ID[Commit]
-	// Scope is the Draft the Commit belongs to.
+	// Scope is the Draft the saved state belongs to.
 	Scope() Scope
-	// Number is the Commit's number within its Draft, from 1.
+	// Number is the saved state's number within its Draft, from 1.
 	Number() int
 	Title() CommitTitle
 	Author() Author
@@ -35,7 +35,7 @@ type Commit interface {
 	// WidgetTypes.
 	Content() CommitContent
 
-	// WithTitle returns the Commit with its title changed, recording
+	// WithTitle returns the saved state with its title changed, recording
 	// commit_title_updated. The content is untouched.
 	WithTitle(aTitle CommitTitle) Commit
 
@@ -57,7 +57,7 @@ type commitImpl struct {
 
 var _ Commit = (*commitImpl)(nil)
 
-// NewCommit returns the Commit of scope at anID, numbered number, saving the
+// NewCommit returns the saved state of scope at anID, numbered number, saving the
 // Draft at draftVersion with the given content, and records
 // commit_created. Returns an error if the number is not positive or the
 // content does not belong to the scope.
@@ -88,7 +88,7 @@ func NewCommit(
 	return commit, nil
 }
 
-// ReconstituteCommit rebuilds a Commit as stored; it records no event. For
+// ReconstituteCommit rebuilds a saved state as stored; it records no event. For
 // repositories.
 func ReconstituteCommit(
 	scope Scope,
@@ -117,7 +117,7 @@ func ReconstituteCommit(
 }
 
 // checkScope refuses a number that is no number and content of the other
-// kind of scope: a Library's Commit holds WidgetTypes, a Project's a
+// kind of scope: a Library's saved state holds WidgetTypes, a Project's a
 // ProjectFile.
 func (c *commitImpl) checkScope() error {
 	if c.number < 1 {
@@ -125,9 +125,9 @@ func (c *commitImpl) checkScope() error {
 	}
 	switch {
 	case c.scope.IsProject() && !c.content.IsProject():
-		return fmt.Errorf("cannot commit project %s: its snapshot is not a project file", c.scope)
+		return fmt.Errorf("cannot make a saved state of project %s: its snapshot is not a project file", c.scope)
 	case c.scope.IsLibrary() && !c.content.IsLibrary():
-		return fmt.Errorf("cannot commit %s: its snapshot is not widget types", c.scope)
+		return fmt.Errorf("cannot make a saved state of %s: its snapshot is not widget types", c.scope)
 	}
 	return nil
 }
@@ -151,5 +151,5 @@ func (c *commitImpl) WithTitle(aTitle CommitTitle) Commit {
 
 // String implements [fmt.Stringer].
 func (c *commitImpl) String() string {
-	return fmt.Sprintf("Commit: %d %q by %s", c.number, c.title, c.author)
+	return fmt.Sprintf("Saved state: %d %q by %s", c.number, c.title, c.author)
 }

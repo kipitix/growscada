@@ -292,7 +292,7 @@ func (s *Session) openScenes(stored, wanted []scene.Scene) {
 // LockLibrary locks the live Library's row FOR SHARE in the Draft's
 // transaction: an import of the Library cannot be written after its deletion
 // begins, the same guard an import of the ordinary API takes (ADR 0018). It is
-// the caller's check that the Commit the import names exists.
+// the caller's check that the saved state the import names exists.
 func (s *Session) LockLibrary(ctx context.Context, libraryID id.ID[library.Library]) error {
 	return s.loader.LockLibrary(ctx, libraryID)
 }

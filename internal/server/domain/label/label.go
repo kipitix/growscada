@@ -1,7 +1,7 @@
 // Package label holds the Label aggregate: a named mark with an optional color
 // an Engineer puts on saved states to group and filter them (task 85_2;
 // ADR 0025). A Label belongs to the Organization, not to a Project or a
-// Library, and it is not content: no Draft, Commit's ProjectFile or Deployment
+// Library, and it is not content: no Draft, saved state's ProjectFile or Deployment
 // carries it. It owns its assignments — the marks on saved states — which are
 // its entities, added in task 85_3; a rename does not need to load them, but
 // the model never pretends an assignment is an aggregate of its own.
@@ -39,14 +39,14 @@ type Label interface {
 	// Recolor changes the color and records a LabelUpdatedEvent. An empty
 	// Color clears it.
 	Recolor(Color) (Label, error)
-	// Assign marks the Commit commitID of scope, numbered commitNumber, with
-	// this label and records a LabelAssignedEvent; assigning a Commit the
+	// Assign marks the saved state commitID of scope, numbered commitNumber, with
+	// this label and records a LabelAssignedEvent; assigning a saved state the
 	// label marks already changes nothing and records nothing (task 85_3;
 	// ADR 0025). It returns ErrInvalidAssignment for a number that is not
 	// positive or a scope that names neither a Project nor a Library.
 	Assign(commitID id.ID[draft.Commit], scope draft.Scope, commitNumber int, at time.Time) (Label, error)
-	// Unassign removes the mark of the Commit commitID and records a
-	// LabelUnassignedEvent; a Commit the label does not mark changes nothing
+	// Unassign removes the mark of the saved state commitID and records a
+	// LabelUnassignedEvent; a saved state the label does not mark changes nothing
 	// and records nothing.
 	Unassign(commitID id.ID[draft.Commit]) (Label, error)
 	// Assignments is the set of saved states the label marks, the read model

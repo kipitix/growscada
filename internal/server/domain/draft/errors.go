@@ -44,12 +44,12 @@ var ErrNothingToUndo = errors.New("nothing to undo")
 var ErrNothingToRedo = errors.New("nothing to redo")
 
 // ErrNothingToSave is a Save refused because the Draft is at the Version its
-// last Commit fixed: there is nothing new to save (task 72_2; ADR 0021).
-var ErrNothingToSave = errors.New("nothing to save: the draft has not changed since its last commit")
+// last saved state fixed: there is nothing new to save (task 72_2; ADR 0021).
+var ErrNothingToSave = errors.New("nothing to save: the draft has not changed since its last saved state")
 
-// ErrCommitNotFound is a read or a rename of a Commit that the Draft does not
+// ErrCommitNotFound is a read or a rename of a saved state that the Draft does not
 // have.
-var ErrCommitNotFound = errors.New("commit not found")
+var ErrCommitNotFound = errors.New("saved state not found")
 
 // NothingToStepError is an undo or a redo the stack has nothing to apply to:
 // it matches ErrNothingToUndo when Undo is set and ErrNothingToRedo otherwise.

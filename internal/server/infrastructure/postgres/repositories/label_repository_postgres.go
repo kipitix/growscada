@@ -275,9 +275,9 @@ func (r labelRepositoryPostgresImpl) assignmentTx(ctx context.Context, l label.L
 	return nil
 }
 
-// lockCommitForAssignment keeps a Commit from being removed while its mark is
-// written: deleting a Project or a Library deletes its Commits, so the insert
-// would fail on the foreign key otherwise. A Commit this server lacks is
+// lockCommitForAssignment keeps a saved state from being removed while its mark is
+// written: deleting a Project or a Library deletes its saved states, so the insert
+// would fail on the foreign key otherwise. A saved state this server lacks is
 // draft.ErrCommitNotFound.
 func lockCommitForAssignment(ctx context.Context, tx *sql.Tx, commitID id.ID[draft.Commit]) error {
 	var locked int
@@ -287,7 +287,7 @@ func lockCommitForAssignment(ctx context.Context, tx *sql.Tx, commitID id.ID[dra
 		return fmt.Errorf("%w: %s", draft.ErrCommitNotFound, commitID)
 	}
 	if err != nil {
-		return fmt.Errorf("cannot lock commit %s: %w", commitID, err)
+		return fmt.Errorf("cannot lock saved state %s: %w", commitID, err)
 	}
 	return nil
 }

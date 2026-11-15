@@ -34,7 +34,7 @@ func newGetProjectsResponse(list []appdto.Project) apiv0.GetProjectsResponse {
 }
 
 // newDraftStateResponse converts the state of a Draft: its Version and whether
-// it holds changes its last Commit does not (task 74).
+// it holds changes its last saved state does not (task 74).
 func newDraftStateResponse(state appdto.DraftState) apiv0.DraftStateResponse {
 	return apiv0.DraftStateResponse{Version: state.Version, HasUnsavedChanges: state.HasUnsavedChanges}
 }
@@ -645,7 +645,7 @@ func newListDeploymentsResponse(summaries []runtimeapp.DeploymentSummary) apiv0.
 	return resp
 }
 
-// newLoadCommitResponse is the answer of a load of a Commit into the Draft: the
+// newLoadCommitResponse is the answer of a load of a saved state into the Draft: the
 // Draft's new state and the saved states of Libraries it could not restore
 // (task 71, task 84).
 func newLoadCommitResponse(loaded appdto.LoadedDraft) apiv0.LoadCommitResponse {

@@ -52,7 +52,7 @@ const constraintLibrariesLiveName = "uq_libraries_organization_live_name"
 const constraintWidgetTypesName = "uq_widget_types_library_name"
 
 // Constraints of library_imports: one import per project and library, the
-// commit imported exists, and the foreign keys that refuse removing a library a
+// saved state imported exists, and the foreign keys that refuse removing a library a
 // project imports.
 const (
 	constraintLibraryImportsProjectLibrary = "uq_library_imports_project_library"

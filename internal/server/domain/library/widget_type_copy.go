@@ -7,7 +7,7 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/id"
 )
 
-// WidgetTypeCopy - the copy of a WidgetType held by a saved state — a Commit —
+// WidgetTypeCopy - the copy of a WidgetType held by a saved state
 // or by a Project's ProjectFile: its definition under the WidgetType's ID, with
 // no Version, because a saved state never changes. It is what a Project sees of
 // a WidgetType, through the saved state it imports (ADR 0007), and what the

@@ -511,8 +511,8 @@ func findLibrary(ctx context.Context, client *Client, name string) (*apiclient.L
 func newDiscardCommand(s *settings) *cobra.Command {
 	return &cobra.Command{
 		Use:   "discard <library>",
-		Short: "Reset the Draft of a library to its last Commit",
-		Long: "Reset the Draft of the library to its last Commit, dropping the unsaved changes:\n" +
+		Short: "Reset the Draft of a library to its last saved state",
+		Long: "Reset the Draft of the library to its last saved state, dropping the unsaved changes:\n" +
 			"the WidgetTypes added since are removed, the changed ones restored, the removed\n" +
 			"ones brought back. The server does it in one transaction and answers the\n" +
 			"Draft's new state; a library never saved has nothing to discard to.",
@@ -548,7 +548,7 @@ func newGetLibrariesCommand(s *settings) *cobra.Command {
 		Use:     "libraries",
 		Aliases: []string{"library"},
 		Short:   "List libraries",
-		Long:    "List the server's libraries in creation order, with their latest Commit and whether each has unsaved changes.",
+		Long:    "List the server's libraries in creation order, with their latest saved state and whether each has unsaved changes.",
 		Args:    noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			libraries, err := s.client().ListLibraries(cmd.Context())

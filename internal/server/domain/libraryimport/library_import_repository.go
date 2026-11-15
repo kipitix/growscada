@@ -30,17 +30,17 @@ type Repository interface {
 	// Returns ErrLibraryImportNotFound if the Project imports none of it.
 	FindByLibrary(context.Context, id.ID[library.Library]) (LibraryImport, error)
 
-	// FindImportedWidgetTypes returns the WidgetTypes of every Commit the
+	// FindImportedWidgetTypes returns the WidgetTypes of every saved state the
 	// Project imports: what its Widgets may be of.
 	FindImportedWidgetTypes(context.Context) ([]library.WidgetTypeCopy, error)
 
 	// FindImportedWidgetTypesByID returns the WidgetTypes with the given IDs
-	// from the Commits the Project imports; an ID none of them holds is left
+	// from the saved states the Project imports; an ID none of them holds is left
 	// out.
 	FindImportedWidgetTypesByID(context.Context, []id.ID[library.WidgetType]) ([]library.WidgetTypeCopy, error)
 
 	// FindImportedWidgetType returns the WidgetType with the given ID from the
-	// Commits the Project imports.
+	// saved states the Project imports.
 	// Returns library.ErrWidgetTypeNotFound if none of them holds it.
 	FindImportedWidgetType(context.Context, id.ID[library.WidgetType]) (library.WidgetTypeCopy, error)
 }

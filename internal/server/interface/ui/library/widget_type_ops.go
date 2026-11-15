@@ -152,7 +152,7 @@ func (l *Library) updateWidgetType(id uuid.UUID, req apiv0.UpdateWidgetTypeReque
 
 // rejectedDraftWrite shows a refused write and, on a conflict, rereads what
 // the Draft's Version and its history decide: the WidgetTypes, the stack, the
-// Commits and the libraries' states (task 72_7; ADR 0016/0017).
+// saved states and the libraries' states (task 72_7; ADR 0016/0017).
 func (l *Library) rejectedDraftWrite(ctx app.Context, err error) {
 	uiutil.ShowError(ctx, err)
 	if errors.Is(err, apiclient.ErrConflict) {

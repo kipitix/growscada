@@ -40,7 +40,7 @@ func NewLabels(labels []label.Label) []Label {
 }
 
 // NewLabelMap creates the DTOs of the labels of each saved state, keyed by the
-// Commit's number, in the order the map holds them.
+// saved state's number, in the order the map holds them.
 func NewLabelMap(byNumber map[int][]label.Label) map[int][]Label {
 	out := make(map[int][]Label, len(byNumber))
 	for number, labels := range byNumber {

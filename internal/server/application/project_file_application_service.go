@@ -167,7 +167,7 @@ func (s projectFileServiceImpl) Deploy(ctx context.Context, rawProjectID uuid.UU
 
 // lockLocalImports rechecks the local saved states inside the Draft's
 // transaction: every imported Library's row is locked FOR SHARE, as
-// PutLibraryImport does, and its Commit must still be there (ADR 0018,
+// PutLibraryImport does, and its saved state must still be there (ADR 0018,
 // task 85_6). A Library deleted between the validation and the write is a file
 // issue, not an import of a deleted Library.
 func (s projectFileServiceImpl) lockLocalImports(ctx context.Context, file projectv0.ProjectFile, session *draft.Session) error {
@@ -198,7 +198,7 @@ func (s projectFileServiceImpl) lockLocalImports(ctx context.Context, file proje
 }
 
 // projectDownloadName returns the name of the live Project projectID, which
-// names a downloaded file of it: a Draft, a Deployment or a Commit (task 39,
+// names a downloaded file of it: a Draft, a Deployment or a saved state (task 39,
 // ADR 0018).
 func projectDownloadName(ctx context.Context, content ProjectContent, projectID id.ID[project.Project]) (string, error) {
 	found, err := content.projects.FindByID(ctx, projectID)

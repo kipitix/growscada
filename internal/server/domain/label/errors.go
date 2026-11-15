@@ -12,7 +12,7 @@ var (
 	ErrInvalidLabelName = errors.New("invalid label name")
 	// ErrInvalidLabelColor - the color is not #RRGGBB and not empty.
 	ErrInvalidLabelColor = errors.New("invalid label color")
-	// ErrInvalidAssignment - the assignment names no Commit, a number that is
+	// ErrInvalidAssignment - the assignment names no saved state, a number that is
 	// not positive or no scope.
 	ErrInvalidAssignment = errors.New("invalid label assignment")
 )

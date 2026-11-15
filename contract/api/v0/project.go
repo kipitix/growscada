@@ -13,7 +13,7 @@ const ProjectsQueryName = "name"
 // Description is the project's optional, free-text description of at most 500
 // characters (task 73); it is an attribute of the project, never part of its
 // ProjectFile. HasUnsavedChanges reports whether the Draft moved since its
-// last Commit.
+// last saved state.
 type ProjectResponse struct {
 	ID                uuid.UUID `json:"id"`
 	Name              string    `json:"name"`

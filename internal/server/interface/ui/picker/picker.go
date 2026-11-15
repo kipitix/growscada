@@ -190,7 +190,7 @@ func (p *Picker) OnMount(ctx app.Context) {
 			return
 		}
 		// A row reads the entity's name, its description and whether its Draft
-		// moved since its last Commit. A create, an update or a delete of an
+		// moved since its last saved state. A create, an update or a delete of an
 		// entity changes the list itself; a Save fixes the Draft of one, and
 		// any write of a Draft's content makes one unsaved (task 73;
 		// ReloadTargetsFor).

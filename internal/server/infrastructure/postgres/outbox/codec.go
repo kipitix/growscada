@@ -52,7 +52,7 @@ type payload struct {
 	// event, whose ID is its Environment's.
 	EnvironmentID *uuid.UUID `json:"environment_id,omitempty"`
 	DeviceID      *uuid.UUID `json:"device_id,omitempty"`
-	// Commit is the number of the Commit of commit_created and
+	// Commit is the number of the saved state of commit_created and
 	// commit_title_updated.
 	Commit int `json:"commit,omitempty"`
 	// LabelID is the label of a label_assigned or label_unassigned event: its

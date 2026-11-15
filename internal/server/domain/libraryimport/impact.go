@@ -58,8 +58,8 @@ func (i Impact) Check() error {
 
 // ImportImpactOf computes the Impact on widgets, the Widgets of a Project, of
 // importing to instead of from, two saved states of one Library: from is the
-// Commit imported now (nil if none), to the one imported after (nil for
-// removing the import). The WidgetTypes are those of the Commits themselves.
+// saved state imported now (nil if none), to the one imported after (nil for
+// removing the import). The WidgetTypes are those of the saved states themselves.
 // A Widget of a WidgetType from holds and to does not is orphaned; a
 // PortBinding of a Widget whose WidgetType both hold is broken if to's copy of
 // it does not declare the port, or the port's type hint does not accept the

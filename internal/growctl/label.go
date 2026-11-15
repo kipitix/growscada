@@ -180,7 +180,7 @@ func colorOrNone(color string) string {
 }
 
 // newLabelCommand is the assignment of labels to saved states (task 85_3;
-// ADR 0025): `label assign` marks a Commit of a Project's or a Library's
+// ADR 0025): `label assign` marks a saved state of a Project's or a Library's
 // Draft and `label unassign` takes the mark off. Labels themselves are managed
 // by `growctl labels`.
 func newLabelCommand(s *settings) *cobra.Command {
@@ -188,7 +188,7 @@ func newLabelCommand(s *settings) *cobra.Command {
 		Use:   "label",
 		Short: "Place a label on a saved state or take it off",
 		Long: "A label is the Organization's metadata; `label assign` marks one saved\n" +
-			"state (Commit) of a Project or a Library and `label unassign` takes the\n" +
+			"state of a Project or a Library and `label unassign` takes the\n" +
 			"mark off (task 85_3; ADR 0025). An assignment states no Draft Version and\n" +
 			"is idempotent: a repeat changes nothing. The label is named by its name,\n" +
 			"ignoring case, or by its ID.",
@@ -211,7 +211,7 @@ func newLabelAssignCommand(s *settings, assign bool) *cobra.Command {
 		Use:   verb + " <project|library> --commit <n> --label <name|id> [--library]",
 		Short: short,
 		Long: short + " of a Project's or a Library's Draft (task 85_3; ADR 0025):\n" +
-			"the Commit is named by its number within the Draft, the label by its name\n" +
+			"the saved state is named by its number within the Draft, the label by its name\n" +
 			"(ignoring case) or its ID. The name is a Project's, or a Library's with\n" +
 			"--library. No Draft Version is stated.",
 		Args: exactlyOneArg,
@@ -233,7 +233,7 @@ func newLabelAssignCommand(s *settings, assign bool) *cobra.Command {
 			}
 			labels, err := target.setLabel(cmd.Context(), assign, commit, found.ID)
 			if err != nil {
-				return fmt.Errorf("%s commit %d: %w", target.ref(), commit, err)
+				return fmt.Errorf("%s saved state %d: %w", target.ref(), commit, err)
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "%s saved state %d: %s %s\n",
 				target.ref(), commit, verb+"ed", found.Name)

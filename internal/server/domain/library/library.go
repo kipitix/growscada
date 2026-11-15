@@ -25,7 +25,7 @@ import (
 // removes it with its Draft and its saved states.
 //
 // A Discard is one transaction over the Draft (ADR 0016): it brings the
-// WidgetTypes back to the last Commit, with no mark and no policy.
+// WidgetTypes back to the last saved state, with no mark and no policy.
 //
 // Library is immutable: every change returns a new Library that also records
 // the change's event. A change keeps the Version; the repository raises it

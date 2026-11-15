@@ -25,8 +25,8 @@ var (
 	// Project does.
 	ErrLibraryImported = errors.New("library is imported by projects")
 	// ErrNothingToDiscard is returned by a Discard of a library never saved:
-	// there is no Commit to reset its Draft to (task 72_5).
-	ErrNothingToDiscard = errors.New("library has no commit to discard to")
+	// there is no saved state to reset its Draft to (task 72_5).
+	ErrNothingToDiscard = errors.New("library has no saved state to discard to")
 )
 
 // LibraryRepository - repository interface for storing and managing

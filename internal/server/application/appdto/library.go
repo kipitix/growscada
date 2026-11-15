@@ -17,10 +17,10 @@ type Library struct {
 	Name        string
 	Description string
 	Version     int
-	// LatestCommit is the number of the Draft's last Commit; 0 when it was
+	// LatestCommit is the number of the Draft's last saved state; 0 when it was
 	// never saved.
 	LatestCommit int
-	// HasUnsavedChanges reports whether the Draft moved since its last Commit.
+	// HasUnsavedChanges reports whether the Draft moved since its last saved state.
 	HasUnsavedChanges bool
 }
 
@@ -33,8 +33,8 @@ type LibraryInput struct {
 }
 
 // NewLibrary creates a Library DTO from the domain aggregate, the number of
-// its last Commit (0 when it was never saved) and whether its Draft moved
-// since that Commit (task 74).
+// its last saved state (0 when it was never saved) and whether its Draft moved
+// since that saved state (task 74).
 func NewLibrary(l library.Library, latestCommit int, hasUnsavedChanges bool) Library {
 	return Library{
 		ID:                l.ID().UUID(),
@@ -60,7 +60,7 @@ type LibraryImport struct {
 }
 
 // NewLibraryImport creates a LibraryImport DTO from the domain entity and, when
-// this server has it, the Commit it names: a Commit that cannot be read leaves
+// this server has it, the saved state it names: a saved state that cannot be read leaves
 // the provenance empty and the number as stored.
 func NewLibraryImport(i libraryimport.LibraryImport, version int, commit draft.Commit, labels []Label) LibraryImport {
 	dto := LibraryImport{LibraryID: i.LibraryID().UUID(), CommitNumber: i.CommitNumber(), Labels: labels, Version: version}

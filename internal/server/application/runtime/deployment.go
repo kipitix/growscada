@@ -36,7 +36,7 @@ var ErrDeploymentNotFound = errors.New("deployment not found")
 var ErrNothingToRollback = errors.New("nothing to rollback")
 
 // ErrNothingToDeploy matches (errors.Is) a Deploy refused because the Project
-// already runs that saved state (task 85_4): a Commit is immutable, so
+// already runs that saved state (task 85_4): a saved state is immutable, so
 // deploying it again would add a Deployment that changes nothing.
 var ErrNothingToDeploy = errors.New("nothing to deploy")
 

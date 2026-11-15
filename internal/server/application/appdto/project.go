@@ -12,14 +12,14 @@ type Project struct {
 	Name        string
 	Description string
 	Version     int
-	// HasUnsavedChanges reports whether the Draft moved since its last Commit:
+	// HasUnsavedChanges reports whether the Draft moved since its last saved state:
 	// the read model of a Project's selection row (task 73; ADR 0016,
-	// ADR 0021). False for a project without a Draft row or a Commit.
+	// ADR 0021). False for a project without a Draft row or a saved state.
 	HasUnsavedChanges bool
 }
 
 // ProjectDraftState is what a Project's Draft tells of it: the Version of the
-// Draft and whether it holds changes its last Commit does not (ADR 0016,
+// Draft and whether it holds changes its last saved state does not (ADR 0016,
 // ADR 0021; task 74).
 type ProjectDraftState struct {
 	// DraftVersion is 0 for a Draft never written: there is nothing to save.
@@ -31,7 +31,7 @@ type ProjectDraftState struct {
 
 // DraftState is the state of a Draft: the Version every content DTO of the
 // Project or Library now carries (ADR 0016) and whether it holds changes its
-// last Commit does not (task 74).
+// last saved state does not (task 74).
 type DraftState struct {
 	Version           int
 	HasUnsavedChanges bool

@@ -19,7 +19,7 @@ import (
 
 // The Project mode's deployment state (task 35, part 5; task 85_4): the
 // Deployment the project runs and the saved state it came from, the Deployments
-// history, Discard to the last Commit and Revert to the running Deployment. A
+// history, Discard to the last saved state and Revert to the running Deployment. A
 // Deploy makes a saved state the running one, so the panel's Deploy button opens
 // the saved states, narrowed by a label (task 85_5); the Deployment itself is
 // Operation's.
@@ -544,7 +544,7 @@ func (p *Project) reloadDraftContent(ctx app.Context) {
 	p.loadTags(ctx)
 	p.loadImports(ctx)
 	p.loadWidgetTypes(ctx)
-	p.loadDraftState(ctx) // its Version and whether the new content is a Commit's
+	p.loadDraftState(ctx) // its Version and whether the new content is a saved state's
 	p.loadDraftChanges(ctx)
 	p.loadCommits(ctx)
 	p.loadDeploy(ctx)

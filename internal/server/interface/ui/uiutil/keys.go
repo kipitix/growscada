@@ -18,7 +18,7 @@ const (
 	KeyUndo
 	// KeyRedo is Ctrl+Shift+Z (Cmd+Shift+Z on macOS).
 	KeyRedo
-	// KeySave is Ctrl+S (Cmd+S on macOS): Save the Draft as a Commit.
+	// KeySave is Ctrl+S (Cmd+S on macOS): Save the Draft as a saved state.
 	KeySave
 )
 

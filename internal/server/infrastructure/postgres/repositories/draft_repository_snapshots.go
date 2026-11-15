@@ -22,7 +22,7 @@ import (
 
 // deleteOrder and upsertOrder are the orders a change's snapshots are written
 // in: a delete before what refers to it, an insert after what it refers to
-// (a Widget's WidgetType is in an imported Commit, a Tag's supplier is a Device).
+// (a Widget's WidgetType is in an imported saved state, a Tag's supplier is a Device).
 var (
 	deleteOrder = []draft.Kind{
 		draft.KindWidget, draft.KindScene, draft.KindLibraryImport, draft.KindTag,
@@ -502,7 +502,7 @@ func (l *draftLoader) readScenes(ctx context.Context, and string, args ...any) (
 	return result, nil
 }
 
-// ImportedWidgetType returns the copy of the WidgetType typeID the Commits the
+// ImportedWidgetType returns the copy of the WidgetType typeID the saved states the
 // Draft's Project imports hold (task 85_6).
 func (l *draftLoader) ImportedWidgetType(ctx context.Context, typeID id.ID[library.WidgetType]) (library.WidgetTypeCopy, error) {
 	rows, err := l.tx.QueryContext(ctx, importedWidgetTypesQuery, l.project.UUID())
@@ -517,7 +517,7 @@ func (l *draftLoader) ImportedWidgetType(ctx context.Context, typeID id.ID[libra
 		}
 		var content draft.CommitContent
 		if err := json.Unmarshal(contentJSON, &content); err != nil {
-			return library.WidgetTypeCopy{}, fmt.Errorf("cannot decode the content of an imported commit: %w", err)
+			return library.WidgetTypeCopy{}, fmt.Errorf("cannot decode the content of an imported saved state: %w", err)
 		}
 		held, ok := content.WidgetTypes()
 		if !ok {
@@ -727,14 +727,14 @@ func (l *draftLoader) LibraryCommit(ctx context.Context, libraryID id.ID[library
 	}
 	types, ok := content.WidgetTypes()
 	if !ok {
-		return libraryimport.Commit{}, fmt.Errorf("commit %d of library %s holds no widget types", number, libraryID)
+		return libraryimport.Commit{}, fmt.Errorf("saved state %d of library %s holds no widget types", number, libraryID)
 	}
 	return libraryimport.ReconstituteCommit(rawID, libraryID, number, types), nil
 }
 
-// writeLibraryImport writes the row of an import: its Commit is resolved by the
+// writeLibraryImport writes the row of an import: its saved state is resolved by the
 // Library and the number in this transaction, so a snapshot restored by an undo
-// or built from a ProjectFile needs no Commit identity of its own. A number the
+// or built from a ProjectFile needs no saved state identity of its own. A number the
 // Library's Draft does not have is draft.ErrCommitNotFound.
 func writeLibraryImport(ctx context.Context, tx *sql.Tx, projectID uuid.UUID, state draft.LibraryImportState) error {
 	res, err := tx.ExecContext(ctx,

@@ -13,7 +13,7 @@ import (
 // presets do not describe. Everything else uses the presets, so no second copy
 // of the palette or of the disabled state remains.
 
-// rowButton is one action of a row of a list — a Release's Deploy, a Commit's
+// rowButton is one action of a row of a list — a Release's Deploy, a saved state's
 // download, the author's change. kind "accent", "error" or "" picks its
 // colours, title is its hover text. options name the row (app.EventScope), so a
 // reused element does not keep the handler of the row it showed before.

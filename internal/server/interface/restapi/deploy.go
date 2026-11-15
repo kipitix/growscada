@@ -83,9 +83,9 @@ func (h DeployHandlers) GetTagStates(w http.ResponseWriter, r *http.Request) {
 }
 
 // PostDiscard handles POST /projects/{project_id}/discard: it resets the Draft
-// to the Project's last Commit, dropping the unsaved changes, and answers the
+// to the Project's last saved state, dropping the unsaved changes, and answers the
 // Draft's new state, with the saved states of Libraries it could not restore
-// (task 71, task 72_4). 409 nothing_to_discard without a Commit.
+// (task 71, task 72_4). 409 nothing_to_discard without a saved state.
 func (h DeployHandlers) PostDiscard(w http.ResponseWriter, r *http.Request) {
 	projectID, ok := pathUUID(w, r, projectResource)
 	if !ok {
@@ -116,7 +116,7 @@ func (h DeployHandlers) PostRevert(w http.ResponseWriter, r *http.Request) {
 }
 
 // PostCommitLoad handles POST /projects/{project_id}/commits/{commit_number}/load:
-// the Draft replaced by the content of that Commit, in one transaction — the
+// the Draft replaced by the content of that saved state, in one transaction — the
 // saved state becomes what is edited (task 84). 404 for a number the Project
 // does not have; the saved states of Libraries it could not restore are
 // answered with the new state (task 71).
@@ -139,9 +139,9 @@ func (h DeployHandlers) PostCommitLoad(w http.ResponseWriter, r *http.Request) {
 
 // PostCommitDeploy handles POST /projects/{project_id}/commits/{commit_number}/deploy:
 // it makes the saved state the Project's running Deployment, its content taken
-// from the Commit alone (task 85_4). 201 with the new Deployment; 404 for the
-// Project or a Commit number it does not have; 409 nothing_to_deploy when that
-// saved state is the running one. No Draft Version is stated: a Commit is
+// from the saved state alone (task 85_4). 201 with the new Deployment; 404 for the
+// Project or a saved state number it does not have; 409 nothing_to_deploy when that
+// saved state is the running one. No Draft Version is stated: a saved state is
 // immutable.
 func (h DeployHandlers) PostCommitDeploy(w http.ResponseWriter, r *http.Request) {
 	projectID, ok := pathUUID(w, r, projectResource)

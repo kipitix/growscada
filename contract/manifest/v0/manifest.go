@@ -98,7 +98,7 @@ type ProjectDocument struct {
 }
 
 // ProjectSpec declares what a Project's Draft imports: LibraryImports maps the
-// name of a Library to the number of its saved state — its Commit — the Project
+// name of a Library to the number of its saved state the Project
 // uses (since 0.5). A Library the map leaves out keeps its import, if any.
 type ProjectSpec struct {
 	LibraryImports map[string]int `yaml:"libraryImports,omitempty"`

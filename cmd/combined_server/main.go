@@ -230,7 +230,7 @@ func main() {
 	// Deploy, Discard and Revert (task 35, task 85_4): a Deploy hands a saved
 	// state's ProjectFile to the Runtime node, which stores it as a Deployment;
 	// the Engineering node keeps no copy of what it sent (ADR 0014). Discard
-	// falls back to the last Commit, Revert to the running Deployment.
+	// falls back to the last saved state, Revert to the running Deployment.
 	projectFileBuilder := application.NewProjectFileBuilder(projectContent)
 	discardService := application.NewDiscardService(projectContent, runtimeNode, libraryRepository)
 	deployService := application.NewDeployService(projectContent, runtimeNode)

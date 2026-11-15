@@ -18,7 +18,7 @@ const (
 	// shares the row's width.
 	ButtonSmall ButtonLayout = "small"
 	// ButtonRow is an action of a row of a list, e.g. a saved state's Deploy or
-	// a Commit's download.
+	// a saved state's download.
 	ButtonRow ButtonLayout = "row"
 )
 

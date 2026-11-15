@@ -11,13 +11,13 @@ import (
 )
 
 // DeployService is the Engineering node's service of a Deploy (task 85_4): it
-// makes a saved state — a Commit — of a Project its running Deployment. A
-// Release takes no part in it, and neither does a Draft Version: a Commit is
+// makes a saved state of a Project its running Deployment. A
+// Release takes no part in it, and neither does a Draft Version: a saved state is
 // immutable and a Deploy changes no Draft (ADR 0021). The document is the
-// Commit's ProjectFile; the Runtime node stores it and assigns the number and
+// saved state's ProjectFile; the Runtime node stores it and assigns the number and
 // the time.
 type DeployService interface {
-	// Deploy makes Commit commitNumber of the live Project projectID its
+	// Deploy makes the saved state commitNumber of the live Project projectID its
 	// running Deployment. Returns draft.ErrCommitNotFound for a number the
 	// Project does not have, project.ErrProjectNotFound if the Project is not
 	// live, ErrNothingToDeploy if that saved state is the one it runs already,

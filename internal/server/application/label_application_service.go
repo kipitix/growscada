@@ -17,9 +17,9 @@ import (
 // LabelService serves the Labels of the server's Organization: their names,
 // their colors and the saved states they mark (task 85_2, task 85_3;
 // ADR 0025). A label is not content: the service reads no Draft Version,
-// states none and writes no DraftChange. An assignment names a Commit of a
+// states none and writes no DraftChange. An assignment names a saved state of a
 // Project's or a Library's Draft and is written in the label's own
-// transaction, which locks the label and the Commit.
+// transaction, which locks the label and the saved state.
 type LabelService interface {
 	// List returns the Organization's labels, ordered by name ignoring case.
 	List(ctx context.Context) ([]appdto.Label, error)
@@ -40,7 +40,7 @@ type LabelService interface {
 	// Assign marks the saved state commitNumber of scope with the label and
 	// returns every label the saved state carries afterwards. It is
 	// idempotent: a repeat changes nothing and records no event. A Project or
-	// Library that is not live is its not-found error, a Commit scope lacks is
+	// Library that is not live is its not-found error, a saved state scope lacks is
 	// draft.ErrCommitNotFound, a label the Organization lacks
 	// label.ErrLabelNotFound; a number that is not positive is invalid input.
 	Assign(ctx context.Context, scope draft.Scope, commitNumber int, labelID uuid.UUID) ([]appdto.Label, error)
@@ -50,7 +50,7 @@ type LabelService interface {
 	Unassign(ctx context.Context, scope draft.Scope, commitNumber int, labelID uuid.UUID) ([]appdto.Label, error)
 
 	// LabelsOf returns the labels of every saved state of scope that carries
-	// one, keyed by the Commit's number: the read of a Commit list that shows
+	// one, keyed by the saved state's number: the read of a saved state list that shows
 	// its chips (task 85_3).
 	LabelsOf(ctx context.Context, scope draft.Scope) (map[int][]appdto.Label, error)
 }
@@ -65,7 +65,7 @@ type labelServiceImpl struct {
 var _ LabelService = (*labelServiceImpl)(nil)
 
 // NewLabelService returns the service of the Organization's labels, resolving
-// an assignment's Commit through the Drafts. The Organization is the server's
+// an assignment's saved state through the Drafts. The Organization is the server's
 // own while one exists: the API is server-wide, and `organization_id` is
 // written from the first day (ADR 0025).
 func NewLabelService(repository label.Repository, drafts draft.Repository, organizationID id.ID[organization.Organization]) LabelService {
@@ -202,8 +202,8 @@ func (s labelServiceImpl) labelsOfCommit(ctx context.Context, scope draft.Scope,
 	return byNumber[commitNumber], nil
 }
 
-// commitOf reads the Commit rawNumber of the Draft of scope, which checks the
-// Commit exists in that scope and the Project or Library is live.
+// commitOf reads the saved state rawNumber of the Draft of scope, which checks the
+// saved state exists in that scope and the Project or Library is live.
 func (s labelServiceImpl) commitOf(ctx context.Context, scope draft.Scope, rawNumber int) (int, draft.Commit, error) {
 	if !scope.IsProject() && !scope.IsLibrary() {
 		return 0, nil, invalidInput(fmt.Errorf("scope: a project or a library is required"))
@@ -214,7 +214,7 @@ func (s labelServiceImpl) commitOf(ctx context.Context, scope draft.Scope, rawNu
 	}
 	commit, err := s.drafts.FindCommit(ctx, scope, number)
 	if err != nil {
-		return 0, nil, fmt.Errorf("cannot find the commit of %s: %w", scope, err)
+		return 0, nil, fmt.Errorf("cannot find the saved state of %s: %w", scope, err)
 	}
 	return number, commit, nil
 }

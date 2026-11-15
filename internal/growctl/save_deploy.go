@@ -85,7 +85,7 @@ func (t workflowTarget) draftVersion(ctx context.Context) (int, error) {
 	return state.Version, err
 }
 
-// save fixes the target's Draft as the next Commit under title and author.
+// save fixes the target's Draft as the next saved state under title and author.
 func (t workflowTarget) save(ctx context.Context, title, author string) (apiv0.CommitResponse, error) {
 	version, err := t.draftVersion(ctx)
 	if err != nil {
@@ -98,7 +98,7 @@ func (t workflowTarget) save(ctx context.Context, title, author string) (apiv0.C
 	return t.library.SaveCommit(ctx, req)
 }
 
-// commits returns the target's Commit history, newest first.
+// commits returns the target's saved state history, newest first.
 func (t workflowTarget) commits(ctx context.Context) ([]apiv0.CommitResponse, error) {
 	if t.kind == "project" {
 		return t.project.Commits(ctx)
@@ -108,7 +108,7 @@ func (t workflowTarget) commits(ctx context.Context) ([]apiv0.CommitResponse, er
 
 // resolveAuthor returns the author a Save records: --author, else
 // GROWSCADA_AUTHOR, else the operating system's user name. An empty name is
-// refused: every Commit names one (ADR 0021).
+// refused: every saved state names one (ADR 0021).
 func resolveAuthor(flag string) (string, error) {
 	if author := strings.TrimSpace(flag); author != "" {
 		return author, nil
@@ -137,11 +137,11 @@ func newSaveCommand(s *settings) *cobra.Command {
 	var asLibrary bool
 	cmd := &cobra.Command{
 		Use:   "save <project|library> --title <title> [--author <name>]",
-		Short: "Fix the Draft as its next Commit (Save)",
+		Short: "Fix the Draft as its next saved state (Save)",
 		Long: "Save fixes the whole Draft of the Project or the Library as an immutable,\n" +
-			"numbered Commit under a title and an author (ADR 0021). It writes no\n" +
+			"numbered saved state under a title and an author (ADR 0021). It writes no\n" +
 			"DraftChange and raises no Version; a Draft that has not changed since its\n" +
-			"last Commit is refused (nothing_to_save). The name is a Project's, or a\n" +
+			"last saved state is refused (nothing_to_save). The name is a Project's, or a\n" +
 			"Library's with --library. The author is --author, else GROWSCADA_AUTHOR,\n" +
 			"else the operating system's user name.",
 		Args: exactlyOneArg,
@@ -161,12 +161,12 @@ func newSaveCommand(s *settings) *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("%s: %w", target.ref(), err)
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "%s saved commit %d\n", target.ref(), commit.Number)
+			fmt.Fprintf(cmd.OutOrStdout(), "%s saved state %d\n", target.ref(), commit.Number)
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&title, "title", "", "the title of the Commit")
-	cmd.Flags().StringVar(&author, "author", "", "the author of the Commit (env "+AuthorEnv+")")
+	cmd.Flags().StringVar(&title, "title", "", "the title of the saved state")
+	cmd.Flags().StringVar(&author, "author", "", "the author of the saved state (env "+AuthorEnv+")")
 	cmd.Flags().BoolVar(&asLibrary, "library", false, "the name is a Library's, not a Project's")
 	return cmd
 }
@@ -176,8 +176,8 @@ func newDeployCommand(s *settings) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "deploy <project> --commit <n>",
 		Short: "Make a saved state the Project's running Deployment",
-		Long: "Deploy makes an existing Commit — a saved state — the running Deployment\n" +
-			"of the Project (ADR 0021, task 85_4). It takes a Commit, never the Draft:\n" +
+		Long: "Deploy makes an existing saved state the running Deployment\n" +
+			"of the Project (ADR 0021, task 85_4). It takes a saved state, never the Draft:\n" +
 			"the order is apply → save → deploy. A Deploy of the saved state that\n" +
 			"already runs is refused (nothing_to_deploy); Operation switches to the new\n" +
 			"one.",
@@ -206,8 +206,8 @@ func newCommitsCommand(s *settings) *cobra.Command {
 	var asLibrary bool
 	cmd := &cobra.Command{
 		Use:   "commits <project|library> [--library]",
-		Short: "List the Commits of a Draft, newest first",
-		Long: "List the Commits of the Project's or the Library's Draft, newest first:\n" +
+		Short: "List the saved states of a Draft, newest first",
+		Long: "List the saved states of the Project's or the Library's Draft, newest first:\n" +
 			"their numbers, titles, authors, times and labels. The name is a Project's,\n" +
 			"or a Library's with --library.",
 		Args: exactlyOneArg,
@@ -221,7 +221,7 @@ func newCommitsCommand(s *settings) *cobra.Command {
 				return fmt.Errorf("%s: %w", target.ref(), err)
 			}
 			if len(commits) == 0 {
-				fmt.Fprintf(cmd.ErrOrStderr(), "%s has no commits.\n", target.ref())
+				fmt.Fprintf(cmd.ErrOrStderr(), "%s has no saved states.\n", target.ref())
 				return nil
 			}
 			w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 3, ' ', 0)
@@ -236,7 +236,7 @@ func newCommitsCommand(s *settings) *cobra.Command {
 	return cmd
 }
 
-// formatTime is how the lists print a Commit's time.
+// formatTime is how the lists print a saved state's time.
 func formatTime(t time.Time) string {
 	if t.IsZero() {
 		return "-"

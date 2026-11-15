@@ -54,7 +54,7 @@ type Library struct {
 	// unsavedReloader loads the Draft's unsaved-changes flag on the events of
 	// its content alone, never raising the known Version (task 74).
 	unsavedReloader uiutil.Reloader
-	// ── Commits (task 72_2; ADR 0021) ──────────────────────────────────────
+	// ── saved states (task 72_2; ADR 0021) ─────────────────────────────────
 	// commits is the history of the selected library's Draft, newest first;
 	// commitsLoaded is false until its first answer. saveDialog is true while
 	// the Save dialog is open, saveTitle and saveAuthor its fields;
