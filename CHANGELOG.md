@@ -1,5 +1,25 @@
 # growscada [CHANGELOG](https://keepachangelog.com/en/1.1.0/)
 
+## [0.0.106] - 2026-11-15
+
+Сводная запись цепочки 88_1–88_4: Commit → saved state. Подробности каждой
+части — в записях 0.0.103–0.0.105; здесь — что меняется у пользователя, в
+данных, в API и в документах.
+
+### Changed
+
+- **Единственное имя понятия — saved state** (задачи 88_1–88_4; ADR 0026 отменяет решение задачи 84 оставить `Commit` в коде и API): домен `draft.SavedState`/`SavedStateContent`/`SavedStateTitle`, сервис `SavedStateService`, таблицы `saved_states`, `saved_state_labels`, `saved_state_library_imports` и колонки `saved_state_*`, REST `/saved-states` с полями `saved_state_number`/`saved_state`, события `saved_state_created`/`saved_state_title_updated`, ошибка `saved_state_not_found`, CLI `saved-states` и `--saved-state`, колонка `SAVED STATE`, UI-файлы `saved_states.go` и `data-saved-state-*`
+- Контракты: `api/v0` MINOR 0.43, `record/v0` MINOR 0.7, `project/v0` MINOR 0.4; `manifest/v0` остаётся 0.5, потому что ключ `spec.libraryImports` не менялся; схемы перегенерированы, старые версии заморожены
+- Документы: ADR 0026 «Saved state is the name of a Commit» и поправка к ADR 0021; `GLOSSARY.md` оставляет `Commit` только как прежнее имя с `_Avoid_`; `AGENTS.md` и `docs/architecture/{domain,application,infrastructure,interface}.md` называют идентификаторы и прозу saved state; старые ADR, старые записи этого файла и `todo/done/` — история и не переписаны
+- «Commit» остаётся только там, где это не домен: транзакция БД или git (`after commit`, `racing commits`, `git commit`), `EntryTypeRevision` и чтение старых Journal-записей, имена старых миграций и типов событий
+
+### Breaking
+
+- **Маршруты `/commits…`** — все методы, `load`, `deploy`, `projectfile` и `labels` — отвечают `410 Gone` с указанием нового пути `/saved-states…`; заглушки удаляются вместе с `/api/v1`. Старые события `commit_created`/`commit_title_updated` больше не публикуются
+- **Внешние ProjectFile** со старым `library_imports[].commit` отклоняются 400 с `file_issues`: строгий декодер называет неизвестное поле, а не импортирует сохранённое состояние с нулевым номером; новый ключ — `saved_state`
+- **growctl**: команда `commits` и флаги `deploy --commit`/`label assign|unassign --commit` удалены без алиасов; скрипты переходят на `saved-states` и `--saved-state`
+- Миграции `engineering/20261116000000_saved_states`, `engineering/20261116000001_saved_state_documents`, `runtime/20261116000000_saved_states` и `runtime/20261116000001_saved_state_documents` переименовывают таблицы, колонки, constraints и indexes и переписывают JSONB-документы (`saved_states.content`, `deployments.config`, Journal, Checkpoint) с поднятием `schema_version`; Down возвращает старые имена поверх тех же строк. Journal-записи, Checkpoint'ы, строки стека DraftChange и очереди outbox, записанные до переименования, читаются кодеком по старым именам, поэтому история и undo не теряются
+
 ## [0.0.105] - 2026-11-15
 
 ### Changed
