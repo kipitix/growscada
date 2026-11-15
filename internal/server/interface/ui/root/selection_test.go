@@ -226,8 +226,9 @@ type countingPage struct {
 	reloads *atomic.Int32
 }
 
-func (p countingPage) Reload(app.Context) { p.reloads.Add(1) }
-func (p countingPage) Render() app.UI     { return app.Div() }
+func (p countingPage) Reload(app.Context)          { p.reloads.Add(1) }
+func (p countingPage) Show(app.Context, uuid.UUID) {}
+func (p countingPage) Render() app.UI              { return app.Div() }
 
 // TestSelectionPage_ThePageIsAskedToRereadWhenShown: the page rereads its list
 // when the mode opens on it — the screen restored from LocalStorage included —

@@ -6,8 +6,8 @@ import (
 	"github.com/google/uuid"
 )
 
-// TestSelectProject_BarFollowsTheModeShown: each mode keeps the project its
-// switcher selects; the Bar follows that of the mode shown, and Library,
+// TestSelectProject_BarFollowsTheModeShown: each mode keeps the project chosen
+// for it in the main menu; the Bar follows that of the mode shown, and Library,
 // which shows none, leaves it as it is.
 func TestSelectProject_BarFollowsTheModeShown(t *testing.T) {
 	r := NewRoot("http://127.0.0.1:0")
@@ -29,7 +29,7 @@ func TestSelectProject_BarFollowsTheModeShown(t *testing.T) {
 	follows(b)
 	r.SetMode(ModeLibrary)
 	follows(b)
-	r.SetMode(ModeHistory) // its switcher has not announced yet
+	r.SetMode(ModeHistory) // nothing is selected for it yet
 	follows(b)
 	r.selectProject(ModeHistory, c)
 	follows(c)

@@ -222,6 +222,23 @@ func (p *Picker) Reload(ctx app.Context) {
 // Items returns the list as last loaded, in the server's order.
 func (p *Picker) Items() []Item { return p.items }
 
+// Show marks the entity id as the page's own selection without announcing it:
+// the main menu opened it, and Root has announced it already (task 89).
+func (p *Picker) Show(ctx app.Context, id uuid.UUID) {
+	if p.selected == id {
+		return
+	}
+	p.selected, p.selectedName = id, ""
+	if item, ok := p.find(id); ok {
+		p.selectedName = item.Name
+	}
+	p.screen = screenDetails
+	uiutil.StoreID(ctx, p.key, id)
+	if p.mounted {
+		ctx.Update()
+	}
+}
+
 // SelectedID returns the entity the page reports as shown (uuid.Nil: none).
 func (p *Picker) SelectedID() uuid.UUID { return p.selected }
 
@@ -237,17 +254,21 @@ func (p *Picker) Name(id uuid.UUID) string {
 }
 
 // Displayed returns the entities as the page shows them: the IDs the person
-// placed first, in that order, then the rest by name (task 81, ADR 0024). An
-// ID of an entity this list does not have is ignored; the client is what
-// merges, the server never reads the entities.
-func (p *Picker) Displayed() []Item {
-	shown := make([]Item, 0, len(p.items))
-	placed := make(map[uuid.UUID]struct{}, len(p.order.IDs))
-	byID := make(map[uuid.UUID]Item, len(p.items))
-	for _, item := range p.items {
+// placed first, in that order, then the rest by name (task 81, ADR 0024).
+func (p *Picker) Displayed() []Item { return Ordered(p.items, p.order) }
+
+// Ordered returns items as a page shows them: the IDs the person placed first,
+// in that order, then the rest by name (task 81, ADR 0024). An ID of an entity
+// the list does not have is ignored; the client is what merges, the server
+// never reads the entities.
+func Ordered(items []Item, order Order) []Item {
+	shown := make([]Item, 0, len(items))
+	placed := make(map[uuid.UUID]struct{}, len(order.IDs))
+	byID := make(map[uuid.UUID]Item, len(items))
+	for _, item := range items {
 		byID[item.ID] = item
 	}
-	for _, anID := range p.order.IDs {
+	for _, anID := range order.IDs {
 		item, ok := byID[anID]
 		if !ok {
 			continue
@@ -258,8 +279,8 @@ func (p *Picker) Displayed() []Item {
 		placed[anID] = struct{}{}
 		shown = append(shown, item)
 	}
-	rest := make([]Item, 0, len(p.items)-len(shown))
-	for _, item := range p.items {
+	rest := make([]Item, 0, len(items)-len(shown))
+	for _, item := range items {
 		if _, ok := placed[item.ID]; !ok {
 			rest = append(rest, item)
 		}

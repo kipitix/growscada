@@ -649,6 +649,10 @@ func stateBadge(kind string) (color, border string) {
 	}
 }
 
+// StateBadge is the colour and the border of a state badge, by the kind of the
+// state: the page's dot and the main menu's badge read the same (task 89).
+func StateBadge(kind string) (color, border string) { return stateBadge(kind) }
+
 // rowsID and rowID name the list and its rows for the browser: the list is the
 // active descendant owner of the keyboard, and a drag reads the row under the
 // pointer.

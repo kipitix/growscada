@@ -19,7 +19,6 @@ import (
 	"github.com/kipitix/growscada/internal/server/interface/ui/operation"
 	"github.com/kipitix/growscada/internal/server/interface/ui/picker"
 	"github.com/kipitix/growscada/internal/server/interface/ui/project"
-	"github.com/kipitix/growscada/internal/server/interface/ui/projects"
 	"github.com/kipitix/growscada/internal/server/interface/ui/toast"
 	"github.com/kipitix/growscada/internal/server/interface/ui/uiutil"
 )
@@ -66,9 +65,9 @@ type Root struct {
 	// header in every mode; labelsOpen is whether it is shown.
 	labels     *labels.Dialog
 	labelsOpen bool
-	// selected holds the entity each mode shows, once its switcher or
-	// selection page announced it: the Project of the modes with a project
-	// switcher, and the Project or Library of the Project and Library modes.
+	// selected holds the entity each mode shows, once the main menu or the
+	// selection page announced it: the Project of Operation and History, and
+	// the Project or Library of the Project and Library modes.
 	selected map[Mode]uuid.UUID
 	// entityName is the name of the entity selected, as last read by the
 	// selection page: the slim "← List · <name>" row of the editor.
@@ -98,6 +97,25 @@ type Root struct {
 	// reloadOnAppUpdate is set by the banner's Reload while the service
 	// worker fetches the new app (see reloadApp).
 	reloadOnAppUpdate bool
+	// The main menu (task 89): menuOpen is whether it is shown, menuExpanded
+	// the mode whose entities it lists. menuProjects and menuLibraries are the
+	// entities as its last reads made them, with the badges of their state,
+	// and the two orders are the ones it lists them in (ADR 0024). The loaded
+	// flags tell "nothing read yet" from "the server has none".
+	menuOpen            bool
+	menuExpanded        Mode
+	menuProjects        []picker.Item
+	menuLibraries       []picker.Item
+	menuProjectOrder    picker.Order
+	menuLibraryOrder    picker.Order
+	menuProjectsLoaded  bool
+	menuLibrariesLoaded bool
+	menuProjectReloader uiutil.Reloader
+	menuLibraryReloader uiutil.Reloader
+	menuProjectSource   picker.Source
+	menuLibrarySource   picker.Source
+	// onKeyDown closes the menu on Esc, wherever the focus is (task 89).
+	onKeyDown app.Func
 }
 
 func NewRoot(anAPIServerURL string) *Root {
@@ -129,9 +147,13 @@ func NewRoot(anAPIServerURL string) *Root {
 			func(id uuid.UUID, name string) { r.selectEntity(ModeProject, id, name) },
 			func(id uuid.UUID) { r.openEntity(ModeProject, id) },
 		)},
-		{mode: ModeOperation, ui: r.operation, switcher: r.newSelector(ModeOperation)},
-		{mode: ModeHistory, ui: &history.History{}, switcher: r.newSelector(ModeHistory)},
+		{mode: ModeOperation, ui: r.operation},
+		{mode: ModeHistory, ui: &history.History{}},
 	}
+	// The main menu reads the entities of both selection pages itself, so it
+	// does not depend on a mode having been opened (task 89).
+	r.menuLibrarySource = picker.NewLibrarySource(r.client)
+	r.menuProjectSource = picker.NewProjectSource(r.client)
 	r.opened = map[Mode]bool{}
 	r.selected = map[Mode]uuid.UUID{}
 	r.entityName = map[Mode]string{}
@@ -143,10 +165,14 @@ func (r *Root) OnMount(ctx app.Context) {
 	r.compoCtx, r.mounted = ctx, true
 	ctx.Page().SetTitle("GrowSCADA")
 
-	// The tab opens the entity last shown: it is read here, before any mode
-	// mounts, so the editor does not wait for its selection page (task 73).
+	// The mode shown opens the entity last shown: it is read here, before any
+	// mode mounts, so the editor does not wait for its selection page (task
+	// 73). Operation and History keep their Project under their own key, as
+	// their switcher did until the main menu replaced it (task 89).
 	r.selected[ModeProject] = uiutil.LoadID(ctx, picker.ProjectKey)
 	r.selected[ModeLibrary] = uiutil.LoadID(ctx, picker.LibraryKey)
+	r.selected[ModeOperation] = uiutil.LoadID(ctx, projectKey(ModeOperation))
+	r.selected[ModeHistory] = uiutil.LoadID(ctx, projectKey(ModeHistory))
 
 	// The screen of a mode with a selection page is what the person left
 	// there, restored before any mode mounts: the page, or the editor of the
@@ -171,10 +197,32 @@ func (r *Root) OnMount(ctx app.Context) {
 		}
 	})
 	// A mode's history screen opens the Labels window through this action: the
-	// window is the tab's one, and Root owns whether it is shown (task 85_3).
+	// window is the header's one, and Root owns whether it is shown (task 85_3).
 	ctx.Handle(labels.ActionOpen, func(ctx app.Context, _ app.Action) {
 		r.openLabels(ctx)
 	})
+	// The menu follows the entities it lists and the project Operation or
+	// History shows: a list changes while it is open, a project is renamed or
+	// deleted elsewhere (task 89).
+	ctx.Handle(eventlog.ActionServerEvent, func(ctx app.Context, a app.Action) {
+		ev, ok := a.Value.(apiv0.Event)
+		if !ok {
+			return
+		}
+		r.handleProjectEvents(ctx, ev)
+		if !r.menuOpen {
+			return
+		}
+		targets := eventlog.ReloadTargetsFor(ev)
+		if targets.Projects {
+			r.loadMenuProjects(ctx)
+		}
+		if targets.Libraries {
+			r.loadMenuLibraries(ctx)
+		}
+	})
+	r.listenMenuKeys()
+	r.restoreProjects(ctx)
 
 	injectToastCSS()
 
@@ -195,23 +243,50 @@ func (r *Root) OnMount(ctx app.Context) {
 		if Mode(savedMode) != ModeUnknown {
 			mode = Mode(savedMode)
 		}
+		// The Operation of the last session shows its project at once, before
+		// its first mount (task 89).
+		if id := r.selected[ModeOperation]; id != uuid.Nil {
+			r.operation.SetProject(id)
+		}
 		// Only now, so a mode is not opened (and loaded) just for being
 		// the default before the saved one is known.
 		r.SetMode(mode)
 	})
 }
 
-// newSelector is the project switcher of a mode that only selects projects
-// (Operation, History): Project and Library list their entities on a
-// selection page of their own (task 73).
-func (r *Root) newSelector(mode Mode) *projects.Switcher {
-	return projects.NewSelector(r.client, string(mode)+":projectID", func(id uuid.UUID) {
-		r.selectProject(mode, id)
+// OnDismount releases the key listener of the menu.
+func (r *Root) OnDismount() {
+	if r.onKeyDown == nil {
+		return
+	}
+	app.Window().Call("removeEventListener", "keydown", r.onKeyDown)
+	r.onKeyDown.Release()
+	r.onKeyDown = nil
+}
+
+// listenMenuKeys closes the menu on Esc, from wherever the focus is, and gives
+// the focus back to the burger (task 89).
+func (r *Root) listenMenuKeys() {
+	if r.onKeyDown != nil {
+		return
+	}
+	r.onKeyDown = app.FuncOf(func(this app.Value, args []app.Value) any {
+		if len(args) == 0 || !r.menuOpen {
+			return nil
+		}
+		if args[0].Get("key").String() != "Escape" {
+			return nil
+		}
+		r.closeMenu()
+		r.focusMenuButton()
+		return nil
 	})
+	app.Window().Call("addEventListener", "keydown", r.onKeyDown)
 }
 
 // openLabels shows the global Labels window, rereading its list (task 85_2).
 func (r *Root) openLabels(ctx app.Context) {
+	r.closeMenu()
 	r.labelsOpen = true
 	r.labels.Reload(ctx)
 	ctx.Update()
@@ -226,15 +301,18 @@ func (r *Root) closeLabels() {
 }
 
 // selectProject shows the project id (uuid.Nil: none) in mode, one of those
-// whose compact switcher selects a project (Operation, History); it calls it
-// on the UI goroutine. Operation reads nothing of the Bar: its own Player
-// follows the Journal (ADR 0020); History reads it. If the Bar follows the
-// project already, it resyncs now; else, if mode is shown, the Bar follows
-// it, its stream resyncing as it opens; else mode reads it once shown
+// that only show a project (Operation, History), chosen in the main menu and
+// called on the UI goroutine (task 89). Operation reads nothing of the Bar:
+// its own Player follows the Journal (ADR 0020); History reads it. If the Bar
+// follows the project already, it resyncs now; else, if mode is shown, the Bar
+// follows it, its stream resyncing as it opens; else mode reads it once shown
 // (SetMode). The Project mode has a selection page instead, which announces
 // through selectEntity (task 73).
 func (r *Root) selectProject(mode Mode, id uuid.UUID) {
 	r.selected[mode] = id
+	if id == uuid.Nil {
+		r.entityName[mode] = ""
+	}
 	if mode == ModeOperation {
 		r.operation.SetProject(id)
 	}
@@ -284,6 +362,16 @@ func (r *Root) openEntity(mode Mode, id uuid.UUID) {
 	r.showList[mode] = false
 	r.storeScreen(mode, screenEditor)
 	r.selectEntity(mode, id, r.entityName[mode])
+}
+
+// openEntityAs is openEntity under the name the main menu read for the entity
+// it opened (task 89).
+func (r *Root) openEntityAs(mode Mode, id uuid.UUID, name string) {
+	if id == uuid.Nil {
+		return
+	}
+	r.entityName[mode] = name
+	r.openEntity(mode, id)
 }
 
 // showListPage shows the selection page of mode, rereading its list, and
@@ -647,22 +735,8 @@ func (r *Root) Render() app.UI {
 			&toast.Container{},
 			r.labels,
 			r.renderVersionBanner(),
-			app.Div().
-				Attr("role", "tablist").
-				Style("display", "flex").
-				Style("flex-direction", "row").
-				Style("align-items", "center").
-				Style("border-bottom", "2px solid var(--border)").
-				Style("background", "var(--bg-elevated)").
-				Body(
-					r.tab("Library", ModeLibrary),
-					r.tab("Project", ModeProject),
-					r.tab("Operation", ModeOperation),
-					r.tab("History", ModeHistory),
-					app.Div().Style("flex", "1"),
-					r.renderLabelsButton(),
-					r.renderThemeToggle(),
-				),
+			r.renderMenuBackdrop(),
+			r.renderHeader(),
 			app.Div().
 				Style("flex", "1").
 				Style("min-height", "0").
@@ -672,6 +746,33 @@ func (r *Root) Render() app.UI {
 					return r.modeSlot(&r.modes[i])
 				})),
 			r.bar,
+		)
+}
+
+// renderHeader is the one row above the modes: the burger of the main menu and
+// the navigation line naming what is shown, then the actions every mode shares
+// (task 89). It holds the open menu, so the panel hangs under it.
+func (r *Root) renderHeader() app.UI {
+	return app.Div().
+		Attr("data-header", "true").
+		Style("position", "relative").
+		Style("z-index", "30").
+		Style("display", "flex").
+		Style("flex-direction", "row").
+		Style("align-items", "center").
+		Style("gap", "8px").
+		Style("padding", "5px 10px").
+		Style("min-height", "38px").
+		Style("box-sizing", "border-box").
+		Style("border-bottom", "2px solid var(--border)").
+		Style("background", "var(--bg-elevated)").
+		Body(
+			r.renderMenuButton(),
+			r.renderNavigation(),
+			app.Div().Style("flex", "1"),
+			r.renderLabelsButton(),
+			r.renderThemeToggle(),
+			r.renderMenuPanel(),
 		)
 }
 
@@ -696,7 +797,7 @@ func (r *Root) modeSlot(m *modeView) app.UI {
 }
 
 // modeContent is the component of a mode: its selection page or the editor of
-// the entity selected, under its project switcher if it has one.
+// the entity selected.
 func (r *Root) modeContent(m *modeView) app.UI {
 	if m.picker != nil {
 		// Both screens stay mounted — the page keeps its list, the editor its
@@ -723,23 +824,7 @@ func (r *Root) modeContent(m *modeView) app.UI {
 					)),
 			)
 	}
-	if m.switcher == nil {
-		return m.ui
-	}
-	return app.Div().
-		Style("display", "flex").
-		Style("flex-direction", "column").
-		Style("flex", "1").
-		Style("min-width", "0").
-		Style("min-height", "0").
-		Body(
-			m.switcher,
-			app.Div().
-				Style("display", "flex").
-				Style("flex", "1").
-				Style("min-height", "0").
-				Body(m.ui),
-		)
+	return m.ui
 }
 
 // screen is one screen of a mode with a selection page, shown or hidden: it
@@ -761,63 +846,27 @@ func screen(visible bool, body app.UI) app.UI {
 		Body(body)
 }
 
-// modeView is a mode and its component: the switcher of the project it shows
-// (Operation, History) or the selection page of its entities (Library,
-// Project). At most one of them is set.
+// modeView is a mode and its component: the selection page of its entities
+// (Library, Project), absent for Operation and History, which only show a
+// Project.
 type modeView struct {
-	mode     Mode
-	ui       app.Composer
-	switcher *projects.Switcher
-	picker   listPage
+	mode   Mode
+	ui     app.Composer
+	picker listPage
 }
 
 // listPage is the selection page of a mode with one: picker.Picker, behind an
-// interface only for the one thing Root does with it — ask it to reread the
-// list when the page is shown — so a test reaches the decision without the
-// page being mounted.
+// interface only for what Root does with it — ask it to reread the list when
+// the page is shown, and mark the entity the main menu opened — so a test
+// reaches the decision without the page being mounted.
 type listPage interface {
 	app.UI
 	Reload(app.Context)
+	Show(app.Context, uuid.UUID)
 }
 
-func (r *Root) tab(label string, mode Mode) app.UI {
-	active := r.currentMode == mode
-
-	ariaSelected := "false"
-	tabIdx := -1
-	if active {
-		ariaSelected = "true"
-		tabIdx = 0
-	}
-
-	tab := app.Div().
-		Attr("role", "tab").
-		Attr("aria-selected", ariaSelected).
-		TabIndex(tabIdx).
-		Style("padding", "10px 20px").
-		Style("cursor", "pointer").
-		Style("font-size", "14px").
-		Style("user-select", "none").
-		Style("border-bottom", "2px solid transparent").
-		Style("margin-bottom", "-2px").
-		Text(label).
-		OnClick(func(ctx app.Context, e app.Event) {
-			r.SetMode(mode)
-			ctx.LocalStorage().Set("root:mode", string(mode))
-		})
-
-	if active {
-		return tab.
-			Style("border-bottom-color", "var(--accent)").
-			Style("color", "var(--accent)").
-			Style("font-weight", "600")
-	}
-	return tab.
-		Style("color", "var(--text-2)")
-}
-
-// renderLabelsButton opens the one Labels window of the tab (task 85_2); it
-// sits beside the theme toggle and is available in every mode.
+// renderLabelsButton opens the one Labels window of the header (task 85_2);
+// it sits beside the theme toggle and is available in every mode.
 func (r *Root) renderLabelsButton() app.UI {
 	return uiutil.IconButton(uiutil.IconTag(), "", true, "Labels", uiutil.ButtonBar,
 		func(ctx app.Context, e app.Event) { r.openLabels(ctx) }).
@@ -854,12 +903,12 @@ func (r *Root) renderThemeToggle() app.UI {
 		})
 }
 
-// SetMode shows mode, opening it if it was not yet. A tab of the Library or
-// the Project mode opens the screen the person left there — the selection page
-// or the editor of the entity last shown — and its list is reread when it is a
+// SetMode shows mode, opening it if it was not yet. The Library and the
+// Project mode open the screen the person left there — the selection page or
+// the editor of the entity last shown — and its list is reread when it is a
 // page (task 73, task 85_1). The Bar follows the project of a mode that shows
-// one, from its switcher's announcement on (selectProject); Library leaves it
-// as it is.
+// one, from the choice of it in the main menu on (selectProject); Library
+// leaves it as it is.
 func (r *Root) SetMode(mode Mode) {
 	r.currentMode = mode
 	first := !r.opened[mode]
