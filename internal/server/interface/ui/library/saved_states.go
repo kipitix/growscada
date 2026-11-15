@@ -18,10 +18,10 @@ import (
 )
 
 // The Library mode's Save and its history (task 72_2; ADR 0021): Save fixes
-// the selected library's Draft as a saved state, the history lists them and their
-// titles are renamed. The Draft is still written at once, so the indicator is
-// the Draft's own unsaved-changes flag, its Version against its Clean Version
-// (ADR 0016, amendment 2026-11-10; task 74).
+// the selected library's Draft as a saved state, the history lists them and
+// their titles are renamed. The Draft is still written at once, so the
+// indicator is the Draft's own unsaved-changes flag, its Version against its
+// Clean Version (ADR 0016, amendment 2026-11-10; task 74).
 
 // loadSavedStates (re)loads the history of the selected library's Draft. A 404
 // means the library is gone and leaves it (libraryGone).
@@ -173,8 +173,8 @@ func (l *Library) renameSavedState(ctx app.Context, number int, title string) {
 	}, nil)
 }
 
-// renderSavedStateBar is the panel's Save, its unsaved-changes indicator and the
-// History button (task 72_7; task 84; ADR 0021).
+// renderSavedStateBar is the panel's Save, its unsaved-changes indicator and
+// the History button (task 72_7; task 84; ADR 0021).
 func (l *Library) renderSavedStateBar() []app.UI {
 	editable := l.libraryID != uuid.Nil
 	saveTitle := "Save the Draft as a saved state"

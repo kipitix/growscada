@@ -65,8 +65,9 @@ func TestLabels_CRUD(t *testing.T) {
 }
 
 // TestLabelAssign_ProjectAndLibrary drives the assignment commands against the
-// real API (task 85_3; ADR 0025): a mark placed by name, shown by `saved-states`,
-// and taken off again, for a Project's and a Library's saved state.
+// real API (task 85_3; ADR 0025): a mark placed by name, shown by
+// `saved-states`, and taken off again, for a Project's and a Library's saved
+// state.
 func TestLabelAssign_ProjectAndLibrary(t *testing.T) {
 	srv, _ := servertest.StartAPI(t, postgres.DB(t))
 	if _, err := runGrowctl(t, srv, twoTags, "apply"); err != nil {

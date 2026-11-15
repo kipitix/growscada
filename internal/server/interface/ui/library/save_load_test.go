@@ -16,8 +16,8 @@ import (
 // The Library's Save flow of task 72_7: Ctrl+S, the status of the list, a load
 // of a saved state and a Discard made in another tab.
 
-// saveWithUI fixes the Draft as a saved state through the Save dialog and consumes
-// its confirmation toast.
+// saveWithUI fixes the Draft as a saved state through the Save dialog and
+// consumes its confirmation toast.
 func saveWithUI(t *testing.T, f *fixture, title string) {
 	t.Helper()
 	f.l.saveAuthor, f.l.saveTitle = "Ada", title
@@ -49,9 +49,10 @@ func TestSaveFromShortcut_OpensTheDialogOnlyWithChanges(t *testing.T) {
 	}
 }
 
-// TestSaveSavedState_ConflictRereadsTheDraft: another tab edits the Draft before
-// this one saves: the 409 is a toast, and the Draft, the stack and the history
-// are read again so the next Save states the server's Version (task 72_7).
+// TestSaveSavedState_ConflictRereadsTheDraft: another tab edits the Draft
+// before this one saves: the 409 is a toast, and the Draft, the stack and the
+// history are read again so the next Save states the server's Version
+// (task 72_7).
 func TestSaveSavedState_ConflictRereadsTheDraft(t *testing.T) {
 	f, id := selected(t)
 	f.run()
@@ -192,8 +193,8 @@ func TestLibraryState_ListsTheStates(t *testing.T) {
 	}
 }
 
-// TestServerEvents_AnotherLibraryLeavesTheSelectedAlone: a saved state of another
-// library is not the selected one's business (task 72_7).
+// TestServerEvents_AnotherLibraryLeavesTheSelectedAlone: a saved state of
+// another library is not the selected one's business (task 72_7).
 func TestServerEvents_AnotherLibraryLeavesTheSelectedAlone(t *testing.T) {
 	url, api := newServer(t)
 	other, err := api.CreateLibrary(context.Background(), apiv0.CreateLibraryRequest{Name: "Other"})

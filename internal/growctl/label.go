@@ -285,8 +285,8 @@ func (t workflowTarget) setLabel(ctx context.Context, assign bool, savedState in
 	}
 }
 
-// labelNames is the labels of a saved state as `saved-states` prints them: their
-// names, a color in parentheses when they have one.
+// labelNames is the labels of a saved state as `saved-states` prints them:
+// their names, a color in parentheses when they have one.
 func labelNames(labels []apiv0.LabelResponse) string {
 	names := make([]string, len(labels))
 	for i, l := range labels {

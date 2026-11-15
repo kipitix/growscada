@@ -116,9 +116,9 @@ func (p *Project) selectImportLibrary(ctx app.Context, libraryID uuid.UUID) {
 	ctx.Update()
 }
 
-// loadImportSavedStates (re)loads the saved states of the opened library, newest
-// first: every one, or those the chosen label marks. A library whose read
-// fails — it was removed meanwhile — closes its list rather than showing
+// loadImportSavedStates (re)loads the saved states of the opened library,
+// newest first: every one, or those the chosen label marks. A library whose
+// read fails — it was removed meanwhile — closes its list rather than showing
 // another library's states in its place.
 func (p *Project) loadImportSavedStates(ctx app.Context) {
 	libraryID := p.importLibraryID

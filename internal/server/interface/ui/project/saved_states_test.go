@@ -11,9 +11,9 @@ import (
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 )
 
-// TestSaveSavedState_HistoryRowAndIndicator: Save fixes the Draft as saved state 1, the
-// history shows it and the unsaved-changes indicator goes off (task 72_2;
-// ADR 0021).
+// TestSaveSavedState_HistoryRowAndIndicator: Save fixes the Draft as saved
+// state 1, the history shows it and the unsaved-changes indicator goes off
+// (task 72_2; ADR 0021).
 func TestSaveSavedState_HistoryRowAndIndicator(t *testing.T) {
 	f := startProject(t)
 	f.run()
@@ -67,9 +67,9 @@ func TestSaveSavedState_HistoryRowAndIndicator(t *testing.T) {
 	}
 }
 
-// TestSaveSavedState_SuccessAndNothingToSave: a Save shows its toast, the shortcut
-// opens the dialog only while the Draft has changes, and a Save of an unchanged
-// Draft is the server's 409 (task 72_6; ADR 0021).
+// TestSaveSavedState_SuccessAndNothingToSave: a Save shows its toast, the
+// shortcut opens the dialog only while the Draft has changes, and a Save of an
+// unchanged Draft is the server's 409 (task 72_6; ADR 0021).
 func TestSaveSavedState_SuccessAndNothingToSave(t *testing.T) {
 	f := startProject(t)
 	f.run()
@@ -167,8 +167,8 @@ func TestSaveSavedState_ShortcutsWaitForTheDialogs(t *testing.T) {
 }
 
 // TestSaveSavedState_ConflictRereadsAndRename: a Save of a stale Version is a
-// conflict that rereads the Draft, and a saved state's title is renamed in place
-// (task 72_2; ADR 0021).
+// conflict that rereads the Draft, and a saved state's title is renamed in
+// place (task 72_2; ADR 0021).
 func TestSaveSavedState_ConflictRereadsAndRename(t *testing.T) {
 	f := startProject(t)
 	f.run()

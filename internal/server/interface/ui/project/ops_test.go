@@ -55,8 +55,8 @@ func newServer(t *testing.T) (string, *testAPI) {
 	return srv.URL, newTestAPI(apiclient.New(srv.URL, srv.Client()))
 }
 
-// cleanHistory removes the Deployments, saved states and DraftChanges of Main: a test
-// that counts or numbers them starts from none.
+// cleanHistory removes the Deployments, saved states and DraftChanges of Main:
+// a test that counts or numbers them starts from none.
 func cleanHistory(t *testing.T) {
 	t.Helper()
 	main := "'" + servertest.MainProject.String() + "'"
@@ -757,8 +757,10 @@ func TestNoServer_ShowsNetworkErrors(t *testing.T) {
 
 	f := mount(t, url, nil)
 
+	// One toast per list: libraries, pins, widget types, scenes, tags, the
+	// deployment state, the Draft and the saved states.
 	toasts := f.e.TakeToasts()
-	if len(toasts) != 8 { // libraries, pins, widget types, scenes, tags, deployment state, the Draft, the savedStates
+	if len(toasts) != 8 {
 		t.Fatalf("want a toast per list, got %+v", toasts)
 	}
 	for _, got := range toasts {

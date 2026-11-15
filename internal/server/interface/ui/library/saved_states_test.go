@@ -8,11 +8,11 @@ import (
 	"github.com/maxence-charriere/go-app/v11/pkg/app"
 )
 
-// TestSavedStateBar_IndicatorKeepsTheButtonPositions: the unsaved-changes indicator
-// is always the panel's second child — hidden when it has nothing to say —, so
-// History never shifts by a position and a reused element keeps its own handler
-// (task 79). TestEngine renders but dispatches no DOM click, so
-// the panels themselves are checked in the browser; this test guards the
+// TestSavedStateBar_IndicatorKeepsTheButtonPositions: the unsaved-changes
+// indicator is always the panel's second child — hidden when it has nothing
+// to say —, so History never shifts by a position and a reused element keeps
+// its own handler (task 79). TestEngine renders but dispatches no DOM click,
+// so the panels themselves are checked in the browser; this test guards the
 // structure the bug came from.
 func TestSavedStateBar_IndicatorKeepsTheButtonPositions(t *testing.T) {
 	l := &Library{libraryID: uuid.New()}
@@ -42,9 +42,9 @@ func TestSavedStateBar_IndicatorKeepsTheButtonPositions(t *testing.T) {
 	}
 }
 
-// TestSaveSavedState_LibraryHistoryAndRename: Save fixes the Draft as saved state 1,
-// the indicator goes off, the history shows it and its title is renamed in
-// place (task 72_2; ADR 0021).
+// TestSaveSavedState_LibraryHistoryAndRename: Save fixes the Draft as saved
+// state 1, the indicator goes off, the history shows it and its title is
+// renamed in place (task 72_2; ADR 0021).
 func TestSaveSavedState_LibraryHistoryAndRename(t *testing.T) {
 	url, api := newServer(t)
 	// A library with a change to save: a Draft nothing was written to is clean
@@ -91,8 +91,8 @@ func TestSaveSavedState_LibraryHistoryAndRename(t *testing.T) {
 	}
 }
 
-// TestSaveSavedState_LibraryShortcutsWaitForTheDialogs: the Save and the History
-// dialogs of the mode hold the Draft's shortcuts (task 72_2; ADR 0021).
+// TestSaveSavedState_LibraryShortcutsWaitForTheDialogs: the Save and the
+// History dialogs of the mode hold the Draft's shortcuts (task 72_2; ADR 0021).
 func TestSaveSavedState_LibraryShortcutsWaitForTheDialogs(t *testing.T) {
 	url, api := newServer(t)
 	f := mount(t, url, api)

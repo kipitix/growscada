@@ -160,9 +160,9 @@ type Project struct {
 
 	// ── Deploy (task 85_5; ADR 0021, ADR 0025) ─────────────────────────────
 	// deployDialog is true while the window is shown; deploySavedStates is the
-	// saved states it lists, newest first — all of them, or the ones the
-	// label deployLabel marks (uuid.Nil: all labels) — and deploySavedStatesLoaded
-	// is false until its first answer. A Deploy makes a saved state the running
+	// saved states it lists, newest first — all of them, or the ones the label
+	// deployLabel marks (uuid.Nil: all labels) — and deploySavedStatesLoaded is
+	// false until its first answer. A Deploy makes a saved state the running
 	// Deployment (task 85_4).
 	deployDialog              bool
 	deploySavedStates         []apiv0.SavedStateResponse

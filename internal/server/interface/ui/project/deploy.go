@@ -147,9 +147,10 @@ type deployListKey struct {
 	label   uuid.UUID
 }
 
-// loadDeploySavedStates (re)loads the saved states the window lists: every one, or
-// the ones the chosen label marks. The list is the Project's, so a 404 is the
-// Project's absence and goes to the switcher like the history's (task 85_5).
+// loadDeploySavedStates (re)loads the saved states the window lists: every
+// one, or the ones the chosen label marks. The list is the Project's, so a 404
+// is the Project's absence and goes to the switcher like the history's
+// (task 85_5).
 func (p *Project) loadDeploySavedStates(ctx app.Context) {
 	if p.content == nil {
 		p.deploySavedStates, p.deploySavedStatesLoaded = nil, false
