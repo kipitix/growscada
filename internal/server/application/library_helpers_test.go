@@ -107,13 +107,13 @@ func mustCreateLibrary(t *testing.T) appdto.Library {
 	return lib
 }
 
-// mustSaveLibraryState saves the library's Draft as a SavedState as it is.
+// mustSaveLibraryState saves the library's Draft as a saved state as it is.
 func mustSaveLibraryState(t *testing.T, libraryID uuid.UUID) appdto.SavedState {
 	t.Helper()
 	return mustSaveLibraryStateTitled(t, libraryID, "Save", "Ada")
 }
 
-// mustSaveLibraryStateTitled saves the library's Draft as a SavedState titled
+// mustSaveLibraryStateTitled saves the library's Draft as a saved state titled
 // title.
 func mustSaveLibraryStateTitled(t *testing.T, libraryID uuid.UUID, title, author string) appdto.SavedState {
 	t.Helper()
@@ -121,7 +121,7 @@ func mustSaveLibraryStateTitled(t *testing.T, libraryID uuid.UUID, title, author
 		draft.LibraryScope(id.NewID(id.IDWithUUID[library.Library](libraryID))),
 		libraryDraftVersionOf(t, libraryID), title, author)
 	if err != nil {
-		t.Fatalf("Save savedState: %v", err)
+		t.Fatalf("Save saved state: %v", err)
 	}
 	return savedState
 }

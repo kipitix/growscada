@@ -116,7 +116,7 @@ func TestDraftCleanVersion_SaveDiscardAndNothingToSave(t *testing.T) {
 	// A Save makes the Draft its SavedState's content, and nothing is left to
 	// save.
 	if _, err := testDrafts().SaveSavedState(ctx, scope, draftVersionOf(t, mainProject),
-		commitTitle(t, "First"), commitAuthor(t), projectSavedStateContent()); err != nil {
+		savedStateTitle(t, "First"), savedStateAuthor(t), projectSavedStateContent()); err != nil {
 		t.Fatalf("SaveSavedState: %v", err)
 	}
 	saved := read()
@@ -124,7 +124,7 @@ func TestDraftCleanVersion_SaveDiscardAndNothingToSave(t *testing.T) {
 		t.Errorf("a saved Draft: %s, clean %s; want it clean", saved.Version(), saved.CleanVersion())
 	}
 	if _, err := testDrafts().SaveSavedState(ctx, scope, draftVersionOf(t, mainProject),
-		commitTitle(t, "Again"), commitAuthor(t), projectSavedStateContent()); !errors.Is(err, draft.ErrNothingToSave) {
+		savedStateTitle(t, "Again"), savedStateAuthor(t), projectSavedStateContent()); !errors.Is(err, draft.ErrNothingToSave) {
 		t.Fatalf("a Save at the Clean Version: %v, want ErrNothingToSave", err)
 	}
 
@@ -141,7 +141,7 @@ func TestDraftCleanVersion_SaveDiscardAndNothingToSave(t *testing.T) {
 		t.Errorf("a clean replacement is unsaved: %s, clean %s", result.Version(), result.CleanVersion())
 	}
 	if _, err := testDrafts().SaveSavedState(ctx, scope, draftVersionOf(t, mainProject),
-		commitTitle(t, "After a discard"), commitAuthor(t), projectSavedStateContent()); !errors.Is(err, draft.ErrNothingToSave) {
+		savedStateTitle(t, "After a discard"), savedStateAuthor(t), projectSavedStateContent()); !errors.Is(err, draft.ErrNothingToSave) {
 		t.Fatalf("a Save after a Discard: %v, want ErrNothingToSave", err)
 	}
 
@@ -159,7 +159,7 @@ func TestDraftCleanVersion_SaveDiscardAndNothingToSave(t *testing.T) {
 	// A replacement that names a SavedState the Draft no longer has as its last
 	// one is not clean either: a Save committed meanwhile overtook it (task 84).
 	if _, err := testDrafts().SaveSavedState(ctx, scope, draftVersionOf(t, mainProject),
-		commitTitle(t, "Second"), commitAuthor(t), projectSavedStateContent()); err != nil && !errors.Is(err, draft.ErrNothingToSave) {
+		savedStateTitle(t, "Second"), savedStateAuthor(t), projectSavedStateContent()); err != nil && !errors.Is(err, draft.ErrNothingToSave) {
 		t.Fatalf("SaveSavedState: %v", err)
 	}
 	if _, err := testDrafts().Replace(ctx, scope, 1, func(session *draft.Session) error {

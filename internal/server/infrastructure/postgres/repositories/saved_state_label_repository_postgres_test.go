@@ -39,7 +39,7 @@ func TestLabelAssignments_WriteReadFilterAndCascade(t *testing.T) {
 	}
 
 	savedState, err := testDrafts().SaveSavedState(ctx, scope, draftVersionOf(t, mainProject),
-		commitTitle(t, "First"), commitAuthor(t), projectSavedStateContent())
+		savedStateTitle(t, "First"), savedStateAuthor(t), projectSavedStateContent())
 	if err != nil {
 		t.Fatalf("SaveSavedState: %v", err)
 	}
@@ -181,7 +181,7 @@ func TestLabelAssignments_SavedStateCascade(t *testing.T) {
 		t.Fatalf("Create: %v", err)
 	}
 	savedState, err := testDrafts().SaveSavedState(ctx, scope, draftVersionOf(t, mainProject),
-		commitTitle(t, "First"), commitAuthor(t), projectSavedStateContent())
+		savedStateTitle(t, "First"), savedStateAuthor(t), projectSavedStateContent())
 	if err != nil {
 		t.Fatalf("SaveSavedState: %v", err)
 	}
@@ -222,7 +222,7 @@ func TestLabelAssignments_DeleteRacesAssign(t *testing.T) {
 		t.Fatalf("Create: %v", err)
 	}
 	savedState, err := testDrafts().SaveSavedState(ctx, scope, draftVersionOf(t, mainProject),
-		commitTitle(t, "First"), commitAuthor(t), projectSavedStateContent())
+		savedStateTitle(t, "First"), savedStateAuthor(t), projectSavedStateContent())
 	if err != nil {
 		t.Fatalf("SaveSavedState: %v", err)
 	}

@@ -17,9 +17,9 @@ import (
 	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/repositories"
 )
 
-// mustSaveState fixes the Draft of the project as a SavedState at the Version
-// it shows, as Save does. A Draft unchanged since its last SavedState has
-// nothing to save: that SavedState is the one the test means.
+// mustSaveState fixes the Draft of the project as a saved state at the Version
+// it shows, as Save does. A Draft unchanged since its last saved state has
+// nothing to save: that saved state is the one the test means.
 func mustSaveState(t *testing.T, projectID uuid.UUID, title string) appdto.SavedState {
 	t.Helper()
 	ctx := context.Background()
@@ -49,7 +49,7 @@ func mustDeploySavedState(t *testing.T, projectID uuid.UUID, savedStateNumber in
 	return deployment
 }
 
-// mustDeployTheDraft saves the Draft as a SavedState and deploys it.
+// mustDeployTheDraft saves the Draft as a saved state and deploys it.
 func mustDeployTheDraft(t *testing.T, projectID uuid.UUID) appdto.Deployment {
 	t.Helper()
 	saved := mustSaveState(t, projectID, "Deploy")
@@ -157,7 +157,7 @@ func TestDeploySavedState_Missing_IsNotFound(t *testing.T) {
 	}
 }
 
-func TestDeploySavedState_AChangedCommit_IsANewDeployment(t *testing.T) {
+func TestDeploySavedState_AChangedSavedState_IsANewDeployment(t *testing.T) {
 	cleanDevices(t)
 	cleanScenes(t)
 	ctx := context.Background()
@@ -212,7 +212,7 @@ func TestProjectFileService_Deploy_LeavesNoRelease(t *testing.T) {
 	}
 }
 
-// --- Discard to the last SavedState and Revert to the Deployment ---
+// --- Discard to the last saved state and Revert to the Deployment ---
 
 func TestDiscard_WithoutASavedState_IsRefused(t *testing.T) {
 	cleanProjects(t)
@@ -229,7 +229,7 @@ func TestDiscard_WithoutASavedState_IsRefused(t *testing.T) {
 }
 
 // TestDiscard_RestoresTheLastSavedState: the Draft is brought back to its last
-// SavedState — the removed Widget, Scene, Tag, Device and pin come back under
+// saved state — the removed Widget, Scene, Tag, Device and pin come back under
 // their IDs, what was added goes, and the Tag states are the Runtime node's,
 // kept.
 func TestDiscard_RestoresTheLastSavedState(t *testing.T) {
@@ -309,7 +309,7 @@ func TestDiscard_RestoresTheLastSavedState(t *testing.T) {
 }
 
 // TestDiscard_RemovesADeviceAndAnEnvironmentOfTheDraft: a Device and an
-// Environment added since the last SavedState go, with the pair that joins them
+// Environment added since the last saved state go, with the pair that joins them
 // and the Tag the Device supplies.
 func TestDiscard_RemovesADeviceAndAnEnvironmentOfTheDraft(t *testing.T) {
 	cleanDevices(t)
@@ -355,7 +355,7 @@ func TestDiscard_RemovesADeviceAndAnEnvironmentOfTheDraft(t *testing.T) {
 }
 
 // TestDiscard_OfAnImportedLibraryRestoresTheImport: the import of a Library
-// the Draft dropped comes back, at the saved state the last SavedState names.
+// the Draft dropped comes back, at the saved state the last Save fixed.
 func TestDiscard_OfAnImportedLibraryRestoresTheImport(t *testing.T) {
 	cleanDevices(t)
 	cleanScenes(t)
@@ -379,7 +379,7 @@ func TestDiscard_OfAnImportedLibraryRestoresTheImport(t *testing.T) {
 // TestUnsavedChanges_FollowTheDraftsCleanVersion: the unsaved-changes flag of a
 // Project comes from the Draft's own Clean Version marker: a never written
 // Draft is clean, a write is unsaved, and a Save, a Discard and a Revert to the
-// last SavedState's content clean it; a write above the marker, or a Revert to
+// last saved state's content clean it; a write above the marker, or a Revert to
 // another content, is unsaved again (task 74; ADR 0016, amendment 2026-11-10).
 func TestUnsavedChanges_FollowTheDraftsCleanVersion(t *testing.T) {
 	cleanProjects(t)
@@ -444,7 +444,7 @@ func TestUnsavedChanges_FollowTheDraftsCleanVersion(t *testing.T) {
 	}
 	check("reverted to the last savedState's content", false)
 
-	// A later SavedState is not the running Deployment: a Revert to that
+	// A later saved state is not the running Deployment: a Revert to that
 	// Deployment is another content, so the Draft stays unsaved.
 	write("level")
 	mustSaveState(t, created.ID, "Second")
@@ -457,7 +457,7 @@ func TestUnsavedChanges_FollowTheDraftsCleanVersion(t *testing.T) {
 
 // TestDiscard_WithAWarningStaysUnsaved: a Discard that could not restore a
 // Library Release drops its pin with its Widgets — the content really differs
-// from the SavedState's — and the Draft stays unsaved (task 74; task 71).
+// from the saved state's — and the Draft stays unsaved (task 74; task 71).
 func TestDiscard_WithAWarningStaysUnsaved(t *testing.T) {
 	r := newReconciliation(t, reconciliationWiring{})
 	ctx := context.Background()
@@ -467,7 +467,7 @@ func TestDiscard_WithAWarningStaysUnsaved(t *testing.T) {
 		t.Fatalf("before the Discard: %+v, %v; want the deployed Draft clean", found, err)
 	}
 
-	// This server does not have the Library the SavedState pins any more.
+	// This server does not have the Library the saved state pins any more.
 	if _, err := testDB.ExecContext(ctx,
 		`UPDATE engineering.libraries SET deleted_at = now() WHERE id = $1`, lib.ID); err != nil {
 		t.Fatalf("mark the library deleted: %v", err)
@@ -494,7 +494,7 @@ func TestRevert_WithoutADeployment_IsRefused(t *testing.T) {
 }
 
 // TestRevert_RestoresTheDeployment: the Draft goes back to what runs, even
-// when a later SavedState exists — that is the difference from Discard.
+// when a later saved state exists — that is the difference from Discard.
 func TestRevert_RestoresTheDeployment(t *testing.T) {
 	cleanDevices(t)
 	cleanScenes(t)

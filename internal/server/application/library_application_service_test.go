@@ -84,7 +84,7 @@ func TestLibraryService_DeleteRefusedWhileALiveProjectImportsIt(t *testing.T) {
 
 // TestLibraryService_DeleteRefusedWhileARunningDeploymentNamesIt: an import in
 // the running Deployment of a Project keeps the Library, even with no import
-// left in the Draft; a Deployment, a SavedState and a Project Release of the
+// left in the Draft; a Deployment, a saved state and a Project Release of the
 // past do not (task 71, task 85_6).
 func TestLibraryService_DeleteRefusedWhileARunningDeploymentNamesIt(t *testing.T) {
 	r := newReconciliation(t, reconciliationWiring{})
@@ -102,7 +102,7 @@ func TestLibraryService_DeleteRefusedWhileARunningDeploymentNamesIt(t *testing.T
 	}
 
 	// A new Deployment without the import leaves the library in history alone: a
-	// SavedState or an old Deployment does not keep it.
+	// saved state or an old Deployment does not keep it.
 	deployProject(t, mainProject)
 	if _, err := r.libSvc.DeleteLibraryByID(ctx, libraryID); err != nil {
 		t.Fatalf("named by an old Deployment and a SavedState only: %v", err)
@@ -110,8 +110,8 @@ func TestLibraryService_DeleteRefusedWhileARunningDeploymentNamesIt(t *testing.T
 }
 
 // TestDiscard_ResetsTheDraftToTheLastSavedState: one transaction brings the
-// WidgetTypes added since the SavedState go, the changed ones restored and the
-// removed ones back under their IDs — two names swapped since the SavedState
+// WidgetTypes added since the saved state go, the changed ones restored and the
+// removed ones back under their IDs — two names swapped since the saved state
 // included.
 func TestDiscard_ResetsTheDraftToTheLastSavedState(t *testing.T) {
 	r := newReconciliation(t, reconciliationWiring{})
@@ -162,7 +162,7 @@ func TestDiscard_ResetsTheDraftToTheLastSavedState(t *testing.T) {
 	if state.Version <= 0 || state.HasUnsavedChanges {
 		t.Errorf("the Draft state after the Discard: %+v", state)
 	}
-	// The Draft is its last SavedState again: there is nothing to save.
+	// The Draft is its last saved state again: there is nothing to save.
 	if _, err := newSavedStateService().Save(ctx,
 		draft.LibraryScope(id.NewID(id.IDWithUUID[library.Library](lib.ID))),
 		libraryDraftVersionOf(t, lib.ID), "After the discard", "Ada"); !errors.Is(err, draft.ErrNothingToSave) {

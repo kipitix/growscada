@@ -154,10 +154,10 @@ func (r libraryImportRepositoryPostgresImpl) FindImportedWidgetType(ctx context.
 	return types[0], nil
 }
 
-// commitContentOfImport reads the content of a saved state an import names,
-// inside the Draft's transaction: the loader decodes the copies an import
-// switch and a removal are checked against.
-func commitContentOfImport(ctx context.Context, q rowQuerier, libraryID id.ID[library.Library], number int) (draft.SavedStateContent, uuid.UUID, error) {
+// savedStateContentOfImport reads the content of a saved state an import
+// names, inside the Draft's transaction: the loader decodes the copies an
+// import switch and a removal are checked against.
+func savedStateContentOfImport(ctx context.Context, q rowQuerier, libraryID id.ID[library.Library], number int) (draft.SavedStateContent, uuid.UUID, error) {
 	var (
 		rawID       uuid.UUID
 		contentJSON []byte

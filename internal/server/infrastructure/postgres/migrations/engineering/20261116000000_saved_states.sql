@@ -6,6 +6,11 @@
 -- the JSONB documents (`saved_states.content`, the Deployment documents, the
 -- Journal and the Checkpoint payloads) are rewritten with the contracts
 -- (task 88_2).
+--
+-- Not every object is renamed: the primary key and the sequence of
+-- engineering.library_imports still say library_pins from task 85_6, and the
+-- NOT NULL constraints PostgreSQL generated on the renamed columns keep the
+-- names it gave them. No code and no API names them.
 ALTER TABLE engineering.commits RENAME TO saved_states;
 ALTER TABLE engineering.saved_states RENAME CONSTRAINT fk_commits_draft_id TO fk_saved_states_draft_id;
 ALTER TABLE engineering.saved_states RENAME CONSTRAINT ck_commits_number TO ck_saved_states_number;

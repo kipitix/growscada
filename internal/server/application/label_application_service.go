@@ -143,7 +143,7 @@ func (s labelServiceImpl) Delete(ctx context.Context, rawID uuid.UUID) error {
 }
 
 func (s labelServiceImpl) Assign(ctx context.Context, scope draft.Scope, rawNumber int, rawLabelID uuid.UUID) ([]appdto.Label, error) {
-	number, savedState, err := s.commitOf(ctx, scope, rawNumber)
+	number, savedState, err := s.savedStateOf(ctx, scope, rawNumber)
 	if err != nil {
 		return nil, err
 	}
@@ -164,7 +164,7 @@ func (s labelServiceImpl) Assign(ctx context.Context, scope draft.Scope, rawNumb
 }
 
 func (s labelServiceImpl) Unassign(ctx context.Context, scope draft.Scope, rawNumber int, rawLabelID uuid.UUID) ([]appdto.Label, error) {
-	number, savedState, err := s.commitOf(ctx, scope, rawNumber)
+	number, savedState, err := s.savedStateOf(ctx, scope, rawNumber)
 	if err != nil {
 		return nil, err
 	}
@@ -202,9 +202,10 @@ func (s labelServiceImpl) labelsOfSavedState(ctx context.Context, scope draft.Sc
 	return byNumber[savedStateNumber], nil
 }
 
-// commitOf reads the saved state rawNumber of the Draft of scope, which checks
-// the saved state exists in that scope and the Project or Library is live.
-func (s labelServiceImpl) commitOf(ctx context.Context, scope draft.Scope, rawNumber int) (int, draft.SavedState, error) {
+// savedStateOf reads the saved state rawNumber of the Draft of scope, which
+// checks the saved state exists in that scope and the Project or Library is
+// live.
+func (s labelServiceImpl) savedStateOf(ctx context.Context, scope draft.Scope, rawNumber int) (int, draft.SavedState, error) {
 	if !scope.IsProject() && !scope.IsLibrary() {
 		return 0, nil, invalidInput(fmt.Errorf("scope: a project or a library is required"))
 	}

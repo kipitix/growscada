@@ -14,8 +14,8 @@ import (
 	"github.com/kipitix/growscada/internal/server/infrastructure/postgres/repositories"
 )
 
-// commitTitle is a title of the repository tests.
-func commitTitle(t *testing.T, text string) draft.SavedStateTitle {
+// savedStateTitle is a title of the repository tests.
+func savedStateTitle(t *testing.T, text string) draft.SavedStateTitle {
 	t.Helper()
 	title, err := draft.NewSavedStateTitle(text)
 	if err != nil {
@@ -24,8 +24,8 @@ func commitTitle(t *testing.T, text string) draft.SavedStateTitle {
 	return title
 }
 
-// commitAuthor is the author of the repository tests.
-func commitAuthor(t *testing.T) draft.Author {
+// savedStateAuthor is the author of the repository tests.
+func savedStateAuthor(t *testing.T) draft.Author {
 	t.Helper()
 	author, err := draft.NewAuthor("Ada")
 	if err != nil {
@@ -61,7 +61,7 @@ func TestDraftSaveSavedState_NumbersAndContent(t *testing.T) {
 	content := projectSavedStateContent()
 	tags := repositories.NewTagRepositoryPostgres(testDB, mainProject)
 
-	first, err := testDrafts().SaveSavedState(ctx, scope, draftVersionOf(t, mainProject), commitTitle(t, "First"), commitAuthor(t), content)
+	first, err := testDrafts().SaveSavedState(ctx, scope, draftVersionOf(t, mainProject), savedStateTitle(t, "First"), savedStateAuthor(t), content)
 	if err != nil {
 		t.Fatalf("SaveSavedState: %v", err)
 	}
@@ -71,7 +71,7 @@ func TestDraftSaveSavedState_NumbersAndContent(t *testing.T) {
 	if first.DraftVersion().Number() != draftVersionOf(t, mainProject).Number() {
 		t.Errorf("saved state fixed version %s, want %s", first.DraftVersion(), draftVersionOf(t, mainProject))
 	}
-	if _, err := testDrafts().SaveSavedState(ctx, scope, draftVersionOf(t, mainProject), commitTitle(t, "Second"), commitAuthor(t), content); !errors.Is(err, draft.ErrNothingToSave) {
+	if _, err := testDrafts().SaveSavedState(ctx, scope, draftVersionOf(t, mainProject), savedStateTitle(t, "Second"), savedStateAuthor(t), content); !errors.Is(err, draft.ErrNothingToSave) {
 		t.Fatalf("SaveSavedState without a change: %v, want ErrNothingToSave", err)
 	}
 
@@ -80,7 +80,7 @@ func TestDraftSaveSavedState_NumbersAndContent(t *testing.T) {
 		session.CreateTag(ctx, makeTag(t, "speed-for-savedState", tags))
 		return nil
 	})
-	second, err := testDrafts().SaveSavedState(ctx, scope, draftVersionOf(t, mainProject), commitTitle(t, "Second"), commitAuthor(t), content)
+	second, err := testDrafts().SaveSavedState(ctx, scope, draftVersionOf(t, mainProject), savedStateTitle(t, "Second"), savedStateAuthor(t), content)
 	if err != nil {
 		t.Fatalf("second SaveSavedState: %v", err)
 	}
@@ -149,7 +149,7 @@ func TestDraftSaveSavedState_StaleVersionAndTwoSaves(t *testing.T) {
 		session.CreateTag(ctx, makeTag(t, "stale-savedState-tag", tags))
 		return nil
 	})
-	if _, err := testDrafts().SaveSavedState(ctx, scope, read, commitTitle(t, "Stale"), commitAuthor(t), content); !errors.Is(err, draft.ErrDraftConflict) {
+	if _, err := testDrafts().SaveSavedState(ctx, scope, read, savedStateTitle(t, "Stale"), savedStateAuthor(t), content); !errors.Is(err, draft.ErrDraftConflict) {
 		t.Fatalf("SaveSavedState at a stale version: %v, want ErrDraftConflict", err)
 	}
 
@@ -163,7 +163,7 @@ func TestDraftSaveSavedState_StaleVersionAndTwoSaves(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			_, err := testDrafts().SaveSavedState(ctx, scope, version, commitTitle(t, "Concurrent"), commitAuthor(t), content)
+			_, err := testDrafts().SaveSavedState(ctx, scope, version, savedStateTitle(t, "Concurrent"), savedStateAuthor(t), content)
 			mu.Lock()
 			results = append(results, err)
 			mu.Unlock()
@@ -188,11 +188,11 @@ func TestDraftSaveSavedState_RenameAndCascade(t *testing.T) {
 	cleanDrafts(t)
 	ctx := context.Background()
 	scope := draft.ProjectScope(mainProject)
-	savedState, err := testDrafts().SaveSavedState(ctx, scope, draftVersionOf(t, mainProject), commitTitle(t, "Before"), commitAuthor(t), projectSavedStateContent())
+	savedState, err := testDrafts().SaveSavedState(ctx, scope, draftVersionOf(t, mainProject), savedStateTitle(t, "Before"), savedStateAuthor(t), projectSavedStateContent())
 	if err != nil {
 		t.Fatalf("SaveSavedState: %v", err)
 	}
-	renamed, err := testDrafts().RenameSavedState(ctx, scope, savedState.Number(), commitTitle(t, "After"))
+	renamed, err := testDrafts().RenameSavedState(ctx, scope, savedState.Number(), savedStateTitle(t, "After"))
 	if err != nil {
 		t.Fatalf("RenameSavedState: %v", err)
 	}
@@ -206,7 +206,7 @@ func TestDraftSaveSavedState_RenameAndCascade(t *testing.T) {
 	if found.Title().String() != "After" {
 		t.Errorf("stored title %q", found.Title())
 	}
-	if _, err := testDrafts().RenameSavedState(ctx, scope, 99, commitTitle(t, "Missing")); !errors.Is(err, draft.ErrSavedStateNotFound) {
+	if _, err := testDrafts().RenameSavedState(ctx, scope, 99, savedStateTitle(t, "Missing")); !errors.Is(err, draft.ErrSavedStateNotFound) {
 		t.Errorf("RenameSavedState of a missing savedState: %v, want ErrSavedStateNotFound", err)
 	}
 
@@ -233,7 +233,7 @@ func TestDraftSaveSavedState_Library(t *testing.T) {
 	scope := draft.LibraryScope(repo.libraryID)
 	content := draft.NewLibrarySavedStateContent([]library.WidgetTypeCopy{library.CopyOf(wt)})
 
-	saved, err := testDrafts().SaveSavedState(ctx, scope, libraryDraftVersionOf(t, repo.libraryID), commitTitle(t, "Widgets"), commitAuthor(t), content)
+	saved, err := testDrafts().SaveSavedState(ctx, scope, libraryDraftVersionOf(t, repo.libraryID), savedStateTitle(t, "Widgets"), savedStateAuthor(t), content)
 	if err != nil {
 		t.Fatalf("SaveSavedState: %v", err)
 	}

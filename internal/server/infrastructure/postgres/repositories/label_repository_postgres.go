@@ -351,8 +351,8 @@ func (r labelRepositoryPostgresImpl) assignments(ctx context.Context, organizati
 	return byLabel, nil
 }
 
-// scopeOfRow is the Draft's scope a savedStates row belongs to: its Draft names
-// exactly one Project or Library.
+// scopeOfRow is the Draft's scope a saved_states row belongs to: its Draft
+// names exactly one Project or Library.
 func scopeOfRow(projectID, libraryID uuid.NullUUID) (draft.Scope, error) {
 	switch {
 	case projectID.Valid && !libraryID.Valid:

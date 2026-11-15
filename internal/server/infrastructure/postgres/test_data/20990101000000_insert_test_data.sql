@@ -222,7 +222,7 @@ INSERT INTO engineering.widgets (id, project_id, name, x, y, z, width, height, o
 -- +goose StatementEnd
 
 -- +goose Down
--- The imports keep a Commit of a Draft, so they go before the Drafts.
+-- The imports keep a saved state of a Draft, so they go before the Drafts.
 DELETE FROM engineering.library_imports;
 DELETE FROM engineering.drafts;
 -- +goose StatementBegin

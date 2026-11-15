@@ -722,7 +722,7 @@ func (l *draftLoader) LibraryImport(ctx context.Context, libraryID id.ID[library
 // LibrarySavedState returns the saved state number of the Library, with the
 // WidgetTypes it holds: what an import names (task 85_6).
 func (l *draftLoader) LibrarySavedState(ctx context.Context, libraryID id.ID[library.Library], number int) (libraryimport.SavedState, error) {
-	content, rawID, err := commitContentOfImport(ctx, l.tx, libraryID, number)
+	content, rawID, err := savedStateContentOfImport(ctx, l.tx, libraryID, number)
 	if err != nil {
 		return libraryimport.SavedState{}, err
 	}
