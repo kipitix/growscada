@@ -81,6 +81,9 @@ func (p *Project) loadStaleScenes(ctx app.Context) {
 		case errors.Is(err, apiclient.ErrNotFound):
 			// The Scene is gone: there is nothing to reread.
 		case err != nil:
+			if content != p.content {
+				break // another project is shown: this read is not its own
+			}
 			// The state the change made stays unknown until the read that
 			// answers: a write of this Scene would state a stale Version.
 			p.markStale(sceneID)

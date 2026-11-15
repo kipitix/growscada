@@ -27,9 +27,10 @@ func (p *Project) handleServerEvents(ctx app.Context) {
 		}
 		p.tags = eventlog.ApplyToTags(p.tags, ev)
 		if ev.Type == eventlog.EventResync || ev.Type == eventlog.EventProjectResync {
-			// Events were lost: the server may have gone back, the stack with
-			// it.
+			// Events were lost: the server may have gone back — the stack with
+			// it, and the Tags it knew to exist are not to be trusted either.
 			p.draftVersions.Forget()
+			p.tagVersions.Forget()
 			p.loadDraftState(ctx)
 			p.loadDraftChanges(ctx)
 		}

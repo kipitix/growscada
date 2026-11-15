@@ -304,6 +304,29 @@ func TestCreateTag_AListSentBefore_KeepsTheSelection(t *testing.T) {
 	}
 }
 
+// A resync forgets the Tags this client knew to exist, as it forgets the
+// Versions: the server may have gone back, and a Tag list sent before a
+// creation then decides on its own (task 61).
+func TestResync_ForgetsTheTagsKnownToExist(t *testing.T) {
+	f := startProject(t)
+	stale, mark := f.p.tags.List(), f.p.tags.Mark() // a list in flight
+	tagMark := f.p.tagVersions.Mark()
+
+	f.p.newTagName, f.p.newTagType = "pump.on", "boolean"
+	f.p.createTag(f.p.compoCtx)
+	f.run()
+	if f.p.selectedTagID == uuid.Nil {
+		t.Fatal("no Tag was created")
+	}
+
+	f.event(apiv0.Event{Type: eventlog.EventResync})
+	f.p.setTags(f.p.compoCtx, mark, tagMark, f.p.markDraft(), stale) // the server lost it
+
+	if f.p.selectedTagID != uuid.Nil {
+		t.Errorf("selected %v: a Tag the server may have lost stays selected", f.p.selectedTagID)
+	}
+}
+
 func TestWidgetEvents_InSeveralScenesNotShown_RereadTheListOnce(t *testing.T) {
 	f, log, _, other, typeID := twoScenes(t)
 	more := []uuid.UUID{other, createScene(t, f.api, "C"), createScene(t, f.api, "D")}
