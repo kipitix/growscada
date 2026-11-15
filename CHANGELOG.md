@@ -1,5 +1,16 @@
 # growscada [CHANGELOG](https://keepachangelog.com/en/1.1.0/)
 
+## [0.0.105] - 2026-11-15
+
+### Changed
+
+- **growctl и внутренние имена UI говорят saved state** (задача 88_3; ADR 0026 отменяет решение задачи 84 оставить `Commit` в идентификаторах)
+  - growctl: команда `commits` → `saved-states` (с `--library`), флаги `deploy --commit N` и `label assign|unassign --commit N` → `--saved-state N`, колонка `COMMIT` → `SAVED STATE` в `get libraries`; help-тексты и usage-ошибка (`--saved-state must be a positive number`) называют saved state, e2e-тесты обновлены; `spec.libraryImports` сохранил ключ и номер, вывод `apply`/`save`/`deploy`/`import` уже говорил saved state
+  - UI: `ui/project/commits.go` и `ui/library/commits.go` → `saved_states.go`; поля `commits`/`commitsLoaded`/`deployCommits`/`importCommits` → `savedStates`/`savedStatesLoaded`/`deploySavedStates`/`importSavedStates`, `renderCommitBar` → `renderSavedStateBar`, `data-commit-unsaved`/`data-commit-saved` → `data-saved-state-*`, `data-import-no-commits` → `data-import-no-saved-states`, `data-import-commit` → `data-import-saved-state-action` (строка сохранённого состояния остаётся `data-import-saved-state`, иначе метка повторялась бы дважды)
+  - `commitEdit`/`commitSceneEdit` не тронуты: там commit — акт применения правки, а не сохранённое состояние; «commit» в смысле транзакции БД или git тоже остался
+  - Поведение не менялось: только имена; тест growctl теперь проверяет колонку `SAVED STATE` и usage-ошибку `--saved-state`, тесты UI — новые `data-*`
+  - Проверки: `make build`, `make test`, `make bruno_test` (235 + 6 запросов); обход PWA — Project (Save, History, Deploy, Import libraries), Library (saved states, History); консоль без ошибок приложения
+
 ## [0.0.104] - 2026-11-15
 
 ### Changed
