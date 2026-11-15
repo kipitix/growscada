@@ -1,6 +1,6 @@
 # 410 Gone на старых путях контента вместо голого 404
 Status: needs-triage
-Priority: 3
+Priority: 1
 
 Появилось при ревью задачи 31 (находка №1). В REST API 0.4 Tags и Scenes (вместе с Widgets) переехали под `/api/v0/projects/{project_id}/…`. На старые пути `/api/v0/tags…` и `/api/v0/scenes…` `http.ServeMux` отвечает своим текстовым 404: не Problem Details и без подсказки, куда переехал ресурс. По правилам проекта версию подняли верно (MINOR, пока MAJOR = 0), но старые клиенты ломаются молча:
 

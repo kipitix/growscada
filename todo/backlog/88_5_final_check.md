@@ -1,6 +1,6 @@
 # 88_5 — финальная проверка переименования
-Status: needs-triage
-Priority: 3
+Status: ready-for-agent
+Priority: 1
 Blocked by: 88_4
 
 Часть цепочки `88_saved_state_rename.md`.

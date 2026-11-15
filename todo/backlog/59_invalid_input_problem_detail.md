@@ -1,6 +1,6 @@
 # Detail у 400 для invalid input без внутренних обёрток
 Status: needs-triage
-Priority: 3
+Priority: 1
 
 Появилось при разборе задачи 22. Ответ 400 на `application.ErrInvalidInput` и `runtimeapp.ErrInvalidInput` отдаёт полный `err.Error()`, например «cannot create scene: name: …» или «cannot save scene: type_id: widget type not found». Префикс поля клиенту полезен, но сервис добавляет его то снаружи `invalidInput()` (`"type_id: %w"`), то внутри, а вокруг стоят обёртки сервиса («cannot create scene:»). Поэтому без правки application вырезать его чисто не получится.
 
