@@ -3,6 +3,7 @@ package root
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/maxence-charriere/go-app/v11/pkg/app"
@@ -31,6 +32,9 @@ const (
 	// menuPanelWidth is the width of the open menu on a screen with room for
 	// it; on a phone it takes the whole width.
 	menuPanelWidth = "340px"
+	// menuScrollDelay waits for the panel the opening rendered to reach the
+	// DOM before the entity shown is scrolled into view.
+	menuScrollDelay = 50 * time.Millisecond
 )
 
 // modeLabels names the modes in the menu and in the navigation line.
@@ -86,6 +90,30 @@ func (r *Root) openMenu(ctx app.Context) {
 	r.menuExpanded = r.currentMode
 	r.loadMenuEntities(ctx)
 	ctx.Update()
+	ctx.After(menuScrollDelay, func(app.Context) { r.scrollToShown() })
+}
+
+// scrollToShown scrolls the panel to the row of what the mode shows — the
+// entity, or the way to the page while the page is shown — so a long list does
+// not hide it (task 89).
+func (r *Root) scrollToShown() {
+	target := ""
+	switch {
+	case hasPage(r.currentMode) && r.showList[r.currentMode]:
+		target = "gs-menu-choose-" + string(r.currentMode)
+	default:
+		if id := r.selected[r.currentMode]; id != uuid.Nil {
+			target = "gs-menu-entity-" + id.String()
+		}
+	}
+	if target == "" {
+		return
+	}
+	row := app.Window().Get("document").Call("getElementById", target)
+	if !row.Truthy() {
+		return
+	}
+	row.Call("scrollIntoView", map[string]any{"block": "nearest"})
 }
 
 // closeMenu hides the menu; nothing about the mode shown changes.
@@ -196,13 +224,18 @@ func (r *Root) menuEmpty(mode Mode) (empty, loaded bool) {
 
 // ── Choosing ─────────────────────────────────────────────────────────────────
 
-// chooseEntity opens the editor of item in mode: the mode shows the entity at
-// once, the selection page follows it, and the menu closes (task 89).
+// chooseEntity opens item in mode: the editor of a Library or a Project, with
+// the selection page following it; the Project of Operation or History (they
+// have no page). Either switches the mode and closes the menu (task 89).
 func (r *Root) chooseEntity(ctx app.Context, mode Mode, item picker.Item) {
+	if !hasPage(mode) {
+		r.chooseProject(ctx, mode, item)
+		return
+	}
 	r.closeMenu()
 	r.openEntityAs(mode, item.ID, item.Name)
 	r.SetMode(mode)
-	r.storeMode(ctx)
+	r.storeMode()
 	if m := r.modeView(mode); m != nil && m.picker != nil {
 		m.picker.Show(ctx, item.ID)
 	}
@@ -214,7 +247,7 @@ func (r *Root) choosePage(ctx app.Context, mode Mode) {
 	r.closeMenu()
 	r.SetMode(mode)
 	r.showListPage(mode)
-	r.storeMode(ctx)
+	r.storeMode()
 }
 
 // chooseProject shows item in mode, one of those without a selection page
@@ -225,13 +258,16 @@ func (r *Root) chooseProject(ctx app.Context, mode Mode, item picker.Item) {
 	r.entityName[mode] = item.Name
 	r.selectProject(mode, item.ID)
 	r.SetMode(mode)
-	r.storeMode(ctx)
-	uiutil.StoreID(ctx, projectKey(mode), item.ID)
+	r.storeMode()
+	uiutil.StoreID(r.compoCtx, projectKey(mode), item.ID)
 }
 
-// storeMode keeps the mode shown for the next reload of the page.
-func (r *Root) storeMode(ctx app.Context) {
-	ctx.LocalStorage().Set("root:mode", string(r.currentMode))
+// storeMode keeps the mode shown for the next reload of the page. The writes
+// of the menu go through the component's own context: the element that fired
+// the click is gone with the menu, and go-app drops what such a context does
+// (see the note on compoCtx).
+func (r *Root) storeMode() {
+	r.compoCtx.LocalStorage().Set("root:mode", string(r.currentMode))
 }
 
 // ── The projects of Operation and History ────────────────────────────────────
@@ -513,6 +549,7 @@ func (r *Root) renderChooseRow(mode Mode) app.UI {
 		body = append(body, app.Span().Style("margin-left", "auto").Body(uiutil.IconCheck()))
 	}
 	return app.Button().
+		Attr("id", "gs-menu-choose-"+string(mode)).
 		Attr("data-menu-choose", string(mode)).
 		Attr("role", "menuitemradio").
 		Attr("aria-checked", boolText(shown)).
@@ -563,6 +600,7 @@ func (r *Root) renderEntityRow(mode Mode, item picker.Item) app.UI {
 		body = append(body, app.Span().Style("flex-shrink", "0").Body(uiutil.IconCheck()))
 	}
 	return app.Button().
+		Attr("id", "gs-menu-entity-"+item.ID.String()).
 		Attr("data-menu-entity", item.ID.String()).
 		Attr("role", "menuitemradio").
 		Attr("aria-checked", boolText(chosen)).

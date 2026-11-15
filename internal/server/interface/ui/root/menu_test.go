@@ -148,9 +148,9 @@ func TestMenu_ChoosePageShowsTheList(t *testing.T) {
 	}
 }
 
-// TestMenu_ChooseProjectForOperationAndHistory: Operation and History take the
-// project the menu chose, keep it for the next reload and switch to it (task
-// 89).
+// TestMenu_ChooseProjectForOperationAndHistory: a row of a project under
+// Operation or History takes it, keeps it for the next reload and switches to
+// the mode (task 89).
 func TestMenu_ChooseProjectForOperationAndHistory(t *testing.T) {
 	for _, mode := range []Mode{ModeOperation, ModeHistory} {
 		t.Run(string(mode), func(t *testing.T) {
@@ -159,7 +159,7 @@ func TestMenu_ChooseProjectForOperationAndHistory(t *testing.T) {
 
 			s.compoCtx.Dispatch(func(ctx app.Context) {
 				s.openMenu(ctx)
-				s.chooseProject(ctx, mode, picker.Item{ID: id, Name: "Greenhouse"})
+				s.chooseEntity(ctx, mode, picker.Item{ID: id, Name: "Greenhouse"})
 			})
 			s.settle()
 
