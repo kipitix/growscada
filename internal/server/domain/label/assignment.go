@@ -8,12 +8,12 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/id"
 )
 
-// Assignment - the mark of one Label on one saved state: an entity of the
-// Label aggregate, not an aggregate of its own (task 85_3; ADR 0025). It names
-// the saved state and the Draft's scope, so a label's assignment can be read
-// without loading the saved state, and it carries no Version: assigning marks no
-// content and is never a conflict with an Engineer editing a Draft.
-// Value Object.
+// Assignment - the mark of one Label on one saved state: an entity of the Label
+// aggregate, not an aggregate of its own (task 85_3; ADR 0025). It names the
+// saved state and the Draft's scope, so a label's assignment can be read
+// without loading the saved state, and it carries no Version: assigning marks
+// no content and is never a conflict with an Engineer editing a Draft. Value
+// Object.
 type Assignment interface {
 	CommitID() id.ID[draft.Commit]
 	Scope() draft.Scope

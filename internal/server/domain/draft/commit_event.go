@@ -7,12 +7,12 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/project"
 )
 
-// CommitEvent - base interface for the events a saved state records: commit_created
-// and commit_title_updated. It names the Draft's Scope and the saved state's
-// number; a Project's saved state event also implements project.ContentEvent, so
-// the event stream routes it to that Project's clients, while a Library's
-// goes to the server's stream like the Library's other events (ADR 0006,
-// ADR 0009).
+// CommitEvent - base interface for the events a saved state records:
+// commit_created and commit_title_updated. It names the Draft's Scope and the
+// saved state's number; a Project's saved state event also implements
+// project.ContentEvent, so the event stream routes it to that Project's
+// clients, while a Library's goes to the server's stream like the Library's
+// other events (ADR 0006, ADR 0009).
 type CommitEvent interface {
 	event.Event
 	Scope() Scope

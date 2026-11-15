@@ -146,9 +146,9 @@ func (h LibrariesHandlers) PostDiscard(w http.ResponseWriter, r *http.Request) {
 }
 
 // PostCommitLoad handles POST /libraries/{library_id}/commits/{commit_number}/load:
-// the Draft replaced by the WidgetTypes of that saved state, in one transaction — the
-// saved state becomes what is edited (task 84). 404 for a number the library
-// does not have.
+// the Draft replaced by the WidgetTypes of that saved state, in one
+// transaction — the saved state becomes what is edited (task 84). 404 for a
+// number the library does not have.
 func (h LibrariesHandlers) PostCommitLoad(w http.ResponseWriter, r *http.Request) {
 	libraryID, ok := pathUUID(w, r, libraryResource)
 	if !ok {

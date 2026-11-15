@@ -17,12 +17,12 @@ import (
 )
 
 // LibraryImport - aggregate of a Project's Draft, one per pair of the Project
-// and a Library: the Library's saved state whose WidgetTypes the Project uses. It
-// is identified by its Library within its Project.
+// and a Library: the Library's saved state whose WidgetTypes the Project uses.
+// It is identified by its Library within its Project.
 //
-// Switching or removing an import is refused while Widgets of the Project
-// would be left without their WidgetType (Impact); the PortBindings it breaks
-// are removed in the same change (ADR 0012).
+// Switching or removing an import is refused while Widgets of the Project would
+// be left without their WidgetType (Impact); the PortBindings it breaks are
+// removed in the same change (ADR 0012).
 //
 // LibraryImport is immutable: every change returns a new LibraryImport that
 // also records the change's event. It is an entity of its Project's Draft,
@@ -33,16 +33,17 @@ type LibraryImport interface {
 	ProjectID() id.ID[project.Project]
 	// LibraryID is the Library imported; it never changes.
 	LibraryID() id.ID[library.Library]
-	// CommitID is the identity of the imported saved state: the saved state of the
-	// Library. It is the identity the row carries; a value rebuilt from a
-	// ProjectFile alone has none, and the write resolves it by the number.
+	// CommitID is the identity of the imported saved state of the Library. It
+	// is the identity the row carries; a value rebuilt from a ProjectFile alone
+	// has none, and the write resolves it by the number.
 	CommitID() uuid.UUID
 	// CommitNumber is the number of the saved state imported within the Library's
 	// Draft.
 	CommitNumber() int
 
-	// Switch imports the saved state instead and records a LibraryImportUpdatedEvent.
-	// Returns an error if the saved state is of another Library.
+	// Switch imports the saved state instead and records a
+	// LibraryImportUpdatedEvent. Returns an error if the saved state is of another
+	// Library.
 	Switch(commit Commit) (LibraryImport, error)
 
 	// Delete records a LibraryImportDeletedEvent; the Draft's write removes
@@ -63,8 +64,8 @@ type libraryImportImpl struct {
 
 var _ LibraryImport = (*libraryImportImpl)(nil)
 
-// CreateLibraryImport creates a new, not yet saved import of a saved state in the
-// Draft of the Project aProjectID and records a LibraryImportCreatedEvent.
+// CreateLibraryImport creates a new, not yet saved import of a saved state in
+// the Draft of the Project aProjectID and records a LibraryImportCreatedEvent.
 func CreateLibraryImport(aProjectID id.ID[project.Project], commit Commit) LibraryImport {
 	return &libraryImportImpl{
 		projectID: aProjectID,
@@ -76,9 +77,9 @@ func CreateLibraryImport(aProjectID id.ID[project.Project], commit Commit) Libra
 }
 
 // ReconstituteLibraryImport rebuilds an import as stored; it records no event.
-// For repositories. A saved state UUID of uuid.Nil means the identity is not known
-// to the caller (an import rebuilt from a ProjectFile): the write resolves it
-// by the Library and the number in the same transaction.
+// For repositories. A saved state UUID of uuid.Nil means the identity is not
+// known to the caller (an import rebuilt from a ProjectFile): the write
+// resolves it by the Library and the number in the same transaction.
 func ReconstituteLibraryImport(aProjectID id.ID[project.Project], aLibraryID id.ID[library.Library], aCommitID uuid.UUID, aCommit int) LibraryImport {
 	return &libraryImportImpl{projectID: aProjectID, libraryID: aLibraryID, commitID: aCommitID, commit: aCommit}
 }

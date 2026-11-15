@@ -57,10 +57,10 @@ type commitImpl struct {
 
 var _ Commit = (*commitImpl)(nil)
 
-// NewCommit returns the saved state of scope at anID, numbered number, saving the
-// Draft at draftVersion with the given content, and records
-// commit_created. Returns an error if the number is not positive or the
-// content does not belong to the scope.
+// NewCommit returns the saved state of scope at anID, numbered number, saving
+// the Draft at draftVersion with the given content, and records commit_created.
+// Returns an error if the number is not positive or the content does not belong
+// to the scope.
 func NewCommit(
 	scope Scope,
 	anID id.ID[Commit],

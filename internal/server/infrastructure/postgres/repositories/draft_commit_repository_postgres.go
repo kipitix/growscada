@@ -64,8 +64,8 @@ func (r draftRepositoryPostgres) SaveCommit(ctx context.Context, scope draft.Sco
 			row.id, number, expected.Number(), expected.Number()); err != nil {
 			return nil, fmt.Errorf("cannot record the last saved state of %s: %w", scope, err)
 		}
-		// The event was recorded when the saved state was made; the returned saved state
-		// carries the time as stored.
+		// The event was recorded when the saved state was made; the returned saved
+		// state carries the time as stored.
 		pending := commit.PendingEvents()
 		result, err = draft.ReconstituteCommit(scope, commit.ID(), number, title, author, storedAt, expected, commit.Content())
 		if err != nil {
@@ -80,9 +80,9 @@ func (r draftRepositoryPostgres) SaveCommit(ctx context.Context, scope draft.Sco
 }
 
 // insertCommitImports writes the Library Imports a Project's ProjectFile
-// carries: they are the provenance of the saved state and what keeps an imported
-// Library from being deleted (task 71, task 85_6). A Library's saved state has
-// neither.
+// carries: they are the provenance of the saved state and what keeps an
+// imported Library from being deleted (task 71, task 85_6). A Library's saved
+// state has neither.
 func insertCommitImports(ctx context.Context, tx *sql.Tx, commit draft.Commit) error {
 	file, ok := commit.Content().ProjectFile()
 	if !ok {
@@ -126,8 +126,8 @@ func (r draftRepositoryPostgres) RenameCommit(ctx context.Context, scope draft.S
 }
 
 // FindCommits returns the Draft's saved states, newest first (see
-// draft.Repository). The filter's label keeps only the saved states it marks: the
-// join is in the query, never in memory.
+// draft.Repository). The filter's label keeps only the saved states it marks:
+// the join is in the query, never in memory.
 func (r draftRepositoryPostgres) FindCommits(ctx context.Context, scope draft.Scope, filter draft.CommitFilter) ([]draft.Commit, error) {
 	if err := checkScopeLive(ctx, r.db, scope); err != nil {
 		return nil, err
@@ -182,7 +182,8 @@ func (r draftRepositoryPostgres) FindLastCommit(ctx context.Context, scope draft
 	return commit, true, nil
 }
 
-// FindCommit returns the saved state number of the Draft (see draft.Repository).
+// FindCommit returns the saved state number of the Draft (see
+// draft.Repository).
 func (r draftRepositoryPostgres) FindCommit(ctx context.Context, scope draft.Scope, number int) (draft.Commit, error) {
 	if err := checkScopeLive(ctx, r.db, scope); err != nil {
 		return nil, err

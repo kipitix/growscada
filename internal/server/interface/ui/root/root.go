@@ -159,8 +159,7 @@ func (r *Root) OnMount(ctx app.Context) {
 	// at once, so the content the server removes after it is not loaded for
 	// it, and shows its selection page with its list reread (task 73,
 	// task 76). The Project says so through the content of its project, the
-	// Library through a read of its Draft, its stack, its saved states or its
-	// saved states.
+	// Library through a read of its Draft, its stack or its saved states.
 	ctx.Handle(uiutil.ActionProjectGone, func(ctx app.Context, a app.Action) {
 		if id, ok := a.Value.(uuid.UUID); ok {
 			r.entityGone(ModeProject, id)

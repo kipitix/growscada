@@ -491,18 +491,18 @@ func (p *ProjectClient) draftChangeCommand(ctx context.Context, path string, sta
 	return resp, err
 }
 
-// Discard resets the library's Draft to its last saved state in one transaction and
-// returns the Draft's new state (task 72_5). The error matches ErrConflict if
-// the library has no saved state.
+// Discard resets the library's Draft to its last saved state in one transaction
+// and returns the Draft's new state (task 72_5). The error matches ErrConflict
+// if the library has no saved state.
 func (l *LibraryClient) Discard(ctx context.Context) (apiv0.DiscardLibraryResponse, error) {
 	var resp apiv0.DiscardLibraryResponse
 	err := l.do(ctx, http.MethodPost, "/discard", nil, http.StatusOK, &resp)
 	return resp, err
 }
 
-// LoadCommit makes the library's Draft the content of a saved state (task 84), as a
-// Project's LoadCommit does. The error matches ErrNotFound for a number the
-// library does not have.
+// LoadCommit makes the library's Draft the content of a saved state (task 84),
+// as a Project's LoadCommit does. The error matches ErrNotFound for a number
+// the library does not have.
 func (l *LibraryClient) LoadCommit(ctx context.Context, number int) (apiv0.LoadCommitResponse, error) {
 	var resp apiv0.LoadCommitResponse
 	err := l.do(ctx, http.MethodPost, apiv0.CommitLoadPathOf(number), nil, http.StatusOK, &resp)
@@ -547,7 +547,7 @@ func (p *ProjectClient) RemoveImport(ctx context.Context, libraryID uuid.UUID, v
 	return resp, err
 }
 
-// ImportImpact previews importing saved state number commit of the
+// ImportImpact previews importing the saved state numbered commit of the
 // library; saved state 0 previews removing the import.
 func (p *ProjectClient) ImportImpact(ctx context.Context, libraryID uuid.UUID, commit int) (apiv0.ImportImpactResponse, error) {
 	path := libraryImportPath(libraryID) + "/impact"
@@ -803,7 +803,7 @@ func widgetPath(sceneID, widgetID uuid.UUID) string {
 	return scenePath(sceneID) + "/widgets/" + widgetID.String()
 }
 
-// ── saved states ──────────────────────────────────────────────────────────────
+// ── saved states ─────────────────────────────────────────────────────────────
 
 // SaveCommit fixes the Draft as a saved state at the stated Version (task 72_2;
 // ADR 0021). The error matches ErrConflict for nothing_to_save and for a stale
@@ -814,7 +814,8 @@ func (p *ProjectClient) SaveCommit(ctx context.Context, req apiv0.CreateCommitRe
 	return resp, err
 }
 
-// Commits returns the Project's saved state history, newest first, without content.
+// Commits returns the Project's saved state history, newest first, without
+// content.
 func (p *ProjectClient) Commits(ctx context.Context) ([]apiv0.CommitResponse, error) {
 	var resp apiv0.GetCommitsResponse
 	err := p.do(ctx, http.MethodGet, apiv0.CommitPath, nil, http.StatusOK, &resp)
@@ -836,8 +837,8 @@ func (p *ProjectClient) RenameCommit(ctx context.Context, number int, req apiv0.
 	return resp, err
 }
 
-// CommitsByLabel returns the Project's saved state history narrowed to the saved
-// states the label marks, newest first (task 85_3; ADR 0025).
+// CommitsByLabel returns the Project's saved state history narrowed to the
+// saved states the label marks, newest first (task 85_3; ADR 0025).
 func (p *ProjectClient) CommitsByLabel(ctx context.Context, labelID uuid.UUID) ([]apiv0.CommitResponse, error) {
 	var resp apiv0.GetCommitsResponse
 	err := p.do(ctx, http.MethodGet,
@@ -847,8 +848,8 @@ func (p *ProjectClient) CommitsByLabel(ctx context.Context, labelID uuid.UUID) (
 
 // AssignLabel marks the saved state number with the label and returns every
 // label the saved state carries afterwards. It is idempotent and states no
-// Draft Version. The error matches ErrNotFound for a saved state or a label this
-// server does not have (task 85_3; ADR 0025).
+// Draft Version. The error matches ErrNotFound for a saved state or a label
+// this server does not have (task 85_3; ADR 0025).
 func (p *ProjectClient) AssignLabel(ctx context.Context, number int, labelID uuid.UUID) ([]apiv0.LabelResponse, error) {
 	return p.commitLabel(ctx, http.MethodPut, number, labelID)
 }
@@ -872,9 +873,9 @@ func (p *ProjectClient) CommitProjectFile(ctx context.Context, number int) (Proj
 }
 
 // LoadCommit makes the Draft the content of a saved state (task 84): the saved
-// state becomes what is edited, the DraftChange stack is cleared and the Draft's
-// Version raised. It states no Version — it is a reset, not a content write. The
-// error matches ErrNotFound for a number the Project does not have.
+// state becomes what is edited, the DraftChange stack is cleared and the
+// Draft's Version raised. It states no Version — it is a reset, not a content
+// write. The error matches ErrNotFound for a number the Project does not have.
 func (p *ProjectClient) LoadCommit(ctx context.Context, number int) (apiv0.LoadCommitResponse, error) {
 	var resp apiv0.LoadCommitResponse
 	err := p.do(ctx, http.MethodPost, apiv0.CommitLoadPathOf(number), nil, http.StatusOK, &resp)
@@ -911,8 +912,8 @@ func (l *LibraryClient) RenameCommit(ctx context.Context, number int, req apiv0.
 	return resp, err
 }
 
-// CommitsByLabel returns the Library's saved state history narrowed to the saved
-// states the label marks, newest first (task 85_3; ADR 0025).
+// CommitsByLabel returns the Library's saved state history narrowed to the
+// saved states the label marks, newest first (task 85_3; ADR 0025).
 func (l *LibraryClient) CommitsByLabel(ctx context.Context, labelID uuid.UUID) ([]apiv0.CommitResponse, error) {
 	var resp apiv0.GetCommitsResponse
 	err := l.do(ctx, http.MethodGet,
@@ -1022,9 +1023,9 @@ func (p *ProjectClient) DeployCommit(ctx context.Context, number int) (apiv0.Dep
 	return resp, err
 }
 
-// Discard resets the Draft to the Project's last saved state, dropping the unsaved
-// changes, and returns its answer at once (task 72_4). The error matches
-// ErrConflict if the Project has no saved state.
+// Discard resets the Draft to the Project's last saved state, dropping the
+// unsaved changes, and returns its answer at once (task 72_4). The error
+// matches ErrConflict if the Project has no saved state.
 func (p *ProjectClient) Discard(ctx context.Context) (apiv0.DiscardProjectResponse, error) {
 	var resp apiv0.DiscardProjectResponse
 	err := p.do(ctx, http.MethodPost, "/discard", nil, http.StatusOK, &resp)

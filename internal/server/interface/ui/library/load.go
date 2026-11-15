@@ -115,8 +115,8 @@ func (l *Library) loadList(ctx app.Context) {
 // loadDraftState (re)loads the state of the selected library's Draft: its
 // Version — the Draft of a library without a WidgetType carries it in no
 // content DTO, and every write of the Draft states it (ADR 0016) — and whether
-// it holds changes its last saved state does not (task 74). It is read on mount, on
-// a resync, after each content event and after each command.
+// it holds changes its last saved state does not (task 74). It is read on
+// mount, on a resync, after each content event and after each command.
 func (l *Library) loadDraftState(ctx app.Context) {
 	if l.libraryID == uuid.Nil {
 		return
@@ -146,11 +146,12 @@ func (l *Library) applyDraftState(mark uiutil.Mark, state apiv0.DraftStateRespon
 }
 
 // loadUnsavedChanges (re)loads whether the selected library's Draft holds
-// changes its last saved state does not, from the Draft's state, after a content
-// event of another tab. The answer states the server's Version too, but that is
-// not the Version the shown WidgetTypes were read at: advancing it would let an
-// edit of the stale content overwrite the other tab's change instead of being
-// refused as a conflict, so only the flag is applied (task 74).
+// changes its last saved state does not, from the Draft's state, after a
+// content event of another tab. The answer states the server's Version too, but
+// that is not the Version the shown WidgetTypes were read at: advancing it
+// would let an edit of the stale content overwrite the other tab's change
+// instead of being refused as a conflict, so only the flag is applied (task
+// 74).
 func (l *Library) loadUnsavedChanges(ctx app.Context) {
 	draft := l.draft()
 	if draft == nil {

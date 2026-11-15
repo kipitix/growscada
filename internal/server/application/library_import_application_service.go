@@ -39,10 +39,10 @@ func (e MissingCommitError) Is(target error) bool { return target == draft.ErrCo
 // a library that does not exist one wrapping library.ErrLibraryNotFound.
 type LibraryImportService interface {
 	FindLibraryImports(ctx context.Context, projectID uuid.UUID) ([]appdto.LibraryImport, error)
-	// PutLibraryImport imports the saved state numbered commit of the library: it adds
-	// the import when the project imports none of the library, else switches
-	// it, stating the Version of the Draft. The bool reports whether the
-	// import was added.
+	// PutLibraryImport imports the saved state numbered commit of the library: it
+	// adds the import when the project imports none of the library, else switches
+	// it, stating the Version of the Draft. The bool reports whether the import
+	// was added.
 	PutLibraryImport(ctx context.Context, projectID, libraryID uuid.UUID, commit, version int) (appdto.LibraryImport, bool, error)
 	DeleteLibraryImport(ctx context.Context, projectID, libraryID uuid.UUID, version int) (appdto.LibraryImport, error)
 	// ImportImpact previews switching the import of the library to a saved state,
@@ -64,8 +64,8 @@ var _ LibraryImportService = (*libraryImportServiceImpl)(nil)
 // NewLibraryImportService returns the service of the Library Imports. The
 // events of its changes are recorded by the LibraryImport and saved with the
 // Draft (ADR 0016); the PortBindings a switch breaks are removed in the same
-// change (ADR 0012). The saved states an import names are the saved states of the
-// Libraries' Drafts, read through the ProjectContent's Draft repository.
+// change (ADR 0012). The saved states an import names are the saved states of
+// the Libraries' Drafts, read through the ProjectContent's Draft repository.
 func NewLibraryImportService(aContent ProjectContent, someLibraries library.LibraryRepository, someLabels LabelService) LibraryImportService {
 	return &libraryImportServiceImpl{content: aContent, libraries: someLibraries, labels: someLabels}
 }
@@ -94,9 +94,9 @@ func (s libraryImportServiceImpl) FindLibraryImports(ctx context.Context, rawPro
 	return result, nil
 }
 
-// provenance reads the saved state an import names and the labels it carries: the
-// saved state a Project sees of what it imported (task 85_6). A saved state this
-// server cannot read — its Library is being removed — leaves both empty.
+// provenance reads the saved state an import names and the labels it carries:
+// the saved state a Project sees of what it imported (task 85_6). A saved state
+// this server cannot read — its Library is being removed — leaves both empty.
 func (s libraryImportServiceImpl) provenance(ctx context.Context, imported libraryimport.LibraryImport) (draft.Commit, []appdto.Label, error) {
 	commit, err := s.libraryCommit(ctx, imported.LibraryID(), imported.CommitNumber())
 	if err != nil {

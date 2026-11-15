@@ -645,9 +645,9 @@ func newListDeploymentsResponse(summaries []runtimeapp.DeploymentSummary) apiv0.
 	return resp
 }
 
-// newLoadCommitResponse is the answer of a load of a saved state into the Draft: the
-// Draft's new state and the saved states of Libraries it could not restore
-// (task 71, task 84).
+// newLoadCommitResponse is the answer of a load of a saved state into the
+// Draft: the Draft's new state and the saved states of Libraries it could not
+// restore (task 71, task 84).
 func newLoadCommitResponse(loaded appdto.LoadedDraft) apiv0.LoadCommitResponse {
 	resp := apiv0.LoadCommitResponse{
 		Version:           loaded.Version,

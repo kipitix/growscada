@@ -21,21 +21,21 @@ const commitContentFormatVersion = 1
 // CommitContent is the immutable snapshot a saved state holds: the canonical
 // ProjectFile of a Project's Draft, or the copies of a Library's Draft
 // WidgetTypes — exactly one of them. It is stored encoded (CommitContent
-// implements [json.Marshaler]) and is never changed: a saved state is a point of
-// history.
+// implements [json.Marshaler]) and is never changed: a saved state is a point
+// of history.
 type CommitContent struct {
 	projectFile *projectv0.ProjectFile
 	widgetTypes []library.WidgetTypeCopy
 }
 
-// NewProjectCommitContent returns the content of a Project's saved state over the
-// canonical ProjectFile the Draft's builder assembled.
+// NewProjectCommitContent returns the content of a Project's saved state over
+// the canonical ProjectFile the Draft's builder assembled.
 func NewProjectCommitContent(file projectv0.ProjectFile) CommitContent {
 	return CommitContent{projectFile: &file}
 }
 
-// NewLibraryCommitContent returns the content of a Library's saved state over the
-// copies of its Draft's WidgetTypes.
+// NewLibraryCommitContent returns the content of a Library's saved state over
+// the copies of its Draft's WidgetTypes.
 func NewLibraryCommitContent(widgetTypes []library.WidgetTypeCopy) CommitContent {
 	return CommitContent{widgetTypes: slices.Clone(widgetTypes)}
 }

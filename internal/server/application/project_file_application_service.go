@@ -198,8 +198,8 @@ func (s projectFileServiceImpl) lockLocalImports(ctx context.Context, file proje
 }
 
 // projectDownloadName returns the name of the live Project projectID, which
-// names a downloaded file of it: a Draft, a Deployment or a saved state (task 39,
-// ADR 0018).
+// names a downloaded file of it: a Draft, a Deployment or a saved state (task
+// 39, ADR 0018).
 func projectDownloadName(ctx context.Context, content ProjectContent, projectID id.ID[project.Project]) (string, error) {
 	found, err := content.projects.FindByID(ctx, projectID)
 	if err != nil {

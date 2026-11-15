@@ -57,9 +57,9 @@ func (p *Project) rejectedDraftWrite(ctx app.Context, err error, reload func(app
 }
 
 // loadDraftState (re)loads the state of the Draft: the Version every content
-// write states (ADR 0016) and whether it holds changes its last saved state does
-// not (task 74). It is read on mount, on a resync, after each content event and
-// after each command — the points loadDraftChanges is read at.
+// write states (ADR 0016) and whether it holds changes its last saved state
+// does not (task 74). It is read on mount, on a resync, after each content
+// event and after each command — the points loadDraftChanges is read at.
 func (p *Project) loadDraftState(ctx app.Context) {
 	if p.content == nil {
 		return
@@ -88,12 +88,12 @@ func (p *Project) applyDraftState(mark uiutil.Mark, state apiv0.DraftStateRespon
 	p.draftUnsaved, p.draftStateLoaded = state.HasUnsavedChanges, true
 }
 
-// loadUnsavedChanges (re)loads whether the Draft holds changes its last saved state
-// does not, from the Draft's state, after a content event of another tab. The
-// answer states the server's Version too, but that is not the Version the shown
-// content was read at: advancing it would let a write of the stale content
-// overwrite the other tab's change instead of being refused as a conflict
-// (task 72_6), so only the flag is applied (task 74).
+// loadUnsavedChanges (re)loads whether the Draft holds changes its last saved
+// state does not, from the Draft's state, after a content event of another tab.
+// The answer states the server's Version too, but that is not the Version the
+// shown content was read at: advancing it would let a write of the stale
+// content overwrite the other tab's change instead of being refused as a
+// conflict (task 72_6), so only the flag is applied (task 74).
 func (p *Project) loadUnsavedChanges(ctx app.Context) {
 	if p.content == nil {
 		return

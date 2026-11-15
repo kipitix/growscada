@@ -40,9 +40,10 @@ func (l *Library) loadCommits(ctx app.Context) {
 }
 
 // hasUnsavedChanges reports whether the Draft moved since its content last
-// equalled its last saved state. The flag is the server's — the Draft's own Clean
-// Version marker (ADR 0016, amendment 2026-11-10; task 74) —, so a Discard, a
-// Revert and a Save all follow it without this tab remembering anything.
+// equalled its last saved state. The flag is the server's — the Draft's own
+// Clean Version marker (ADR 0016, amendment 2026-11-10; task 74) —, so a
+// Discard, a Revert and a Save all follow it without this tab remembering
+// anything.
 func (l *Library) hasUnsavedChanges() bool {
 	return l.draftUnsaved
 }
@@ -67,7 +68,8 @@ func (l *Library) saveFromShortcut(ctx app.Context) {
 	l.openSaveDialog()
 }
 
-// saveCommit confirms the Save dialog: the Draft as it is becomes a saved state.
+// saveCommit confirms the Save dialog: the Draft as it is becomes a saved
+// state.
 func (l *Library) saveCommit() {
 	draft := l.draft()
 	if draft == nil || l.savingCommit {

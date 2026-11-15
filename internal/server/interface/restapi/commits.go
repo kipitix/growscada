@@ -14,19 +14,19 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/project"
 )
 
-// CommitHandlers serves the saved states of a Project's or a Library's Draft (task
-// 72_2; ADR 0021): a Save fixes the Draft as a saved state, the history is listed
-// (filtered by a label, task 85_3) and read, a title is renamed, a label is
-// placed on a saved state or taken off it, and a Project's saved state is
-// downloaded as the ProjectFile it holds. The same handler serves both paths;
-// the scope is the path the request came under.
+// CommitHandlers serves the saved states of a Project's or a Library's Draft
+// (task 72_2; ADR 0021): a Save fixes the Draft as a saved state, the history
+// is listed (filtered by a label, task 85_3) and read, a title is renamed, a
+// label is placed on a saved state or taken off it, and a Project's saved state
+// is downloaded as the ProjectFile it holds. The same handler serves both
+// paths; the scope is the path the request came under.
 type CommitHandlers struct {
 	commits application.CommitService
 	labels  application.LabelService
 }
 
-// NewCommitHandler creates the handler over the Engineering node's saved states and
-// over the labels of a saved state.
+// NewCommitHandler creates the handler over the Engineering node's saved states
+// and over the labels of a saved state.
 func NewCommitHandler(commits application.CommitService, labels application.LabelService) *CommitHandlers {
 	return &CommitHandlers{commits: commits, labels: labels}
 }
@@ -89,8 +89,8 @@ func (h CommitHandlers) GetCommits(w http.ResponseWriter, r *http.Request) {
 	sendJSONResponse(w, http.StatusOK, newGetCommitsResponse(commits))
 }
 
-// GetCommitByNumber handles GET …/commits/{commit_number}: one saved state, with
-// the WidgetTypes of a Library's snapshot. 404 for a number the Draft does
+// GetCommitByNumber handles GET …/commits/{commit_number}: one saved state,
+// with the WidgetTypes of a Library's snapshot. 404 for a number the Draft does
 // not have.
 func (h CommitHandlers) GetCommitByNumber(w http.ResponseWriter, r *http.Request) {
 	scope, ok := commitScope(w, r)
@@ -134,8 +134,8 @@ func (h CommitHandlers) PatchCommit(w http.ResponseWriter, r *http.Request) {
 
 // GetCommitProjectFile handles GET
 // /projects/{project_id}/commits/{commit_number}/projectfile: the exact
-// document the saved state fixed, as an attachment (as a Deployment's document is
-// downloaded). 404 for a number the Project does not have.
+// document the saved state fixed, as an attachment (as a Deployment's document
+// is downloaded). 404 for a number the Project does not have.
 func (h CommitHandlers) GetCommitProjectFile(w http.ResponseWriter, r *http.Request) {
 	projectID, ok := pathUUID(w, r, projectResource)
 	if !ok {

@@ -8,11 +8,11 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/version"
 )
 
-// CommitFilter narrows the saved state list of a Draft. The zero filter lists every
-// saved state.
+// CommitFilter narrows the saved state list of a Draft. The zero filter lists
+// every saved state.
 type CommitFilter struct {
-	// LabelID keeps only the saved states the label marks, filtered by the SQL join
-	// over engineering.commit_labels (task 85_3; ADR 0025). uuid.Nil keeps
+	// LabelID keeps only the saved states the label marks, filtered by the SQL
+	// join over engineering.commit_labels (task 85_3; ADR 0025). uuid.Nil keeps
 	// every saved state.
 	LabelID uuid.UUID
 }
@@ -36,10 +36,10 @@ type Repository interface {
 	Update(ctx context.Context, scope Scope, expected version.Version[Draft], description string, change func(*Session) error) (Draft, error)
 
 	// CheckVersion locks the Draft's row and checks it is still at expected: a
-	// stale Version is a ConflictError. It is the check a multi-step act over
-	// the Draft makes after it read the Draft and before it acts on it (ADR
-	// 0022). A Deploy takes a saved state and reads no Draft, so the pattern has no
-	// caller since task 72_4; ADR 0022 keeps it for the next act that needs it.
+	// stale Version is a ConflictError. It is the check a multi-step act over the
+	// Draft makes after it read the Draft and before it acts on it (ADR 0022). A
+	// Deploy takes a saved state and reads no Draft, so the pattern has no caller
+	// since task 72_4; ADR 0022 keeps it for the next act that needs it.
 	CheckVersion(ctx context.Context, scope Scope, expected version.Version[Draft]) error
 
 	// Replace runs a write that replaces the whole content of the Draft
@@ -84,12 +84,12 @@ type Repository interface {
 
 	// SaveCommit fixes the Draft as a saved state (task 72_2; ADR 0021): it locks
 	// the Draft's row, checks expected — a stale Version is a ConflictError —,
-	// refuses a Draft at its Clean Version (ErrNothingToSave: there is nothing
-	// the last saved state does not hold already), numbers the saved state after the last
-	// one, writes it with the imports of its ProjectFile, raises
+	// refuses a Draft at its Clean Version (ErrNothingToSave: there is nothing the
+	// last saved state does not hold already), numbers the saved state after the
+	// last one, writes it with the imports of its ProjectFile, raises
 	// last_commit_number and last_commit_draft_version and makes expected the
-	// Clean Version (ADR 0016, amendment 2026-11-10). content is assembled by
-	// the caller from the Draft at expected (a ProjectFile or a Library's
+	// Clean Version (ADR 0016, amendment 2026-11-10). content is assembled by the
+	// caller from the Draft at expected (a ProjectFile or a Library's
 	// WidgetTypes); no DraftChange is written and the Version is not raised.
 	SaveCommit(ctx context.Context, scope Scope, expected version.Version[Draft], title CommitTitle, author Author, content CommitContent) (Commit, error)
 
@@ -99,13 +99,13 @@ type Repository interface {
 	// Returns ErrCommitNotFound for a number the Draft does not have.
 	RenameCommit(ctx context.Context, scope Scope, number int, title CommitTitle) (Commit, error)
 
-	// FindCommits returns the Draft's saved states, newest first, or only those the
-	// filter's label marks. A Project or Library that is not live is
+	// FindCommits returns the Draft's saved states, newest first, or only those
+	// the filter's label marks. A Project or Library that is not live is
 	// ErrProjectNotFound or ErrLibraryNotFound.
 	FindCommits(ctx context.Context, scope Scope, filter CommitFilter) ([]Commit, error)
 
-	// FindLastCommit returns the Draft's newest saved state, and whether it has one
-	// at all: a Draft never saved has none. It is the read of a Discard, which
+	// FindLastCommit returns the Draft's newest saved state, and whether it has
+	// one at all: a Draft never saved has none. It is the read of a Discard, which
 	// falls back to it (task 72_4) and needs no other saved state. A Project or
 	// Library that is not live is ErrProjectNotFound or ErrLibraryNotFound.
 	FindLastCommit(ctx context.Context, scope Scope) (Commit, bool, error)

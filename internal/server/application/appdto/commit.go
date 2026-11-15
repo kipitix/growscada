@@ -8,10 +8,10 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/draft"
 )
 
-// Commit is the application-layer DTO of a saved state (task 72_2; ADR 0021): its
-// number, title, author and time, the Version of the Draft it fixed, and the
-// counts of its snapshot. WidgetTypes is filled by Find of a Library's saved state
-// alone: the list never carries content.
+// Commit is the application-layer DTO of a saved state (task 72_2; ADR 0021):
+// its number, title, author and time, the Version of the Draft it fixed, and
+// the counts of its snapshot. WidgetTypes is filled by Find of a Library's
+// saved state alone: the list never carries content.
 type Commit struct {
 	ID           uuid.UUID
 	Number       int
@@ -36,7 +36,8 @@ type CommitCounts struct {
 	WidgetTypes  int
 }
 
-// NewCommit creates a saved state DTO from the domain entity, without its content.
+// NewCommit creates a saved state DTO from the domain entity, without its
+// content.
 func NewCommit(c draft.Commit) Commit {
 	return Commit{
 		ID:           c.ID().UUID(),

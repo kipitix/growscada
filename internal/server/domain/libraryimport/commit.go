@@ -13,8 +13,8 @@ import (
 // Commit is a saved state of a Library as an Import names it (task 85_6): its
 // identity, its Library, its number within the Library's Draft and the copies
 // of the WidgetTypes it holds. It is the content an Import uses — a Project
-// sees the WidgetTypes of the saved state it imported, never the Library's Draft —
-// and the value the Import's impact is computed over.
+// sees the WidgetTypes of the saved state it imported, never the Library's
+// Draft — and the value the Import's impact is computed over.
 //
 // It is a value of this package, not the Draft's saved state: an Import is an
 // entity of a Project's Draft, and the Draft package imports this one.
@@ -28,8 +28,8 @@ type Commit struct {
 var _ fmt.Stringer = Commit{}
 
 // NewCommit returns the saved state number of the Library aLibraryID, held by
-// the saved state anID, with the copies of its WidgetTypes. Returns an error for a
-// zero identity, a zero Library or a number below 1.
+// the saved state anID, with the copies of its WidgetTypes. Returns an error
+// for a zero identity, a zero Library or a number below 1.
 func NewCommit(anID uuid.UUID, aLibraryID id.ID[library.Library], number int, widgetTypes []library.WidgetTypeCopy) (Commit, error) {
 	if anID == uuid.Nil {
 		return Commit{}, fmt.Errorf("a saved state needs an ID")
@@ -67,7 +67,8 @@ func (c Commit) Number() int { return c.number }
 // WidgetTypes are the copies of the WidgetTypes the saved state holds.
 func (c Commit) WidgetTypes() []library.WidgetTypeCopy { return slices.Clone(c.widgetTypes) }
 
-// FindWidgetType returns the copy of the WidgetType typeID the saved state holds.
+// FindWidgetType returns the copy of the WidgetType typeID the saved state
+// holds.
 func (c Commit) FindWidgetType(typeID id.ID[library.WidgetType]) (library.WidgetTypeCopy, bool) {
 	for _, wt := range c.widgetTypes {
 		if wt.ID() == typeID {

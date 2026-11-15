@@ -16,11 +16,11 @@ import (
 	"github.com/kipitix/growscada/internal/server/domain/project"
 )
 
-// libraryImportRepositoryPostgresImpl reads the Library Imports of one
-// Project: every query names project_id. They are entities of the Project's
-// Draft (ADR 0016): their writes go through draftRepositoryPostgres. The
-// WidgetTypes they give the Project are the copies the imported saved states hold,
-// decoded from the saved state's content (task 85_6).
+// libraryImportRepositoryPostgresImpl reads the Library Imports of one Project:
+// every query names project_id. They are entities of the Project's Draft (ADR
+// 0016): their writes go through draftRepositoryPostgres. The WidgetTypes they
+// give the Project are the copies the imported saved states hold, decoded from
+// the saved state's content (task 85_6).
 type libraryImportRepositoryPostgresImpl struct {
 	db      *sql.DB
 	project id.ID[project.Project]
@@ -79,16 +79,17 @@ func (r libraryImportRepositoryPostgresImpl) readImports(ctx context.Context, an
 	return imports, nil
 }
 
-// importedWidgetTypesQuery selects the content of the saved states the Project $1
-// imports, in the order of its imports.
+// importedWidgetTypesQuery selects the content of the saved states the Project
+// $1 imports, in the order of its imports.
 const importedWidgetTypesQuery = `SELECT c.content
 	FROM engineering.library_imports li
 	JOIN engineering.commits c ON c.id = li.commit_id
 	WHERE li.project_id = $1
 	ORDER BY li.pk_id`
 
-// FindImportedWidgetTypes returns the WidgetTypes of every saved state the Project
-// imports, in the order of the imports and of each saved state's copies.
+// FindImportedWidgetTypes returns the WidgetTypes of every saved state the
+// Project imports, in the order of the imports and of each saved state's
+// copies.
 func (r libraryImportRepositoryPostgresImpl) FindImportedWidgetTypes(ctx context.Context) ([]library.WidgetTypeCopy, error) {
 	return r.readImported(ctx, nil)
 }
@@ -103,8 +104,8 @@ func (r libraryImportRepositoryPostgresImpl) FindImportedWidgetTypesByID(ctx con
 	return r.readImported(ctx, wanted)
 }
 
-// readImported reads the WidgetTypes of the imported saved states, all of them or
-// only those whose IDs are in wanted.
+// readImported reads the WidgetTypes of the imported saved states, all of them
+// or only those whose IDs are in wanted.
 func (r libraryImportRepositoryPostgresImpl) readImported(ctx context.Context, wanted map[uuid.UUID]struct{}) ([]library.WidgetTypeCopy, error) {
 	rows, err := r.db.QueryContext(ctx, importedWidgetTypesQuery, r.project.UUID())
 	if err != nil {
@@ -140,8 +141,8 @@ func (r libraryImportRepositoryPostgresImpl) readImported(ctx context.Context, w
 	return types, nil
 }
 
-// FindImportedWidgetType returns the WidgetType typeID held by a saved state the
-// Project imports.
+// FindImportedWidgetType returns the WidgetType typeID held by a saved state
+// the Project imports.
 func (r libraryImportRepositoryPostgresImpl) FindImportedWidgetType(ctx context.Context, typeID id.ID[library.WidgetType]) (library.WidgetTypeCopy, error) {
 	types, err := r.FindImportedWidgetTypesByID(ctx, []id.ID[library.WidgetType]{typeID})
 	if err != nil {
@@ -153,9 +154,9 @@ func (r libraryImportRepositoryPostgresImpl) FindImportedWidgetType(ctx context.
 	return types[0], nil
 }
 
-// commitContentOfImport reads the content of a saved state an import names, inside
-// the Draft's transaction: the loader decodes the copies an import switch and
-// a removal are checked against.
+// commitContentOfImport reads the content of a saved state an import names,
+// inside the Draft's transaction: the loader decodes the copies an import
+// switch and a removal are checked against.
 func commitContentOfImport(ctx context.Context, q rowQuerier, libraryID id.ID[library.Library], number int) (draft.CommitContent, uuid.UUID, error) {
 	var (
 		rawID       uuid.UUID

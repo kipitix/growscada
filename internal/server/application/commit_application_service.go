@@ -34,8 +34,8 @@ type CommitService interface {
 	Find(ctx context.Context, scope draft.Scope, number int) (appdto.Commit, error)
 	// Rename changes the title of a saved state, stating no Draft Version.
 	Rename(ctx context.Context, scope draft.Scope, number int, title string) (appdto.Commit, error)
-	// ProjectFile returns the ProjectFile of a Project's saved state as a download.
-	// It is refused with invalid input for a Library's scope.
+	// ProjectFile returns the ProjectFile of a Project's saved state as a
+	// download. It is refused with invalid input for a Library's scope.
 	ProjectFile(ctx context.Context, scope draft.Scope, number int) (ProjectFileDownload, error)
 }
 
@@ -49,11 +49,11 @@ type commitServiceImpl struct {
 
 var _ CommitService = (*commitServiceImpl)(nil)
 
-// NewCommitService returns the service of the saved states of the Projects aContent
-// serves and of the Libraries aLibraries serves, assembling a Project's
-// snapshot with aBuilder, reading a Library's Draft through someWidgetTypes,
-// and reading the labels of a saved state through someLabels, the service that
-// serves them (task 85_3; ADR 0025).
+// NewCommitService returns the service of the saved states of the Projects
+// aContent serves and of the Libraries aLibraries serves, assembling a
+// Project's snapshot with aBuilder, reading a Library's Draft through
+// someWidgetTypes, and reading the labels of a saved state through someLabels,
+// the service that serves them (task 85_3; ADR 0025).
 func NewCommitService(aContent ProjectContent, aLibraries LibraryContent, aBuilder ProjectFileBuilder,
 	someWidgetTypes library.WidgetTypeRepositories, someLabels LabelService) CommitService {
 	return &commitServiceImpl{content: aContent, libraries: aLibraries, builder: aBuilder,
@@ -238,8 +238,8 @@ func (s commitServiceImpl) ProjectFile(ctx context.Context, scope draft.Scope, r
 	return ProjectFileDownload{File: file, ProjectName: name}, nil
 }
 
-// commitNumber parses the number of a saved state a client names; a number below 1
-// is the client's input, not a missing saved state.
+// commitNumber parses the number of a saved state a client names; a number
+// below 1 is the client's input, not a missing saved state.
 func commitNumber(raw int) (int, error) {
 	if raw < 1 {
 		return 0, invalidInput(fmt.Errorf("commit number must be positive, got %d", raw))

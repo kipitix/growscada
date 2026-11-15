@@ -12,9 +12,9 @@ type Project struct {
 	Name        string
 	Description string
 	Version     int
-	// HasUnsavedChanges reports whether the Draft moved since its last saved state:
-	// the read model of a Project's selection row (task 73; ADR 0016,
-	// ADR 0021). False for a project without a Draft row or a saved state.
+	// HasUnsavedChanges reports whether the Draft moved since its last saved
+	// state: the read model of a Project's selection row (task 73; ADR 0016, ADR
+	// 0021). False for a project without a Draft row or a saved state.
 	HasUnsavedChanges bool
 }
 

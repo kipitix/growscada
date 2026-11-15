@@ -30,15 +30,15 @@ type LibraryService interface {
 	// DraftState is the Version of the library's Draft: what every write of
 	// its content states and every DTO of it carries.
 	DraftState(ctx context.Context, libraryID uuid.UUID) (appdto.DraftState, error)
-	// Discard resets the library's Draft to its last saved state in one transaction
-	// over the Draft and answers the Draft's new state. A library never saved
-	// is ErrNothingToDiscard.
+	// Discard resets the library's Draft to its last saved state in one
+	// transaction over the Draft and answers the Draft's new state. A library
+	// never saved is ErrNothingToDiscard.
 	Discard(ctx context.Context, libraryID uuid.UUID) (appdto.DraftState, error)
-	// LoadCommit replaces the library's Draft with the WidgetTypes of its
-	// saved state number, in one transaction: the saved state becomes what is
-	// edited, the DraftChange stack is cleared and the Version raised, as a
-	// Discard does. The Draft is clean exactly when that saved state is its last one
-	// (task 84). A number the library does not have is draft.ErrCommitNotFound.
+	// LoadCommit replaces the library's Draft with the WidgetTypes of its saved
+	// state number, in one transaction: the saved state becomes what is edited,
+	// the DraftChange stack is cleared and the Version raised, as a Discard does.
+	// The Draft is clean exactly when that saved state is its last one (task 84).
+	// A number the library does not have is draft.ErrCommitNotFound.
 	LoadCommit(ctx context.Context, libraryID uuid.UUID, number int) (appdto.LoadedDraft, error)
 }
 
@@ -91,8 +91,8 @@ func (s libraryServiceImpl) findOwn(ctx context.Context, rawID uuid.UUID) (libra
 	return findOwnLibrary(ctx, s.libraries, s.organization, id.NewID(id.IDWithUUID[library.Library](rawID)))
 }
 
-// describe returns the DTO of l with its last saved state and whether its Draft has
-// changes not saved yet.
+// describe returns the DTO of l with its last saved state and whether its Draft
+// has changes not saved yet.
 func (s libraryServiceImpl) describe(ctx context.Context, l library.Library) (appdto.Library, error) {
 	list, err := s.describeAll(ctx, []library.Library{l})
 	if err != nil {
@@ -229,11 +229,11 @@ func libraryVersion(raw int) (version.Version[library.Library], error) {
 	return expected, nil
 }
 
-// DeleteLibraryByID marks a library deleted, while no live Project imports it and
-// no running Deployment names a saved state of it, and returns it as it was read,
-// with its releases: from then on it does not exist for the API. Its Draft and
-// releases are removed later, by the policy of NewLibraryCleanupPolicy. A
-// saved state of the past does not refuse it: their documents
+// DeleteLibraryByID marks a library deleted, while no live Project imports it
+// and no running Deployment names a saved state of it, and returns it as it was
+// read, with its releases: from then on it does not exist for the API. Its
+// Draft and releases are removed later, by the policy of
+// NewLibraryCleanupPolicy. Old saved states do not refuse it: their documents
 // carry the WidgetType copies they need (task 71). It expects no Version
 // (retryOnRace).
 func (s libraryServiceImpl) DeleteLibraryByID(ctx context.Context, rawID uuid.UUID) (appdto.Library, error) {
@@ -317,8 +317,8 @@ func (s libraryServiceImpl) Discard(ctx context.Context, rawID uuid.UUID) (appdt
 }
 
 // LoadCommit makes the library's Draft the content of one of its saved states
-// (task 84): the reset a Discard makes, to the saved state the client named rather
-// than the last one.
+// (task 84): the reset a Discard makes, to the saved state the client named
+// rather than the last one.
 func (s libraryServiceImpl) LoadCommit(ctx context.Context, rawID uuid.UUID, number int) (appdto.LoadedDraft, error) {
 	found, err := s.findOwn(ctx, rawID)
 	if err != nil {

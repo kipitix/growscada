@@ -123,8 +123,8 @@ func libraryWriteError(what string, err error) error {
 }
 
 // Delete removes the row of a library marked deleted, with its Draft and its
-// saved states by the cascade of their foreign keys. The imports of Projects still
-// being removed refuse it.
+// saved states by the cascade of their foreign keys. The imports of Projects
+// still being removed refuse it.
 func (r libraryRepositoryPostgresImpl) Delete(ctx context.Context, l library.Library) error {
 	return r.store.inTx(ctx, l.PendingEvents(), func(tx *sql.Tx) error {
 		res, err := tx.ExecContext(ctx, `DELETE FROM engineering.libraries WHERE id = $1 AND deleted_at IS NOT NULL`, l.ID().UUID())

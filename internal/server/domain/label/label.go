@@ -1,7 +1,7 @@
 // Package label holds the Label aggregate: a named mark with an optional color
-// an Engineer puts on saved states to group and filter them (task 85_2;
-// ADR 0025). A Label belongs to the Organization, not to a Project or a
-// Library, and it is not content: no Draft, saved state's ProjectFile or Deployment
+// an Engineer puts on saved states to group and filter them (task 85_2; ADR
+// 0025). A Label belongs to the Organization, not to a Project or a Library,
+// and it is not content: no Draft, saved state's ProjectFile or Deployment
 // carries it. It owns its assignments — the marks on saved states — which are
 // its entities, added in task 85_3; a rename does not need to load them, but
 // the model never pretends an assignment is an aggregate of its own.

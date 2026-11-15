@@ -143,9 +143,9 @@ type InputPortState struct {
 	TypeHint    string `json:"type_hint"`
 }
 
-// LibraryImportState is an import's row; its ID is the Library's. Commit is
-// the number of the Library's saved state it names: the identity of that
-// saved state (the row's commit_id) is resolved from the Library and the number in
+// LibraryImportState is an import's row; its ID is the Library's. Commit is the
+// number of the Library's saved state it names: the identity of that saved
+// state (the row's commit_id) is resolved from the Library and the number in
 // the write, so a snapshot restored by an undo or built from a ProjectFile
 // carries the number alone.
 type LibraryImportState struct {

@@ -59,14 +59,14 @@ func (i Impact) Check() error {
 // ImportImpactOf computes the Impact on widgets, the Widgets of a Project, of
 // importing to instead of from, two saved states of one Library: from is the
 // saved state imported now (nil if none), to the one imported after (nil for
-// removing the import). The WidgetTypes are those of the saved states themselves.
-// A Widget of a WidgetType from holds and to does not is orphaned; a
-// PortBinding of a Widget whose WidgetType both hold is broken if to's copy of
-// it does not declare the port, or the port's type hint does not accept the
-// TagType of the bound Tag as tagTypes, the TagTypes of the Project's Tags,
-// has it. A binding to a Tag that does not exist is no matter of the import:
-// it is removed whatever the import.
-// It is both the preview of a switch and the check that refuses it.
+// removing the import). The WidgetTypes are those of the saved states
+// themselves. A Widget of a WidgetType from holds and to does not is orphaned;
+// a PortBinding of a Widget whose WidgetType both hold is broken if to's copy
+// of it does not declare the port, or the port's type hint does not accept the
+// TagType of the bound Tag as tagTypes, the TagTypes of the Project's Tags, has
+// it. A binding to a Tag that does not exist is no matter of the import: it is
+// removed whatever the import. It is both the preview of a switch and the check
+// that refuses it.
 func ImportImpactOf(widgets []PlacedWidget, from, to *Commit, tagTypes scene.TagTypes) Impact {
 	var impact Impact
 	if from == nil {

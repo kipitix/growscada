@@ -1,7 +1,7 @@
 // Package description holds the Description of a Project or a Library: an
 // optional, free-text attribute of the aggregate itself. It is never part of
-// the aggregate's content: a ProjectFile, a Deployment, a saved state or a growctl
-// manifest does not carry it (task 73).
+// the aggregate's content: a ProjectFile, a Deployment, a saved state or a
+// growctl manifest does not carry it (task 73).
 package description
 
 import (

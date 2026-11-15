@@ -152,9 +152,9 @@ func (p *Project) loadImportCommits(ctx app.Context) {
 		}, p.loadImportCommits)
 }
 
-// changeImport imports saved state number commit of the library, or removes the
-// import for saved state 0, after its preview: orphaned Widgets refuse it, broken
-// bindings are confirmed.
+// changeImport imports the saved state numbered commit of the library, or
+// removes the import for 0, after its preview: orphaned Widgets refuse it,
+// broken bindings are confirmed.
 func (p *Project) changeImport(libraryID uuid.UUID, commit int) {
 	if p.waitMoves(p.compoCtx, func(ctx app.Context) { p.changeImport(libraryID, commit) }) {
 		return
@@ -189,8 +189,7 @@ func (p *Project) changeImport(libraryID uuid.UUID, commit int) {
 	}, nil)
 }
 
-// saveImport imports (a positive saved state number) or removes (saved state 0)
-// the import.
+// saveImport imports (commit > 0) or removes (commit 0) the import.
 func (p *Project) saveImport(content *apiclient.ProjectClient, libraryID uuid.UUID, commit, version int) {
 	mark := p.markDraft()
 	uiutil.Call(p.compoCtx, func(c context.Context) (apiv0.LibraryImportResponse, error) {

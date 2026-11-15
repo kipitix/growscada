@@ -20,7 +20,8 @@ type Library struct {
 	// LatestCommit is the number of the Draft's last saved state; 0 when it was
 	// never saved.
 	LatestCommit int
-	// HasUnsavedChanges reports whether the Draft moved since its last saved state.
+	// HasUnsavedChanges reports whether the Draft moved since its last saved
+	// state.
 	HasUnsavedChanges bool
 }
 
@@ -60,8 +61,8 @@ type LibraryImport struct {
 }
 
 // NewLibraryImport creates a LibraryImport DTO from the domain entity and, when
-// this server has it, the saved state it names: a saved state that cannot be read leaves
-// the provenance empty and the number as stored.
+// this server has it, the saved state it names: a saved state that cannot be
+// read leaves the provenance empty and the number as stored.
 func NewLibraryImport(i libraryimport.LibraryImport, version int, commit draft.Commit, labels []Label) LibraryImport {
 	dto := LibraryImport{LibraryID: i.LibraryID().UUID(), CommitNumber: i.CommitNumber(), Labels: labels, Version: version}
 	if commit != nil {

@@ -20,9 +20,9 @@ import (
 // loaded and written by the Draft's repository, which opens one transaction
 // over this row (ADR 0016).
 //
-// Draft is immutable: every change returns a new Draft. A content change
-// keeps the Version; the repository raises it once when it stores the change,
-// and a Save or a reset to a saved state's content moves the Clean Version with it.
+// Draft is immutable: every change returns a new Draft. A content change keeps
+// the Version; the repository raises it once when it stores the change, and a
+// Save or a reset to a saved state's content moves the Clean Version with it.
 type Draft interface {
 	ID() id.ID[Draft]
 	// Scope is the Project or the Library the Draft belongs to; it never
@@ -31,10 +31,10 @@ type Draft interface {
 	// Version is the Version of the Draft's content: the token every write
 	// of it states and raises.
 	Version() version.Version[Draft]
-	// CleanVersion is the Version at which the Draft's content last equalled
-	// its last saved state's: a Save puts the Draft there, and so does a reset whose
-	// target is that content (ADR 0016, amendment 2026-11-10). 0 for a Draft
-	// whose content never equalled a saved state's — one never saved.
+	// CleanVersion is the Version at which the Draft's content last equalled its
+	// last saved state's: a Save puts the Draft there, and so does a reset whose
+	// target is that content (ADR 0016, amendment 2026-11-10). 0 for a Draft whose
+	// content never equalled a saved state's — one never saved.
 	CleanVersion() version.Version[Draft]
 	// HasUnsavedChanges reports whether the Draft's Version is above its Clean
 	// Version: its content moved since it last equalled its last saved state. A

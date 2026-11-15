@@ -43,12 +43,11 @@ func parseLibraryKey(key string) (id.ID[library.Library], error) {
 const LibraryCleanupPolicyName = "remove_deleted_library"
 
 // libraryCleanupPolicy removes a Library marked deleted with its Draft, its
-// saved states and its WidgetTypes; a library_deleted event's job does it. It was
-// marked only while no live Project imported it, and no import is added to it
-// since; the imports of Projects marked deleted hold it until their cleanup
-// removes them,
-// and the job is run again until then. For a live Library the job does
-// nothing.
+// saved states and its WidgetTypes; a library_deleted event's job does it. It
+// was marked only while no live Project imported it, and no import is added to
+// it since; the imports of Projects marked deleted hold it until their cleanup
+// removes them, and the job is run again until then. For a live Library the job
+// does nothing.
 type libraryCleanupPolicy struct {
 	libraries library.LibraryRepository
 }

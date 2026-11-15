@@ -80,8 +80,8 @@ func DeployProject(t *testing.T, db *sql.DB, projectID uuid.UUID) {
 	}
 }
 
-// saveDraft fixes the Draft as a saved state, or returns its last saved state when the
-// Draft is at its Clean Version already.
+// saveDraft fixes the Draft as a saved state, or returns its last saved state
+// when the Draft is at its Clean Version already.
 func saveDraft(ctx context.Context, drafts draft.Repository, scope draft.Scope, content draft.CommitContent) (draft.Commit, error) {
 	current, ok, err := drafts.Read(ctx, scope)
 	if err != nil {

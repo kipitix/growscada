@@ -11,8 +11,8 @@ import (
 )
 
 // DraftService reads the state of a Project's Draft (ADR 0016): the Version
-// every content write states and whether the Draft holds changes its last
-// saved state does not. It is what a client that has read no content yet — a Project
+// every content write states and whether the Draft holds changes its last saved
+// state does not. It is what a client that has read no content yet — a Project
 // with no Scenes and no Tags — reads the Version from.
 type DraftService interface {
 	// State returns the Version of the live Project's Draft and its

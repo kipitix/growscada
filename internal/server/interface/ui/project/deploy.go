@@ -19,10 +19,10 @@ import (
 
 // The Project mode's deployment state (task 35, part 5; task 85_4): the
 // Deployment the project runs and the saved state it came from, the Deployments
-// history, Discard to the last saved state and Revert to the running Deployment. A
-// Deploy makes a saved state the running one, so the panel's Deploy button opens
-// the saved states, narrowed by a label (task 85_5); the Deployment itself is
-// Operation's.
+// history, Discard to the last saved state and Revert to the running
+// Deployment. A Deploy makes a saved state the running one, so the panel's
+// Deploy button opens the saved states, narrowed by a label (task 85_5); the
+// Deployment itself is Operation's.
 
 // loadDeployments (re)loads the Deployments the dialog lists, newest first.
 func (p *Project) loadDeployments(ctx app.Context) {

@@ -72,10 +72,10 @@ func (l *Library) handleServerEvents(ctx app.Context) {
 	})
 }
 
-// eventOfSelectedLibrary reports whether an event of a Library's saved state or a
-// WidgetType of its Draft concerns the selected library. The
-// event names the library in ev.ID, and a WidgetType event in ev.LibraryID;
-// an event that names none concerns every one (task 72_7).
+// eventOfSelectedLibrary reports whether an event of a Library's saved state or
+// a WidgetType of its Draft concerns the selected library. The event names the
+// library in ev.ID, and a WidgetType event in ev.LibraryID; an event that names
+// none concerns every one (task 72_7).
 func (l *Library) eventOfSelectedLibrary(ev apiv0.Event) bool {
 	id := ev.ID
 	if ev.LibraryID != "" {

@@ -70,10 +70,11 @@ const DraftPath = "/draft"
 
 // DraftStateResponse is the state of a Project's or a Library's Draft: its
 // Version and whether it holds changes its last saved state does not (ADR 0016,
-// task 74). GET /projects/{id}/draft and GET /libraries/{id}/draft answer it, and
-// so do POST /projects/{id}/discard (the reset to the last saved state), POST
-// /projects/{id}/revert-to-deployed (the reset to the Deployment the Project
-// runs) and POST /libraries/{id}/discard (to the last saved state) after the reset.
+// task 74). GET /projects/{id}/draft and GET /libraries/{id}/draft answer it,
+// and so do POST /projects/{id}/discard (the reset to the last saved state),
+// POST /projects/{id}/revert-to-deployed (the reset to the Deployment the
+// Project runs) and POST /libraries/{id}/discard (to the last saved state)
+// after the reset.
 //
 // In Problem.draft (409 draft_conflict) only Version is meaningful: the
 // conflict names the Version the server holds, not the state of its flag.
@@ -83,11 +84,12 @@ type DraftStateResponse struct {
 }
 
 // DiscardProjectResponse is the answer of POST /projects/{id}/discard — the
-// Draft reset to its last saved state — and of POST /projects/{id}/revert-to-deployed
-// — the Draft reset to the Deployment the Project runs —, each in one
-// transaction (ADR 0016, task 72_4). Warnings name the saved states of Libraries
-// the restored target used but this server does not have: their imports, and the
-// Widgets of their WidgetTypes, were dropped from the restored Draft (task 71).
+// Draft reset to its last saved state — and of
+// POST /projects/{id}/revert-to-deployed — the Draft reset to the Deployment
+// the Project runs —, each in one transaction (ADR 0016, task 72_4). Warnings
+// name the saved states of Libraries the restored target used but this server
+// does not have: their imports, and the Widgets of their WidgetTypes, were
+// dropped from the restored Draft (task 71).
 type DiscardProjectResponse struct {
 	Version  int                      `json:"version"`
 	Warnings []DiscardWarningResponse `json:"warnings,omitempty"`
