@@ -9,10 +9,10 @@ import (
 	"github.com/kipitix/growscada/internal/server/application/appdto"
 )
 
-// TestCommits_ProjectSaveListFindRename covers the Commit routes of a
+// TestSavedStates_ProjectSaveListFindRename covers the saved state routes of a
 // Project (task 72_2; ADR 0021): a Save, its refusals, the history, one
-// Commit, the rename and the ProjectFile download.
-func TestCommits_ProjectSaveListFindRename(t *testing.T) {
+// saved state, the rename and the ProjectFile download.
+func TestSavedStates_ProjectSaveListFindRename(t *testing.T) {
 	cleanProjectsRest(t)
 	if _, err := testDB().ExecContext(context.Background(),
 		"DELETE FROM engineering.drafts"); err != nil {
@@ -22,16 +22,16 @@ func TestCommits_ProjectSaveListFindRename(t *testing.T) {
 	router := services.router()
 
 	if rec := serve(router, http.MethodGet, mainPath+"/saved-states", nil); rec.Code != http.StatusOK {
-		t.Fatalf("GET commits: %d %s", rec.Code, rec.Body)
+		t.Fatalf("GET saved states: %d %s", rec.Code, rec.Body)
 	}
 	if rec := serve(router, http.MethodPost, mainPath+"/saved-states", apiv0.CreateSavedStateRequest{
 		Version: 1, Title: "  First save ", Author: " Ada ",
 	}); rec.Code != http.StatusCreated {
-		t.Fatalf("POST commit: %d %s", rec.Code, rec.Body)
+		t.Fatalf("POST saved state: %d %s", rec.Code, rec.Body)
 	}
 	created := decodeBody[apiv0.SavedStateResponse](t, serve(router, http.MethodGet, mainPath+"/saved-states/1", nil))
 	if created.Number != 1 || created.Title != "First save" || created.Author != "Ada" {
-		t.Errorf("the saved commit: %+v", created)
+		t.Errorf("the saved state: %+v", created)
 	}
 
 	if rec := serve(router, http.MethodPost, mainPath+"/saved-states", apiv0.CreateSavedStateRequest{
@@ -56,18 +56,18 @@ func TestCommits_ProjectSaveListFindRename(t *testing.T) {
 		t.Errorf("history: %+v", list)
 	}
 	if rec := serve(router, http.MethodGet, mainPath+"/saved-states/9", nil); rec.Code != http.StatusNotFound {
-		t.Errorf("GET a missing commit: %d, want 404", rec.Code)
+		t.Errorf("GET a missing saved state: %d, want 404", rec.Code)
 	}
 	if rec := serve(router, http.MethodGet, mainPath+"/saved-states/not-a-number", nil); rec.Code != http.StatusBadRequest {
-		t.Errorf("GET a commit by a non-number: %d, want 400", rec.Code)
+		t.Errorf("GET a saved state by a non-number: %d, want 400", rec.Code)
 	}
 
 	rec = serve(router, http.MethodPatch, mainPath+"/saved-states/1", apiv0.RenameSavedStateRequest{Title: "Before the demo"})
 	if rec.Code != http.StatusOK {
-		t.Fatalf("PATCH commit: %d %s", rec.Code, rec.Body)
+		t.Fatalf("PATCH saved state: %d %s", rec.Code, rec.Body)
 	}
 	if renamed := decodeBody[apiv0.SavedStateResponse](t, rec); renamed.Title != "Before the demo" {
-		t.Errorf("renamed commit: %+v", renamed)
+		t.Errorf("renamed saved state: %+v", renamed)
 	}
 	if rec := serve(router, http.MethodPatch, mainPath+"/saved-states/1", apiv0.RenameSavedStateRequest{Title: " "}); rec.Code != http.StatusBadRequest {
 		t.Errorf("PATCH with an empty title: %d, want 400", rec.Code)
@@ -75,27 +75,27 @@ func TestCommits_ProjectSaveListFindRename(t *testing.T) {
 
 	rec = serve(router, http.MethodGet, mainPath+"/saved-states/1/projectfile", nil)
 	if rec.Code != http.StatusOK {
-		t.Fatalf("GET the commit's project file: %d %s", rec.Code, rec.Body)
+		t.Fatalf("GET the saved state's project file: %d %s", rec.Code, rec.Body)
 	}
 	if ct := rec.Header().Get("Content-Type"); ct != "application/json" {
 		t.Errorf("project file content type %q", ct)
 	}
 }
 
-// TestCommits_LibrarySaveAndRead covers the Commit routes of a Library
+// TestSavedStates_LibrarySaveAndRead covers the saved state routes of a Library
 // (task 72_2; ADR 0021).
-func TestCommits_LibrarySaveAndRead(t *testing.T) {
+func TestSavedStates_LibrarySaveAndRead(t *testing.T) {
 	services := newServices()
 	router := services.router()
 	created, err := services.libraries.CreateLibrary(context.Background(),
-		appdto.LibraryInput{Name: "commits-rest-" + t.Name()})
+		appdto.LibraryInput{Name: "saved-states-rest-" + t.Name()})
 	if err != nil {
 		t.Fatalf("CreateLibrary: %v", err)
 	}
 	path := apiv0.PathPrefix + apiv0.LibraryPath(created.ID.String())
 
 	if rec := serve(router, http.MethodGet, path+"/saved-states", nil); rec.Code != http.StatusOK {
-		t.Fatalf("GET library commits: %d %s", rec.Code, rec.Body)
+		t.Fatalf("GET library saved states: %d %s", rec.Code, rec.Body)
 	}
 	if _, err := services.widgetTypes.CreateWidgetType(context.Background(), created.ID, 1, appdto.WidgetTypeInput{
 		Name: "gauge", HtmlTemplate: "<div></div>", Script: "function update(){}",
@@ -106,19 +106,19 @@ func TestCommits_LibrarySaveAndRead(t *testing.T) {
 	if rec := serve(router, http.MethodPost, path+"/saved-states", apiv0.CreateSavedStateRequest{
 		Version: 2, Title: "Widgets", Author: "Ada",
 	}); rec.Code != http.StatusCreated {
-		t.Fatalf("POST library commit: %d %s", rec.Code, rec.Body)
+		t.Fatalf("POST library saved state: %d %s", rec.Code, rec.Body)
 	}
 	rec := serve(router, http.MethodGet, path+"/saved-states/1", nil)
 	if rec.Code != http.StatusOK {
-		t.Fatalf("GET library commit: %d %s", rec.Code, rec.Body)
+		t.Fatalf("GET library saved state: %d %s", rec.Code, rec.Body)
 	}
-	if commit := decodeBody[apiv0.SavedStateResponse](t, rec); commit.WidgetTypes == nil {
-		t.Errorf("a library's commit carries no widget types: %+v", commit)
+	if saved := decodeBody[apiv0.SavedStateResponse](t, rec); saved.WidgetTypes == nil {
+		t.Errorf("a library's saved state carries no widget types: %+v", saved)
 	}
 	if rec := serve(router, http.MethodPatch, path+"/saved-states/1", apiv0.RenameSavedStateRequest{Title: "For the demo"}); rec.Code != http.StatusOK {
-		t.Errorf("PATCH library commit: %d, want 200", rec.Code)
+		t.Errorf("PATCH library saved state: %d, want 200", rec.Code)
 	}
 	if rec := serve(router, http.MethodGet, path+"/saved-states/1/projectfile", nil); rec.Code != http.StatusNotFound {
-		t.Errorf("a library has no commit project file: %d, want 404", rec.Code)
+		t.Errorf("a library has no saved state project file: %d, want 404", rec.Code)
 	}
 }

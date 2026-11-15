@@ -149,9 +149,9 @@ type InputPortState struct {
 // number in the write, so a snapshot restored by an undo or built from a
 // ProjectFile carries the number alone.
 //
-// The stored name of the field stays "saved_state" (task 88_1): the DraftChange
-// snapshots of earlier builds carry it, and the JSONB documents are rewritten
-// as one with the contracts (task 88_2).
+// The stored name of the field is "saved_state" (task 88_2): a DraftChange
+// snapshot written before the rename carries "commit" instead, and the
+// draftchange codec reads it as this field (ADR 0017).
 type LibraryImportState struct {
 	LibraryID  uuid.UUID `json:"library_id"`
 	SavedState int       `json:"saved_state"`

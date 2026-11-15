@@ -9,11 +9,11 @@ import (
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 )
 
-// TestLoadCommit_Project: a saved state becomes what is edited (task 84). The
-// Draft is replaced by the Commit's content in one transaction, and it is clean
-// exactly when the loaded Commit is the last one. A number the Project does not
-// have is 404 and changes nothing.
-func TestLoadCommit_Project(t *testing.T) {
+// TestLoadSavedState_Project: a saved state becomes what is edited (task 84).
+// The Draft is replaced by the saved state's content in one transaction, and
+// it is clean exactly when the loaded saved state is the last one. A number
+// the Project does not have is 404 and changes nothing.
+func TestLoadSavedState_Project(t *testing.T) {
 	cleanProjectsRest(t)
 	services := newServices()
 	router := services.router()
@@ -30,10 +30,10 @@ func TestLoadCommit_Project(t *testing.T) {
 	version = services.draftVersion(t)
 	if rec := serve(router, http.MethodPost, mainPath+"/saved-states",
 		apiv0.CreateSavedStateRequest{Version: version, Title: "The first", Author: "Ada"}); rec.Code != http.StatusCreated {
-		t.Fatalf("POST commit: %d %s", rec.Code, rec.Body)
+		t.Fatalf("POST saved state: %d %s", rec.Code, rec.Body)
 	}
 
-	// A Tag the Commit does not hold: the Draft differs from it.
+	// A Tag the saved state does not hold: the Draft differs from it.
 	version = services.draftVersion(t)
 	if rec := serve(router, http.MethodPost, mainPath+"/tags",
 		apiv0.CreateTagRequest{Version: version, Name: "pressure", Type: "integer"}); rec.Code != http.StatusCreated {
@@ -49,7 +49,7 @@ func TestLoadCommit_Project(t *testing.T) {
 		t.Errorf("the load states no draft version: %+v", loaded)
 	}
 	if loaded.HasUnsavedChanges {
-		t.Errorf("the last Commit loaded leaves the Draft dirty: %+v", loaded)
+		t.Errorf("the last saved state loaded leaves the Draft dirty: %+v", loaded)
 	}
 	if len(loaded.Warnings) != 0 {
 		t.Errorf("the load dropped a pin: %+v", loaded.Warnings)
@@ -68,16 +68,16 @@ func TestLoadCommit_Project(t *testing.T) {
 
 	rec = serve(router, http.MethodPost, mainPath+"/saved-states/99/load", nil)
 	if rec.Code != http.StatusNotFound {
-		t.Fatalf("load a Commit the Project does not have: %d %s", rec.Code, rec.Body)
+		t.Fatalf("load a saved state the Project does not have: %d %s", rec.Code, rec.Body)
 	}
 	if got := rec.Header().Get("Content-Type"); got != "application/problem+json" {
 		t.Errorf("a refusal's content type: %q", got)
 	}
 }
 
-// TestLoadCommit_Library: the same reset of a Library's Draft, to the
-// WidgetTypes its Commit copied (task 84).
-func TestLoadCommit_Library(t *testing.T) {
+// TestLoadSavedState_Library: the same reset of a Library's Draft, to the
+// WidgetTypes its saved state copied (task 84).
+func TestLoadSavedState_Library(t *testing.T) {
 	router := newServices().router()
 	const p = apiv0.PathPrefix
 
@@ -96,10 +96,10 @@ func TestLoadCommit_Library(t *testing.T) {
 	saved := decodeBody[apiv0.CreateWidgetTypeResponse](t, rec)
 	if rec := serve(router, http.MethodPost, lp+"/saved-states",
 		apiv0.CreateSavedStateRequest{Version: saved.Version, Title: "One widget", Author: "Ada"}); rec.Code != http.StatusCreated {
-		t.Fatalf("POST commits: %d %s", rec.Code, rec.Body)
+		t.Fatalf("POST saved states: %d %s", rec.Code, rec.Body)
 	}
 
-	// A second WidgetType, which the Commit does not hold.
+	// A second WidgetType, which the saved state does not hold.
 	rec = serve(router, http.MethodPost, lp+"/widget-types", apiv0.CreateWidgetTypeRequest{
 		Version: saved.Version, Name: "meter", HtmlTemplate: "<div/>", ScriptLanguage: "javascript", DefaultWidth: 10, DefaultHeight: 10,
 	})
@@ -121,6 +121,6 @@ func TestLoadCommit_Library(t *testing.T) {
 	}
 
 	if rec := serve(router, http.MethodPost, lp+"/saved-states/9/load", nil); rec.Code != http.StatusNotFound {
-		t.Fatalf("load a Commit the library does not have: %d %s", rec.Code, rec.Body)
+		t.Fatalf("load a saved state the library does not have: %d %s", rec.Code, rec.Body)
 	}
 }

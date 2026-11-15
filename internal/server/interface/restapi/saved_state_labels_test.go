@@ -21,11 +21,12 @@ import (
 	"github.com/kipitix/growscada/internal/server/interface/restapi"
 )
 
-// TestCommitLabels_AssignFilterAndChips covers the label assignment routes of a
-// Project's saved state (task 85_3; ADR 0025): a label is placed and taken off
-// idempotently, the history lists the chips, ?label= filters it, the label's
-// assigned count follows, and a Commit or a label this server lacks is 404.
-func TestCommitLabels_AssignFilterAndChips(t *testing.T) {
+// TestSavedStateLabels_AssignFilterAndChips covers the label assignment routes
+// of a Project's saved state (task 85_3; ADR 0025): a label is placed and taken
+// off idempotently, the history lists the chips, ?label= filters it, the
+// label's assigned count follows, and a saved state or a label this server
+// lacks is 404.
+func TestSavedStateLabels_AssignFilterAndChips(t *testing.T) {
 	cleanProjectsRest(t)
 	cleanTestLabels(t)
 	if _, err := testDB().ExecContext(context.Background(), "DELETE FROM engineering.drafts"); err != nil {
@@ -46,7 +47,7 @@ func TestCommitLabels_AssignFilterAndChips(t *testing.T) {
 	if rec := serve(router, http.MethodPost, mainPath+"/saved-states", apiv0.CreateSavedStateRequest{
 		Version: 1, Title: "First save", Author: "Ada",
 	}); rec.Code != http.StatusCreated {
-		t.Fatalf("POST commit: %d %s", rec.Code, rec.Body)
+		t.Fatalf("POST saved state: %d %s", rec.Code, rec.Body)
 	}
 
 	labelPath := mainPath + "/saved-states/1/labels/" + label.ID.String()
@@ -67,12 +68,12 @@ func TestCommitLabels_AssignFilterAndChips(t *testing.T) {
 	}
 
 	// The saved state carries the label, and so does the history.
-	commit := decodeBody[apiv0.SavedStateResponse](t, serve(router, http.MethodGet, mainPath+"/saved-states/1", nil))
-	if len(commit.Labels) != 1 || commit.Labels[0].ID != label.ID {
-		t.Errorf("the commit's labels: %+v", commit.Labels)
+	saved := decodeBody[apiv0.SavedStateResponse](t, serve(router, http.MethodGet, mainPath+"/saved-states/1", nil))
+	if len(saved.Labels) != 1 || saved.Labels[0].ID != label.ID {
+		t.Errorf("the saved state's labels: %+v", saved.Labels)
 	}
-	if commits := decodeBody[apiv0.GetSavedStatesResponse](t, serve(router, http.MethodGet, mainPath+"/saved-states", nil)); len(commits.SavedStates) != 1 || len(commits.SavedStates[0].Labels) != 1 {
-		t.Errorf("the history's chips: %+v", commits)
+	if savedStates := decodeBody[apiv0.GetSavedStatesResponse](t, serve(router, http.MethodGet, mainPath+"/saved-states", nil)); len(savedStates.SavedStates) != 1 || len(savedStates.SavedStates[0].Labels) != 1 {
+		t.Errorf("the history's chips: %+v", savedStates)
 	}
 
 	// ?label= filters the history by one label, in the query.
@@ -117,7 +118,7 @@ func TestCommitLabels_AssignFilterAndChips(t *testing.T) {
 		t.Errorf("a repeated DELETE: %d, want 200", rec.Code)
 	}
 
-	// A Commit or a label this server lacks is 404.
+	// A saved state or a label this server lacks is 404.
 	if rec := serve(router, http.MethodPut, mainPath+"/saved-states/9/labels/"+label.ID.String(), nil); rec.Code != http.StatusNotFound {
 		t.Errorf("a label on a missing saved state: %d, want 404", rec.Code)
 	}
@@ -132,15 +133,15 @@ func TestCommitLabels_AssignFilterAndChips(t *testing.T) {
 	}
 }
 
-// TestCommitLabels_LibraryScope covers the same routes under a Library: its
+// TestSavedStateLabels_LibraryScope covers the same routes under a Library: its
 // saved states carry the Organization's labels too (task 85_3; ADR 0025).
-func TestCommitLabels_LibraryScope(t *testing.T) {
+func TestSavedStateLabels_LibraryScope(t *testing.T) {
 	cleanTestLabels(t)
 	services := newServices()
 	router := services.router()
 	ctx := context.Background()
 
-	created, err := services.libraries.CreateLibrary(ctx, appdto.LibraryInput{Name: "commit-labels-" + uuid.NewString()[:8]})
+	created, err := services.libraries.CreateLibrary(ctx, appdto.LibraryInput{Name: "saved-state-labels-" + uuid.NewString()[:8]})
 	if err != nil {
 		t.Fatalf("CreateLibrary: %v", err)
 	}
@@ -150,9 +151,9 @@ func TestCommitLabels_LibraryScope(t *testing.T) {
 		t.Fatalf("Create label: %v", err)
 	}
 	// A saved state another Draft holds is not this Library's: its number names
-	// no Commit of it (task 85_3).
+	// no saved state of it (task 85_3).
 	if rec := serve(router, http.MethodPut, path+"/saved-states/1/labels/"+label.ID.String(), nil); rec.Code != http.StatusNotFound {
-		t.Errorf("a label on a Library without Commit 1: %d, want 404", rec.Code)
+		t.Errorf("a label on a Library without saved state 1: %d, want 404", rec.Code)
 	}
 	if _, err := services.widgetTypes.CreateWidgetType(ctx, created.ID, 1, appdto.WidgetTypeInput{
 		Name: "gauge", HtmlTemplate: "<div></div>", Script: "function update(){}",
@@ -163,27 +164,27 @@ func TestCommitLabels_LibraryScope(t *testing.T) {
 	if rec := serve(router, http.MethodPost, path+"/saved-states", apiv0.CreateSavedStateRequest{
 		Version: 2, Title: "Widgets", Author: "Ada",
 	}); rec.Code != http.StatusCreated {
-		t.Fatalf("POST library commit: %d %s", rec.Code, rec.Body)
+		t.Fatalf("POST library saved state: %d %s", rec.Code, rec.Body)
 	}
 	labelPath := path + "/saved-states/1/labels/" + label.ID.String()
 	if rec := serve(router, http.MethodPut, labelPath, nil); rec.Code != http.StatusOK {
 		t.Fatalf("PUT a label on a library's saved state: %d %s", rec.Code, rec.Body)
 	}
-	commits := decodeBody[apiv0.GetSavedStatesResponse](t,
+	savedStates := decodeBody[apiv0.GetSavedStatesResponse](t,
 		serve(router, http.MethodGet, path+"/saved-states?"+apiv0.SavedStatesQueryLabel+"="+label.ID.String(), nil))
-	if len(commits.SavedStates) != 1 || commits.SavedStates[0].Number != 1 || len(commits.SavedStates[0].Labels) != 1 {
-		t.Errorf("the library's history of a label: %+v", commits)
+	if len(savedStates.SavedStates) != 1 || savedStates.SavedStates[0].Number != 1 || len(savedStates.SavedStates[0].Labels) != 1 {
+		t.Errorf("the library's history of a label: %+v", savedStates)
 	}
 	if rec := serve(router, http.MethodDelete, labelPath, nil); rec.Code != http.StatusOK {
 		t.Errorf("DELETE a label off a library's saved state: %d, want 200", rec.Code)
 	}
 }
 
-// TestCommitLabels_EventsOnTheServerStream: an assignment is the server's
-// event, naming the Project in ID, the label in label and the Commit's number
-// in commit, so History of every mode and the Labels window see it (task 85_3;
-// ADR 0025).
-func TestCommitLabels_EventsOnTheServerStream(t *testing.T) {
+// TestSavedStateLabels_EventsOnTheServerStream: an assignment is the server's
+// event, naming the Project in ID, the label in label and the saved state's
+// number in saved_state, so History of every mode and the Labels window see it
+// (task 85_3; ADR 0025).
+func TestSavedStateLabels_EventsOnTheServerStream(t *testing.T) {
 	cleanProjectsRest(t)
 	cleanTestLabels(t)
 	if _, err := testDB().ExecContext(context.Background(),
@@ -192,7 +193,7 @@ func TestCommitLabels_EventsOnTheServerStream(t *testing.T) {
 	}
 	if rec := serve(newServicesPublishingTo(func(event.Event) {}).router(), http.MethodPost, mainPath+"/saved-states",
 		apiv0.CreateSavedStateRequest{Version: 1, Title: "First save", Author: "Ada"}); rec.Code != http.StatusCreated {
-		t.Fatalf("POST commit: %d %s", rec.Code, rec.Body)
+		t.Fatalf("POST saved state: %d %s", rec.Code, rec.Body)
 	}
 	ctx, stop := context.WithCancel(context.Background())
 	defer stop()

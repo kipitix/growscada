@@ -9,23 +9,23 @@ import (
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 )
 
-// saveCommitDeploy fixes the Draft as a saved state and makes it the running
-// Deployment: the order a Deploy takes since task 85_4.
-func saveCommitDeploy(t *testing.T, router testRouter, version, commitNumber int) apiv0.DeployResponse {
+// saveSavedStateDeploy fixes the Draft as a saved state and makes it the
+// running Deployment: the order a Deploy takes since task 85_4.
+func saveSavedStateDeploy(t *testing.T, router testRouter, version, savedStateNumber int) apiv0.DeployResponse {
 	t.Helper()
 	rec := serve(router, http.MethodPost, mainPath+"/saved-states",
 		apiv0.CreateSavedStateRequest{Version: version, Title: "Save", Author: "Ada"})
 	if rec.Code != http.StatusCreated {
-		t.Fatalf("POST commit: %d %s", rec.Code, rec.Body)
+		t.Fatalf("POST saved state: %d %s", rec.Code, rec.Body)
 	}
-	rec = serve(router, http.MethodPost, mainPath+"/saved-states/"+strconv.Itoa(commitNumber)+"/deploy", nil)
+	rec = serve(router, http.MethodPost, mainPath+"/saved-states/"+strconv.Itoa(savedStateNumber)+"/deploy", nil)
 	if rec.Code != http.StatusCreated {
-		t.Fatalf("POST commit deploy: %d %s", rec.Code, rec.Body)
+		t.Fatalf("POST saved state deploy: %d %s", rec.Code, rec.Body)
 	}
 	return decodeBody[apiv0.DeployResponse](t, rec)
 }
 
-func TestDeployCommit_DeploymentAndTagStates(t *testing.T) {
+func TestDeploySavedState_DeploymentAndTagStates(t *testing.T) {
 	cleanProjectsRest(t)
 	services := newServices()
 	router := services.router()
@@ -45,7 +45,7 @@ func TestDeployCommit_DeploymentAndTagStates(t *testing.T) {
 	createdTag := decodeBody[apiv0.CreateTagResponse](t, rec)
 	version = services.draftVersion(t)
 
-	deployed := saveCommitDeploy(t, router, version, 1)
+	deployed := saveSavedStateDeploy(t, router, version, 1)
 	if deployed.Number != 1 || deployed.DeployedAt == "" {
 		t.Errorf("the first Deploy: %+v", deployed)
 	}
@@ -128,7 +128,7 @@ func TestDeployments_ListDetailRollback(t *testing.T) {
 		t.Fatalf("POST tag: %d %s", rec.Code, rec.Body)
 	}
 	first := decodeBody[apiv0.CreateTagResponse](t, rec)
-	saveCommitDeploy(t, router, services.draftVersion(t), 1)
+	saveSavedStateDeploy(t, router, services.draftVersion(t), 1)
 
 	rec = serve(router, http.MethodGet, mainPath+"/deployments", nil)
 	list := decodeBody[apiv0.ListDeploymentsResponse](t, rec)
@@ -151,7 +151,7 @@ func TestDeployments_ListDetailRollback(t *testing.T) {
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("POST the second tag: %d %s", rec.Code, rec.Body)
 	}
-	saveCommitDeploy(t, router, services.draftVersion(t), 2)
+	saveSavedStateDeploy(t, router, services.draftVersion(t), 2)
 
 	rec = serve(router, http.MethodGet, mainPath+"/deployments/1", nil)
 	if rec.Code != http.StatusOK {
@@ -210,7 +210,7 @@ func TestDeployments_OfADeletedProject_Are404(t *testing.T) {
 	cleanProjectsRest(t)
 	services := newServices()
 	router := services.router()
-	saveCommitDeploy(t, router, services.draftVersion(t), 1)
+	saveSavedStateDeploy(t, router, services.draftVersion(t), 1)
 	if _, err := testDB().ExecContext(context.Background(),
 		"UPDATE projects SET deleted_at = now() WHERE id = '"+mainProject.String()+"'"); err != nil {
 		t.Fatalf("mark the project deleted: %v", err)
@@ -244,7 +244,7 @@ func TestDiscardAndRevert(t *testing.T) {
 	if rec := serve(router, http.MethodPost, mainPath+"/revert-to-deployed", nil); rec.Code != http.StatusConflict {
 		t.Fatalf("POST revert without a Deployment: %d, want 409", rec.Code)
 	}
-	saveCommitDeploy(t, router, services.draftVersion(t), 1)
+	saveSavedStateDeploy(t, router, services.draftVersion(t), 1)
 
 	rec := serve(router, http.MethodPost, mainPath+"/discard", nil)
 	if rec.Code != http.StatusOK {
