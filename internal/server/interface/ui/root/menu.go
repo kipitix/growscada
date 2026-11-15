@@ -163,45 +163,56 @@ func (r *Root) loadMenuEntities(ctx app.Context) {
 }
 
 // loadMenuLibraries reads the libraries of the menu.
-func (r *Root) loadMenuLibraries(ctx app.Context) {
-	uiutil.Load(r.compoCtx, &r.menuLibraryReloader, r.menuLibrarySource.List,
-		func(ctx app.Context, items []picker.Item) {
-			r.menuLibraries, r.menuLibrariesLoaded = items, true
-			r.loadMenuOrder(ctx, r.menuLibrarySource, func(order picker.Order) {
-				r.menuLibraryOrder = order
-			})
-			ctx.Update()
-		}, r.loadMenuLibraries)
-}
+func (r *Root) loadMenuLibraries(ctx app.Context) { r.menuLibraries.load(ctx, r.loadMenuLibraries) }
 
 // loadMenuProjects reads the projects of the menu: those of the Project mode
 // and, with them, those Operation and History show (task 89).
-func (r *Root) loadMenuProjects(ctx app.Context) {
-	uiutil.Load(r.compoCtx, &r.menuProjectReloader, r.menuProjectSource.List,
-		func(ctx app.Context, items []picker.Item) {
-			r.menuProjects, r.menuProjectsLoaded = items, true
-			r.loadMenuOrder(ctx, r.menuProjectSource, func(order picker.Order) {
-				r.menuProjectOrder = order
-			})
-			ctx.Update()
-		}, r.loadMenuProjects)
+func (r *Root) loadMenuProjects(ctx app.Context) { r.menuProjects.load(ctx, r.loadMenuProjects) }
+
+// menuListOf returns the list a mode's entities live in: the libraries, or the
+// projects of the three modes that show one.
+func (r *Root) menuListOf(mode Mode) *menuList {
+	if mode == ModeLibrary {
+		return &r.menuLibraries
+	}
+	return &r.menuProjects
 }
 
-// loadMenuOrder reads the order the person placed the entities in, so the menu
+// menuList is one list the menu shows: the entities of a mode with the badges
+// of their state, the order the person placed them in (ADR 0024), and the
+// loader that keeps them fresh while the panel is open.
+type menuList struct {
+	source   picker.Source
+	items    []picker.Item
+	order    picker.Order
+	loaded   bool
+	reloader uiutil.Reloader
+}
+
+// load (re)reads the list and, with it, the order it is shown in.
+func (l *menuList) load(ctx app.Context, reload func(app.Context)) {
+	uiutil.Load(ctx, &l.reloader, l.source.List, func(ctx app.Context, items []picker.Item) {
+		l.items, l.loaded = items, true
+		l.loadOrder(ctx)
+		ctx.Update()
+	}, reload)
+}
+
+// loadOrder reads the order the person placed the entities in, so the menu
 // lists them as the selection page does (task 81, ADR 0024). A source without
 // one leaves the list by name; a server without the setting is not an error.
-func (r *Root) loadMenuOrder(ctx app.Context, source picker.Source, keep func(picker.Order)) {
-	orderSource, ok := source.(picker.OrderSource)
+func (l *menuList) loadOrder(ctx app.Context) {
+	orderSource, ok := l.source.(picker.OrderSource)
 	if !ok {
-		keep(picker.Order{})
+		l.order = picker.Order{}
 		return
 	}
-	uiutil.Call(r.compoCtx, orderSource.Order, func(ctx app.Context, order picker.Order) {
-		keep(order)
+	uiutil.Call(ctx, orderSource.Order, func(ctx app.Context, order picker.Order) {
+		l.order = order
 		ctx.Update()
 	}, func(ctx app.Context, err error) {
 		if errors.Is(err, apiclient.ErrNotFound) {
-			keep(picker.Order{})
+			l.order = picker.Order{}
 			ctx.Update()
 			return
 		}
@@ -209,22 +220,12 @@ func (r *Root) loadMenuOrder(ctx app.Context, source picker.Source, keep func(pi
 	})
 }
 
-// menuItems returns the entities of mode as the menu lists them.
-func (r *Root) menuItems(mode Mode) []picker.Item {
-	if mode == ModeLibrary {
-		return picker.Ordered(r.menuLibraries, r.menuLibraryOrder)
-	}
-	return picker.Ordered(r.menuProjects, r.menuProjectOrder)
-}
+// shown returns the entities as the menu lists them.
+func (l *menuList) shown() []picker.Item { return picker.Ordered(l.items, l.order) }
 
-// menuEmpty reports whether a mode of the menu has no entity to offer: either
-// nothing was read yet — the panel says it is loading — or the server has none.
-func (r *Root) menuEmpty(mode Mode) (empty, loaded bool) {
-	if mode == ModeLibrary {
-		return len(r.menuLibraries) == 0, r.menuLibrariesLoaded
-	}
-	return len(r.menuProjects) == 0, r.menuProjectsLoaded
-}
+// empty reports whether the list has no entity to offer: either nothing was
+// read yet — the panel says it is loading — or the server has none.
+func (l *menuList) empty() (empty, loaded bool) { return len(l.items) == 0, l.loaded }
 
 // ── Choosing ─────────────────────────────────────────────────────────────────
 
@@ -245,7 +246,8 @@ func (r *Root) chooseEntity(ctx app.Context, mode Mode, item picker.Item) {
 		return
 	}
 	r.closeMenu()
-	r.openEntityAs(mode, item.ID, item.Name)
+	r.entityName[mode] = item.Name
+	r.openEntity(mode, item.ID)
 	r.SetMode(mode)
 	r.storeMode()
 	if m := r.modeView(mode); m != nil && m.picker != nil {
@@ -298,18 +300,18 @@ func (r *Root) restoreProjects(ctx app.Context) {
 	if !kept {
 		return
 	}
-	uiutil.Call(r.compoCtx, r.client.ListProjects, func(ctx app.Context, list []apiv0.ProjectResponse) {
-		byID := make(map[uuid.UUID]apiv0.ProjectResponse, len(list))
-		for _, project := range list {
-			byID[project.ID] = project
+	uiutil.Call(r.compoCtx, r.menuProjects.source.List, func(ctx app.Context, items []picker.Item) {
+		byID := make(map[uuid.UUID]picker.Item, len(items))
+		for _, item := range items {
+			byID[item.ID] = item
 		}
 		for _, mode := range projectModes {
 			id := r.selected[mode]
 			if id == uuid.Nil {
 				continue
 			}
-			if project, ok := byID[id]; ok {
-				r.entityName[mode] = project.Name
+			if item, ok := byID[id]; ok {
+				r.entityName[mode] = item.Name
 				continue
 			}
 			r.selectProject(mode, uuid.Nil)
@@ -534,14 +536,14 @@ func (r *Root) renderModeRow(mode Mode) app.UI {
 }
 
 // modeEnterable reports whether the menu offers mode at all: the Library and
-// the Project always (their page creates entities), Operation and History only
-// while the server has a project to show — nothing is offered while the list is
-// still being read (task 89).
+// the Project always (their page creates entities), Operation and History while
+// the server has a project to show — the row waits while the list is still
+// being read, and is off once the read finds none (task 89).
 func (r *Root) modeEnterable(mode Mode) bool {
 	if hasPage(mode) {
 		return true
 	}
-	empty, loaded := r.menuEmpty(mode)
+	empty, loaded := r.menuListOf(mode).empty()
 	return !loaded || !empty
 }
 
@@ -553,11 +555,11 @@ func (r *Root) renderMenuEntities(mode Mode) app.UI {
 	if hasPage(mode) {
 		rows = append(rows, r.renderChooseRow(mode))
 	}
-	items := r.menuItems(mode)
-	for _, item := range items {
+	list := r.menuListOf(mode)
+	for _, item := range list.shown() {
 		rows = append(rows, r.renderEntityRow(mode, item))
 	}
-	if empty, loaded := r.menuEmpty(mode); empty {
+	if empty, loaded := list.empty(); empty {
 		rows = append(rows, renderMenuHint(mode, loaded))
 	}
 	return app.Div().
@@ -616,17 +618,7 @@ func (r *Root) renderEntityRow(mode Mode, item picker.Item) app.UI {
 		Style("white-space", "nowrap").
 		Text(item.Name)}
 	if item.State != "" {
-		badgeColor, border := picker.StateBadge(item.StateKind)
-		body = append(body, app.Span().
-			Attr("data-menu-state", item.StateKind).
-			Title(item.State).
-			Style("flex-shrink", "0").
-			Style("padding", "0 6px").
-			Style("border", "1px solid "+border).
-			Style("border-radius", "8px").
-			Style("color", badgeColor).
-			Style("font-size", "10px").
-			Text(item.State))
+		body = append(body, picker.StateChip(item))
 	}
 	if chosen {
 		body = append(body, app.Span().Style("flex-shrink", "0").Body(uiutil.IconCheck()))

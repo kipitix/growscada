@@ -229,7 +229,7 @@ func renderGripSpace() app.UI {
 // renderStateDot is the dot a row carries for the entity's state: the state
 // in words is in the details pane, so the list stays names (task 82).
 func (p *Picker) renderStateDot(item Item) app.UI {
-	color, _ := stateBadge(item.StateKind)
+	color, _ := StateBadge(item.StateKind)
 	return app.Span().
 		Attr("data-picker-dot", item.StateKind).
 		Attr("title", item.State).
@@ -429,18 +429,9 @@ func (p *Picker) renderStateLine(item Item) app.UI {
 	if item.State == "" {
 		return app.Div()
 	}
-	color, border := stateBadge(item.StateKind)
 	return app.Div().
 		Style("margin-top", "12px").
-		Body(app.Span().
-			Attr("data-picker-state", item.StateKind).
-			Style("font-size", "10px").
-			Style("padding", "1px 6px").
-			Style("border-radius", "8px").
-			Style("white-space", "nowrap").
-			Style("color", color).
-			Style("border", "1px solid "+border).
-			Text(item.State))
+		Body(StateChip(item))
 }
 
 // renderErrorLine is the server's refusal of the field being edited, or of the
@@ -640,7 +631,9 @@ func (p *Picker) renderCreate() app.UI {
 
 // stateBadge is the text colour and the border colour of a state's badge: the
 // one place its palette lives.
-func stateBadge(kind string) (color, border string) {
+// StateBadge is the colour and the border of a state badge, by the kind of the
+// state.
+func StateBadge(kind string) (color, border string) {
 	switch kind {
 	case "unsaved":
 		return "var(--toast-warn-title)", "var(--toast-warn-border)"
@@ -649,9 +642,21 @@ func stateBadge(kind string) (color, border string) {
 	}
 }
 
-// StateBadge is the colour and the border of a state badge, by the kind of the
-// state: the page's dot and the main menu's badge read the same (task 89).
-func StateBadge(kind string) (color, border string) { return stateBadge(kind) }
+// StateChip is the badge of a state as a row of the page and the main menu show
+// it: the state in words, coloured by its kind (task 89).
+func StateChip(item Item) app.UI {
+	color, border := StateBadge(item.StateKind)
+	return app.Span().
+		Attr("data-picker-state", item.StateKind).
+		Title(item.State).
+		Style("font-size", "10px").
+		Style("padding", "1px 6px").
+		Style("border-radius", "8px").
+		Style("white-space", "nowrap").
+		Style("color", color).
+		Style("border", "1px solid "+border).
+		Text(item.State)
+}
 
 // rowsID and rowID name the list and its rows for the browser: the list is the
 // active descendant owner of the keyboard, and a drag reads the row under the

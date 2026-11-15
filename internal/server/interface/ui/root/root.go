@@ -98,22 +98,12 @@ type Root struct {
 	// worker fetches the new app (see reloadApp).
 	reloadOnAppUpdate bool
 	// The main menu (task 89): menuOpen is whether it is shown, menuExpanded
-	// the mode whose entities it lists. menuProjects and menuLibraries are the
-	// entities as its last reads made them, with the badges of their state,
-	// and the two orders are the ones it lists them in (ADR 0024). The loaded
-	// flags tell "nothing read yet" from "the server has none".
-	menuOpen            bool
-	menuExpanded        Mode
-	menuProjects        []picker.Item
-	menuLibraries       []picker.Item
-	menuProjectOrder    picker.Order
-	menuLibraryOrder    picker.Order
-	menuProjectsLoaded  bool
-	menuLibrariesLoaded bool
-	menuProjectReloader uiutil.Reloader
-	menuLibraryReloader uiutil.Reloader
-	menuProjectSource   picker.Source
-	menuLibrarySource   picker.Source
+	// the mode whose entities it lists; the two lists hold what it shows and
+	// keep it fresh.
+	menuOpen      bool
+	menuExpanded  Mode
+	menuLibraries menuList
+	menuProjects  menuList
 	// onKeyDown closes the menu on Esc, wherever the focus is (task 89).
 	onKeyDown app.Func
 }
@@ -152,8 +142,8 @@ func NewRoot(anAPIServerURL string) *Root {
 	}
 	// The main menu reads the entities of both selection pages itself, so it
 	// does not depend on a mode having been opened (task 89).
-	r.menuLibrarySource = picker.NewLibrarySource(r.client)
-	r.menuProjectSource = picker.NewProjectSource(r.client)
+	r.menuLibraries.source = picker.NewLibrarySource(r.client)
+	r.menuProjects.source = picker.NewProjectSource(r.client)
 	r.opened = map[Mode]bool{}
 	r.selected = map[Mode]uuid.UUID{}
 	r.entityName = map[Mode]string{}

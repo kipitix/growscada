@@ -226,11 +226,11 @@ func TestNavigation_NamesTheModeAndTheEntity(t *testing.T) {
 func TestMenu_ListsEntitiesOfTheExpandedModeOnly(t *testing.T) {
 	r := NewRoot("http://127.0.0.1:0")
 	r.menuOpen, r.menuExpanded = true, ModeLibrary
-	r.menuLibraries = []picker.Item{
+	r.menuLibraries.items = []picker.Item{
 		{ID: uuid.New(), Name: "Zulu"},
 		{ID: uuid.New(), Name: "Alpha"},
 	}
-	r.menuLibrariesLoaded = true
+	r.menuLibraries.loaded = true
 
 	html := app.HTMLString(r.renderMenuPanel())
 	for _, want := range []string{`id="gs-main-menu"`, `data-menu-mode="library"`, `data-menu-mode="project"`,
@@ -250,12 +250,12 @@ func TestMenu_ListsEntitiesOfTheExpandedModeOnly(t *testing.T) {
 
 	// Read and empty: the hint says the server has none, not that it is
 	// loading. Not read yet: it says it is loading.
-	r.menuLibraries, r.menuLibrariesLoaded, r.menuExpanded = nil, true, ModeProject
-	r.menuProjectsLoaded = true
+	r.menuLibraries.items, r.menuLibraries.loaded, r.menuExpanded = nil, true, ModeProject
+	r.menuProjects.loaded = true
 	if html := app.HTMLString(r.renderMenuPanel()); !strings.Contains(html, "No projects yet") {
 		t.Errorf("an empty list does not say so: %s", html)
 	}
-	r.menuProjectsLoaded = false
+	r.menuProjects.loaded = false
 	if html := app.HTMLString(r.renderMenuPanel()); !strings.Contains(html, "Loading projects…") {
 		t.Errorf("a list being read does not say so: %s", html)
 	}
@@ -267,7 +267,7 @@ func TestMenu_ListsEntitiesOfTheExpandedModeOnly(t *testing.T) {
 func TestMenu_OperationWithoutProjectsIsDisabled(t *testing.T) {
 	r := NewRoot("http://127.0.0.1:0")
 	r.menuOpen, r.menuExpanded = true, ModeProject
-	r.menuProjectsLoaded = true // the server has none
+	r.menuProjects.loaded = true // the server has none
 
 	for _, mode := range []Mode{ModeOperation, ModeHistory} {
 		if r.modeEnterable(mode) {
@@ -289,13 +289,13 @@ func TestMenu_OperationWithoutProjectsIsDisabled(t *testing.T) {
 func TestMenu_LibrariesKeepThePersonsOrder(t *testing.T) {
 	r := NewRoot("http://127.0.0.1:0")
 	first, second := uuid.New(), uuid.New()
-	r.menuLibraries = []picker.Item{
+	r.menuLibraries.items = []picker.Item{
 		{ID: first, Name: "Alpha"},
 		{ID: second, Name: "Zulu"},
 	}
-	r.menuLibraryOrder = picker.Order{IDs: []uuid.UUID{second}}
+	r.menuLibraries.order = picker.Order{IDs: []uuid.UUID{second}}
 
-	items := r.menuItems(ModeLibrary)
+	items := r.menuListOf(ModeLibrary).shown()
 	if len(items) != 2 || items[0].ID != second || items[1].ID != first {
 		t.Errorf("the libraries come as %v, want %v first", items, second)
 	}
