@@ -1031,6 +1031,11 @@ func TestSaveDeploy_Project(t *testing.T) {
 		t.Fatalf("saved states after the save: %q, %v", out, err)
 	}
 
+	if _, _, err := execGrowctl(t, srv, "", "deploy", "Main"); exitCode(err) != 2 ||
+		!strings.Contains(err.Error(), "--saved-state") {
+		t.Errorf("deploy without the flag: %v; want a usage error naming --saved-state", err)
+	}
+
 	out, _, err = execGrowctl(t, srv, "", "deploy", "Main", "--saved-state", "1")
 	if err != nil || out != "project/Main deployed 1\n" {
 		t.Fatalf("deploy: %q, %v", out, err)

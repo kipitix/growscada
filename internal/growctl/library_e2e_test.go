@@ -57,10 +57,11 @@ spec:
 }
 
 // TestLibrary_ApplyImportDiscardDelete walks a library through growctl: apply
-// creates it with its Draft, save fixes saved state 1, apply imports it in Main, an
-// edited WidgetType is updated and saved again, the import switched to saved
-// state 2, prune removes a WidgetType left out, discard resets the Draft,
-// delete removes the WidgetType and, once its import is gone, the library.
+// creates it with its Draft, save fixes saved state 1, apply imports it in
+// Main, an edited WidgetType is updated and saved again, the import switched
+// to saved state 2, prune removes a WidgetType left out, discard resets the
+// Draft, delete removes the WidgetType and, once its import is gone, the
+// library.
 func TestLibrary_ApplyImportDiscardDelete(t *testing.T) {
 	srv, _ := servertest.StartAPI(t, postgres.DB(t))
 
@@ -121,6 +122,9 @@ func TestLibrary_ApplyImportDiscardDelete(t *testing.T) {
 	out, _, err = execGrowctl(t, srv, "", "get", "libraries")
 	if err != nil || !strings.Contains(out, "Gauges") {
 		t.Errorf("get libraries: %q, %v", out, err)
+	}
+	if !strings.Contains(out, "SAVED STATE") {
+		t.Errorf("get libraries does not head its saved state column: %q", out)
 	}
 
 	// The library is pinned: delete removes its WidgetType, the library
