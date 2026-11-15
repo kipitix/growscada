@@ -380,7 +380,10 @@ func (r *Root) renderMenuBackdrop() app.UI {
 		Style("position", "fixed").
 		Style("inset", "0").
 		Style("z-index", "25").
-		OnClick(func(ctx app.Context, e app.Event) { r.closeMenu() })
+		OnClick(func(ctx app.Context, e app.Event) {
+			r.closeMenu()
+			r.focusMenuButton()
+		})
 }
 
 // navigationText is what the line beside the burger says: the mode and the

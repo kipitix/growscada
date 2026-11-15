@@ -286,6 +286,11 @@ func (r *Root) listenMenuKeys() {
 		if args[0].Get("key").String() != "Escape" {
 			return nil
 		}
+		// The menu takes the key: the mode under it keeps its selection, and
+		// Esc closes the menu alone (task 89). Root listens from its own mount
+		// on, before any mode's listener, so stopping here stops them too.
+		args[0].Call("preventDefault")
+		args[0].Call("stopImmediatePropagation")
 		r.closeMenu()
 		r.focusMenuButton()
 		return nil
