@@ -55,7 +55,7 @@ func newServer(t *testing.T) (string, *testAPI) {
 	return srv.URL, newTestAPI(apiclient.New(srv.URL, srv.Client()))
 }
 
-// cleanHistory removes the Deployments, Commits and DraftChanges of Main: a test
+// cleanHistory removes the Deployments, saved states and DraftChanges of Main: a test
 // that counts or numbers them starts from none.
 func cleanHistory(t *testing.T) {
 	t.Helper()
@@ -171,11 +171,11 @@ func createWidgetType(t *testing.T, api *testAPI, name string, ports ...apiv0.In
 	if err != nil {
 		t.Fatalf("create widget type: %v", err)
 	}
-	commit, err := api.Library(lib.ID).SaveSavedState(ctx, apiv0.CreateSavedStateRequest{Version: created.Version, Title: "Save", Author: "Ada"})
+	savedState, err := api.Library(lib.ID).SaveSavedState(ctx, apiv0.CreateSavedStateRequest{Version: created.Version, Title: "Save", Author: "Ada"})
 	if err != nil {
-		t.Fatalf("save commit: %v", err)
+		t.Fatalf("save saved state: %v", err)
 	}
-	if _, err := api.ImportLibrary(ctx, lib.ID, apiv0.PutLibraryImportRequest{SavedState: commit.Number}); err != nil {
+	if _, err := api.ImportLibrary(ctx, lib.ID, apiv0.PutLibraryImportRequest{SavedState: savedState.Number}); err != nil {
 		t.Fatalf("import: %v", err)
 	}
 	return created.ID
@@ -758,7 +758,7 @@ func TestNoServer_ShowsNetworkErrors(t *testing.T) {
 	f := mount(t, url, nil)
 
 	toasts := f.e.TakeToasts()
-	if len(toasts) != 8 { // libraries, pins, widget types, scenes, tags, deployment state, the Draft, the commits
+	if len(toasts) != 8 { // libraries, pins, widget types, scenes, tags, deployment state, the Draft, the savedStates
 		t.Fatalf("want a toast per list, got %+v", toasts)
 	}
 	for _, got := range toasts {

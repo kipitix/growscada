@@ -65,7 +65,7 @@ func TestLabels_CRUD(t *testing.T) {
 }
 
 // TestLabelAssign_ProjectAndLibrary drives the assignment commands against the
-// real API (task 85_3; ADR 0025): a mark placed by name, shown by `commits`,
+// real API (task 85_3; ADR 0025): a mark placed by name, shown by `saved-states`,
 // and taken off again, for a Project's and a Library's saved state.
 func TestLabelAssign_ProjectAndLibrary(t *testing.T) {
 	srv, _ := servertest.StartAPI(t, postgres.DB(t))
@@ -81,29 +81,29 @@ func TestLabelAssign_ProjectAndLibrary(t *testing.T) {
 	}
 
 	// A name is enough to name the label, whatever its case.
-	out, _, err := execGrowctl(t, srv, "", "label", "assign", "Main", "--commit", "1", "--label", strings.ToUpper(name))
+	out, _, err := execGrowctl(t, srv, "", "label", "assign", "Main", "--saved-state", "1", "--label", strings.ToUpper(name))
 	if err != nil {
 		t.Fatalf("label assign: %v", err)
 	}
 	assertOutput(t, out, "project/Main saved state 1: assigned "+name, "labels: "+name+" (#22c55e)")
-	out, _, err = execGrowctl(t, srv, "", "commits", "Main")
+	out, _, err = execGrowctl(t, srv, "", "saved-states", "Main")
 	if err != nil || !strings.Contains(out, name) || !strings.Contains(out, "#22c55e") {
-		t.Fatalf("commits after the assignment: %q, %v", out, err)
+		t.Fatalf("saved states after the assignment: %q, %v", out, err)
 	}
 
-	out, _, err = execGrowctl(t, srv, "", "label", "unassign", "Main", "--commit", "1", "--label", name)
+	out, _, err = execGrowctl(t, srv, "", "label", "unassign", "Main", "--saved-state", "1", "--label", name)
 	if err != nil {
 		t.Fatalf("label unassign: %v", err)
 	}
 	assertOutput(t, out, "project/Main saved state 1: unassigned "+name)
-	if out, _, err := execGrowctl(t, srv, "", "commits", "Main"); err != nil || strings.Contains(out, name) {
-		t.Fatalf("commits after the unassignment: %q, %v", out, err)
+	if out, _, err := execGrowctl(t, srv, "", "saved-states", "Main"); err != nil || strings.Contains(out, name) {
+		t.Fatalf("saved states after the unassignment: %q, %v", out, err)
 	}
 	// The commands refuse a missing saved state and a missing label.
-	if _, _, err := execGrowctl(t, srv, "", "label", "assign", "Main", "--commit", "9", "--label", name); err == nil {
+	if _, _, err := execGrowctl(t, srv, "", "label", "assign", "Main", "--saved-state", "9", "--label", name); err == nil {
 		t.Errorf("a mark of a missing saved state succeeded")
 	}
-	if _, _, err := execGrowctl(t, srv, "", "label", "assign", "Main", "--commit", "1", "--label", "no-such-label"); err == nil {
+	if _, _, err := execGrowctl(t, srv, "", "label", "assign", "Main", "--saved-state", "1", "--label", "no-such-label"); err == nil {
 		t.Errorf("a mark of a missing label succeeded")
 	}
 
@@ -132,16 +132,16 @@ func TestLabelAssign_ProjectAndLibrary(t *testing.T) {
 		t.Fatalf("SaveSavedState: %v", err)
 	}
 
-	out, _, err = execGrowctl(t, srv, "", "label", "assign", libraryName, "--commit", "1", "--label", name, "--library")
+	out, _, err = execGrowctl(t, srv, "", "label", "assign", libraryName, "--saved-state", "1", "--label", name, "--library")
 	if err != nil {
 		t.Fatalf("library label assign: %v", err)
 	}
 	assertOutput(t, out, "library/"+libraryName+" saved state 1: assigned "+name, "labels: "+name+" (#22c55e)")
-	out, _, err = execGrowctl(t, srv, "", "commits", libraryName, "--library")
+	out, _, err = execGrowctl(t, srv, "", "saved-states", libraryName, "--library")
 	if err != nil || !strings.Contains(out, name) {
-		t.Fatalf("library commits after the assignment: %q, %v", out, err)
+		t.Fatalf("library saved states after the assignment: %q, %v", out, err)
 	}
-	out, _, err = execGrowctl(t, srv, "", "label", "unassign", libraryName, "--commit", "1", "--label", name, "--library")
+	out, _, err = execGrowctl(t, srv, "", "label", "unassign", libraryName, "--saved-state", "1", "--label", name, "--library")
 	if err != nil {
 		t.Fatalf("library label unassign: %v", err)
 	}

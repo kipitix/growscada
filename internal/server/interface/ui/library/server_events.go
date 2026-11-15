@@ -35,7 +35,7 @@ func (l *Library) handleServerEvents(ctx app.Context) {
 			l.loadDraftChanges(ctx)
 			l.loadLibraries(ctx)
 			l.loadList(ctx)
-			l.loadCommits(ctx)
+			l.loadSavedStates(ctx)
 			return
 		}
 		mine := l.eventOfSelectedLibrary(ev)
@@ -57,7 +57,7 @@ func (l *Library) handleServerEvents(ctx app.Context) {
 			l.loadList(ctx)
 		}
 		if targets.SavedStates && mine {
-			l.loadCommits(ctx)
+			l.loadSavedStates(ctx)
 			l.loadUnsavedChanges(ctx) // a Save makes the Draft its saved state's content
 		}
 		if eventlog.IsLabelEvent(ev.Type) {
@@ -66,7 +66,7 @@ func (l *Library) handleServerEvents(ctx app.Context) {
 			// library's saved state it marks (task 85_3).
 			l.loadHistoryLabels(ctx)
 			if !mine {
-				l.loadCommits(ctx)
+				l.loadSavedStates(ctx)
 			}
 		}
 	})

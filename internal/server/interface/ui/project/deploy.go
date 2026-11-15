@@ -133,7 +133,7 @@ func (p *Project) loadDeploy(ctx app.Context) {
 // filter offers: the window is the only place a Deploy is chosen from.
 func (p *Project) openDeployDialog(ctx app.Context) {
 	p.deployDialog = true
-	p.loadDeployCommits(ctx)
+	p.loadDeploySavedStates(ctx)
 	p.loadDeploy(ctx)
 	p.loadHistoryLabels(ctx)
 	ctx.Update()
@@ -147,15 +147,15 @@ type deployListKey struct {
 	label   uuid.UUID
 }
 
-// loadDeployCommits (re)loads the saved states the window lists: every one, or
+// loadDeploySavedStates (re)loads the saved states the window lists: every one, or
 // the ones the chosen label marks. The list is the Project's, so a 404 is the
 // Project's absence and goes to the switcher like the history's (task 85_5).
-func (p *Project) loadDeployCommits(ctx app.Context) {
+func (p *Project) loadDeploySavedStates(ctx app.Context) {
 	if p.content == nil {
-		p.deployCommits, p.deployCommitsLoaded = nil, false
+		p.deploySavedStates, p.deploySavedStatesLoaded = nil, false
 		return
 	}
-	uiutil.LoadForGone(ctx, &p.deployCommitsReloader,
+	uiutil.LoadForGone(ctx, &p.deploySavedStatesReloader,
 		func() deployListKey { return deployListKey{content: p.content, label: p.deployLabel} },
 		func(c context.Context, k deployListKey) ([]apiv0.SavedStateResponse, error) {
 			if k.content == nil {
@@ -166,14 +166,14 @@ func (p *Project) loadDeployCommits(ctx app.Context) {
 			}
 			return k.content.SavedStatesByLabel(c, k.label)
 		},
-		func(ctx app.Context, _ deployListKey, commits []apiv0.SavedStateResponse) {
-			p.deployCommits, p.deployCommitsLoaded = commits, true
+		func(ctx app.Context, _ deployListKey, savedStates []apiv0.SavedStateResponse) {
+			p.deploySavedStates, p.deploySavedStatesLoaded = savedStates, true
 		},
 		func(ctx app.Context, k deployListKey) {
 			if k.content != nil {
 				ctx.NewActionWithValue(uiutil.ActionProjectGone, k.content.ID())
 			}
-		}, p.loadDeployCommits)
+		}, p.loadDeploySavedStates)
 }
 
 // setDeployLabel narrows the window to the saved states the label marks; the
@@ -183,7 +183,7 @@ func (p *Project) setDeployLabel(ctx app.Context, labelID uuid.UUID) {
 		return
 	}
 	p.deployLabel = labelID
-	p.loadDeployCommits(ctx)
+	p.loadDeploySavedStates(ctx)
 	ctx.Update()
 }
 
@@ -200,7 +200,7 @@ func (p *Project) resetDeployLabelIfGone(ctx app.Context) {
 	}
 	p.deployLabel = uuid.Nil
 	if p.deployDialog {
-		p.loadDeployCommits(ctx)
+		p.loadDeploySavedStates(ctx)
 	}
 }
 
@@ -242,7 +242,7 @@ func (p *Project) doDeploySavedState(ctx app.Context, number int) {
 			Title:  fmt.Sprintf("Saved state %d deployed", number),
 			Detail: fmt.Sprintf("Deployment %d is running", deployed.Number),
 		}})
-		p.loadDeployCommits(ctx)
+		p.loadDeploySavedStates(ctx)
 		p.loadDeploy(ctx)
 		if p.deploymentsDialog {
 			p.loadDeployments(ctx)
@@ -260,7 +260,7 @@ func (p *Project) doDeploySavedState(ctx app.Context, number int) {
 		} else {
 			uiutil.ShowError(ctx, err)
 		}
-		p.loadDeployCommits(ctx)
+		p.loadDeploySavedStates(ctx)
 		p.loadDeploy(ctx)
 		ctx.Update()
 	})
@@ -275,8 +275,8 @@ func nothingToDeploy(err error) bool {
 		strings.Contains(statusErr.Problem.Detail, "Nothing to deploy")
 }
 
-// downloadCommitProjectFile downloads the ProjectFile a saved state fixed.
-func (p *Project) downloadCommitProjectFile(ctx app.Context, number int) {
+// downloadSavedStateProjectFile downloads the ProjectFile a saved state fixed.
+func (p *Project) downloadSavedStateProjectFile(ctx app.Context, number int) {
 	callContent(p, func(c context.Context, pc *apiclient.ProjectClient) (apiclient.ProjectFileDownload, error) {
 		return pc.SavedStateProjectFile(c, number)
 	}, func(ctx app.Context, download apiclient.ProjectFileDownload) {
@@ -309,17 +309,17 @@ func (p *Project) renderDeployDialog() app.UI {
 				p.deployment.Number)))
 	}
 	switch {
-	case !p.deployCommitsLoaded:
+	case !p.deploySavedStatesLoaded:
 		rows = append(rows, app.P().Style("margin", "0 0 6px").Style("color", "var(--text-muted)").
 			Text("Loading saved states…"))
-	case len(p.deployCommits) == 0 && p.deployLabel != uuid.Nil:
+	case len(p.deploySavedStates) == 0 && p.deployLabel != uuid.Nil:
 		rows = append(rows, app.P().Style("margin", "0 0 6px").
 			Text("No saved state carries this label."))
-	case len(p.deployCommits) == 0:
+	case len(p.deploySavedStates) == 0:
 		rows = append(rows, app.P().Style("margin", "0 0 6px").
 			Text("Nothing saved yet. Save the Draft first: a saved state is what gets deployed."))
 	default:
-		for _, saved := range p.deployCommits {
+		for _, saved := range p.deploySavedStates {
 			rows = append(rows, p.renderDeployRow(saved))
 		}
 	}
@@ -463,8 +463,8 @@ func (p *Project) renderDeployRow(saved apiv0.SavedStateResponse) app.UI {
 	}
 	controls = append(controls, rowButton("Project file", "", true,
 		"Download this saved state as a project file",
-		func(ctx app.Context) { p.downloadCommitProjectFile(ctx, saved.Number) },
-		app.EventScope("download-commit/"+number)).
+		func(ctx app.Context) { p.downloadSavedStateProjectFile(ctx, saved.Number) },
+		app.EventScope("download-saved-state/"+number)).
 		Attr("data-saved-state-download", number))
 
 	return app.Div().
@@ -546,7 +546,7 @@ func (p *Project) reloadDraftContent(ctx app.Context) {
 	p.loadWidgetTypes(ctx)
 	p.loadDraftState(ctx) // its Version and whether the new content is a saved state's
 	p.loadDraftChanges(ctx)
-	p.loadCommits(ctx)
+	p.loadSavedStates(ctx)
 	p.loadDeploy(ctx)
 }
 
@@ -590,7 +590,7 @@ func (p *Project) renderDeployBar() app.UI {
 		p.renderBackButton(),
 		uiutil.BarDivider(),
 	}
-	body = append(body, p.renderCommitBar()...)
+	body = append(body, p.renderSavedStateBar()...)
 	body = append(body,
 		uiutil.BarDivider(),
 		p.renderDraftChangesBar(),
@@ -662,7 +662,7 @@ func (p *Project) renderBackButton() app.UI {
 // deployButtonTitle is the Deploy button's hover text: a Draft with nothing
 // saved says what to do first (task 72_6; task 85_5).
 func (p *Project) deployButtonTitle() string {
-	if p.commitsLoaded && len(p.commits) == 0 {
+	if p.savedStatesLoaded && len(p.savedStates) == 0 {
 		return "Save the Draft first: only a saved state is deployed"
 	}
 	return "Choose a saved state to deploy"

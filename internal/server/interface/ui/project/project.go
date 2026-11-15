@@ -94,17 +94,17 @@ type Project struct {
 	draftVersions uiutil.Versions
 
 	// ── saved states (task 72_2; ADR 0021) ─────────────────────────────────
-	// commits is the history of the Draft, newest first; commitsLoaded is
+	// savedStates is the history of the Draft, newest first; savedStatesLoaded is
 	// false until its first answer. saveDialog is true while the Save dialog
-	// is open, saveTitle and saveAuthor its fields; savingCommit marks the
+	// is open, saveTitle and saveAuthor its fields; savingSavedState marks the
 	// request in flight.
-	commits         []apiv0.SavedStateResponse
-	commitsLoaded   bool
-	commitsReloader uiutil.Reloader
-	saveDialog      bool
-	savingCommit    bool
-	saveTitle       string
-	saveAuthor      string
+	savedStates         []apiv0.SavedStateResponse
+	savedStatesLoaded   bool
+	savedStatesReloader uiutil.Reloader
+	saveDialog          bool
+	savingSavedState    bool
+	saveTitle           string
+	saveAuthor          string
 	// draftUnsaved is the unsaved-changes flag of the project's Draft, as the
 	// server answers it: its Version is above its Clean Version (ADR 0016,
 	// amendment 2026-11-10; task 74). The editor draws it and never derives it.
@@ -145,30 +145,30 @@ type Project struct {
 
 	// ── Import libraries (task 85_6) ───────────────────────────────────────
 	// importDialog is true while the window is shown; importLibraryID is the
-	// library whose saved states it lists (uuid.Nil: none) as importCommits,
+	// library whose saved states it lists (uuid.Nil: none) as importSavedStates,
 	// newest first, narrowed by the label importLabel (uuid.Nil: all) —
-	// importCommitsLoaded is false until its first answer.
-	importDialog          bool
-	importLibraryID       uuid.UUID
-	importCommits         []apiv0.SavedStateResponse
-	importCommitsLoaded   bool
-	importCommitsReloader uiutil.Reloader
-	importLabel           uuid.UUID
+	// importSavedStatesLoaded is false until its first answer.
+	importDialog              bool
+	importLibraryID           uuid.UUID
+	importSavedStates         []apiv0.SavedStateResponse
+	importSavedStatesLoaded   bool
+	importSavedStatesReloader uiutil.Reloader
+	importLabel               uuid.UUID
 	// librariesLoaded is false until the server's libraries were read once:
 	// the Import window says nothing of their list before it.
 	librariesLoaded bool
 
 	// ── Deploy (task 85_5; ADR 0021, ADR 0025) ─────────────────────────────
-	// deployDialog is true while the window is shown; deployCommits is the
+	// deployDialog is true while the window is shown; deploySavedStates is the
 	// saved states it lists, newest first — all of them, or the ones the
-	// label deployLabel marks (uuid.Nil: all labels) — and deployCommitsLoaded
+	// label deployLabel marks (uuid.Nil: all labels) — and deploySavedStatesLoaded
 	// is false until its first answer. A Deploy makes a saved state the running
 	// Deployment (task 85_4).
-	deployDialog          bool
-	deployCommits         []apiv0.SavedStateResponse
-	deployCommitsLoaded   bool
-	deployCommitsReloader uiutil.Reloader
-	deployLabel           uuid.UUID
+	deployDialog              bool
+	deploySavedStates         []apiv0.SavedStateResponse
+	deploySavedStatesLoaded   bool
+	deploySavedStatesReloader uiutil.Reloader
+	deployLabel               uuid.UUID
 
 	// ── DraftChange stack (ADR 0017) ────────────────────────────────────────
 	// changes is the state of the Draft's undo/redo stack, read on mount, on a
@@ -368,7 +368,7 @@ func (p *Project) OnMount(ctx app.Context) {
 	p.loadDeploy(ctx)
 	p.loadDraftState(ctx)
 	p.loadDraftChanges(ctx)
-	p.loadCommits(ctx)
+	p.loadSavedStates(ctx)
 
 	p.listenShortcuts()
 	p.handleServerEvents(ctx)
@@ -427,14 +427,14 @@ func (p *Project) SetProject(id uuid.UUID) {
 	p.projectFileIssues, p.projectFileDetail = nil, ""
 	p.changes, p.changesLoaded = apiv0.DraftChangesResponse{}, false
 	p.undoing, p.redoing = false, false
-	p.commits, p.commitsLoaded = nil, false
-	p.saveDialog, p.savingCommit = false, false
+	p.savedStates, p.savedStatesLoaded = nil, false
+	p.saveDialog, p.savingSavedState = false, false
 	p.history.Reset()
 	p.draftUnsaved, p.draftStateLoaded = false, false
 	p.contentReplacements, p.appliedReplacements = 0, 0
-	p.deployCommits, p.deployCommitsLoaded, p.deployLabel = nil, false, uuid.Nil
+	p.deploySavedStates, p.deploySavedStatesLoaded, p.deployLabel = nil, false, uuid.Nil
 	p.importDialog, p.importLibraryID, p.importLabel = false, uuid.Nil, uuid.Nil
-	p.importCommits, p.importCommitsLoaded = nil, false
+	p.importSavedStates, p.importSavedStatesLoaded = nil, false
 	p.deployDialog = false
 	p.draftVersions.Forget()
 	clear(p.staleScenes)

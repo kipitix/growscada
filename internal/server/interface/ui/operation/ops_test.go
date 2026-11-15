@@ -40,8 +40,8 @@ func cleanMain(t *testing.T) {
 	}
 }
 
-// deployDraft saves the Draft as a Commit and deploys that saved state: a
-// Deploy takes a Commit since task 85_4.
+// deployDraft saves the Draft as a saved state and deploys that saved state: a
+// Deploy takes a saved state since task 85_4.
 func deployDraft(t *testing.T, project *apiclient.ProjectClient) apiv0.DeployResponse {
 	t.Helper()
 	ctx := context.Background()
@@ -49,11 +49,11 @@ func deployDraft(t *testing.T, project *apiclient.ProjectClient) apiv0.DeployRes
 	if err != nil {
 		t.Fatalf("draft state: %v", err)
 	}
-	commit, err := project.SaveSavedState(ctx, apiv0.CreateSavedStateRequest{Version: state.Version, Title: "Save", Author: "Ada"})
+	savedState, err := project.SaveSavedState(ctx, apiv0.CreateSavedStateRequest{Version: state.Version, Title: "Save", Author: "Ada"})
 	if err != nil {
-		t.Fatalf("save commit: %v", err)
+		t.Fatalf("save saved state: %v", err)
 	}
-	deployed, err := project.DeploySavedState(ctx, commit.Number)
+	deployed, err := project.DeploySavedState(ctx, savedState.Number)
 	if err != nil {
 		t.Fatalf("deploy saved state: %v", err)
 	}

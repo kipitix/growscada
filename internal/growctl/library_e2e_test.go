@@ -57,7 +57,7 @@ spec:
 }
 
 // TestLibrary_ApplyImportDiscardDelete walks a library through growctl: apply
-// creates it with its Draft, save fixes Commit 1, apply imports it in Main, an
+// creates it with its Draft, save fixes saved state 1, apply imports it in Main, an
 // edited WidgetType is updated and saved again, the import switched to saved
 // state 2, prune removes a WidgetType left out, discard resets the Draft,
 // delete removes the WidgetType and, once its import is gone, the library.
@@ -94,9 +94,9 @@ func TestLibrary_ApplyImportDiscardDelete(t *testing.T) {
 		out != "library/Gauges saved state 2\n" {
 		t.Fatalf("save 2: %q, %v", out, err)
 	}
-	out, _, err = execGrowctl(t, srv, "", "commits", "Gauges", "--library")
+	out, _, err = execGrowctl(t, srv, "", "saved-states", "Gauges", "--library")
 	if err != nil || !strings.Contains(out, "Wider") {
-		t.Fatalf("commits: %q, %v", out, err)
+		t.Fatalf("saved states: %q, %v", out, err)
 	}
 	if out, err = runGrowctl(t, srv, edited+mainImports("2"), "apply"); err != nil || !strings.Contains(out, "project/Main import library/Gauges saved state 2 switched") {
 		t.Fatalf("switch the pin: %q, %v", out, err)

@@ -75,9 +75,9 @@ func NewRootCommand() *cobra.Command {
 			"manifests: apply and diff bring the Draft to the manifests, delete removes it.\n" +
 			"apply edits the Draft and nothing more; to make the result run, follow the\n" +
 			"Save → Deploy order:\n\n" +
-			"  growctl apply -f manifests/          # edit the Draft\n" +
+			"  growctl apply -f manifests/                 # edit the Draft\n" +
 			"  growctl save Main --title 'Before the demo'\n" +
-			"  growctl deploy Main --commit 1       # the Project's running Deployment\n\n" +
+			"  growctl deploy Main --saved-state 1         # the Project's running Deployment\n\n" +
 			"A Project imports a saved state of a Library, so the Library's own path is\n" +
 			"apply → save, then a saved state number in the Project's spec.libraryImports. The\n" +
 			"author of a Save is --author, else GrowSCADA_AUTHOR, else the\n" +
@@ -106,7 +106,7 @@ func NewRootCommand() *cobra.Command {
 		newGetCommand(s),
 		newSaveCommand(s),
 		newDeployCommand(s),
-		newCommitsCommand(s),
+		newSavedStatesCommand(s),
 		newLabelsCommand(s),
 		newLabelCommand(s),
 		newDiscardCommand(s),

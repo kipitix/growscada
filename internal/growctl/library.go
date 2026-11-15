@@ -560,7 +560,7 @@ func newGetLibrariesCommand(s *settings) *cobra.Command {
 				return nil
 			}
 			w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
-			fmt.Fprintln(w, "NAME\tCOMMIT\tUNSAVED")
+			fmt.Fprintln(w, "NAME\tSAVED STATE\tUNSAVED")
 			for _, l := range libraries {
 				fmt.Fprintf(w, "%s\t%d\t%t\n", l.Name, l.LatestSavedState, l.HasUnsavedChanges)
 			}

@@ -22,7 +22,7 @@ func TestSavedStateLabels_AssignAndUnassign(t *testing.T) {
 	f.run()
 	f.p.saveAuthor = "Ada"
 	f.p.saveTitle = "First save"
-	f.p.saveCommit(f.p.compoCtx)
+	f.p.saveSavedState(f.p.compoCtx)
 	f.run()
 	f.e.TakeToasts() // the Save's own confirmation
 
@@ -45,8 +45,8 @@ func TestSavedStateLabels_AssignAndUnassign(t *testing.T) {
 	f.p.assignLabel(f.p.compoCtx, 1, first.ID)
 	f.run()
 	f.noToasts()
-	if len(f.p.commits) != 1 || len(f.p.commits[0].Labels) != 1 || f.p.commits[0].Labels[0].ID != first.ID {
-		t.Fatalf("the saved state's labels: %+v", f.p.commits)
+	if len(f.p.savedStates) != 1 || len(f.p.savedStates[0].Labels) != 1 || f.p.savedStates[0].Labels[0].ID != first.ID {
+		t.Fatalf("the saved state's labels: %+v", f.p.savedStates)
 	}
 	html := app.HTMLString(f.p.Render())
 	for _, want := range []string{`data-saved-state-labels="1"`, `data-label-id="` + first.ID.String() + `"`, first.Name} {
@@ -59,8 +59,8 @@ func TestSavedStateLabels_AssignAndUnassign(t *testing.T) {
 	f.p.assignLabel(f.p.compoCtx, 1, second.ID)
 	f.run()
 	f.noToasts()
-	if len(f.p.commits) != 1 || len(f.p.commits[0].Labels) != 2 {
-		t.Errorf("the saved state's labels after a second mark: %+v", f.p.commits)
+	if len(f.p.savedStates) != 1 || len(f.p.savedStates[0].Labels) != 2 {
+		t.Errorf("the saved state's labels after a second mark: %+v", f.p.savedStates)
 	}
 
 	// Another tab takes the first mark off: its label_unassigned event reloads
@@ -69,21 +69,21 @@ func TestSavedStateLabels_AssignAndUnassign(t *testing.T) {
 		t.Fatalf("another tab's unassignment: %v", err)
 	}
 	f.event(apiv0.Event{Type: apiv0.EventLabelUnassigned, ID: servertest.MainProject.String(), SavedState: 1, Label: first.ID.String()})
-	if len(f.p.commits) != 1 || len(f.p.commits[0].Labels) != 1 || f.p.commits[0].Labels[0].ID != second.ID {
-		t.Errorf("the history after another tab's unassignment: %+v", f.p.commits)
+	if len(f.p.savedStates) != 1 || len(f.p.savedStates[0].Labels) != 1 || f.p.savedStates[0].Labels[0].ID != second.ID {
+		t.Errorf("the history after another tab's unassignment: %+v", f.p.savedStates)
 	}
 
 	// The person takes the remaining mark off here.
 	f.p.unassignLabel(f.p.compoCtx, 1, second.ID)
 	f.run()
 	f.noToasts()
-	if len(f.p.commits) != 1 || len(f.p.commits[0].Labels) != 0 {
-		t.Errorf("the saved state's labels after taking the mark off: %+v", f.p.commits)
+	if len(f.p.savedStates) != 1 || len(f.p.savedStates[0].Labels) != 0 {
+		t.Errorf("the saved state's labels after taking the mark off: %+v", f.p.savedStates)
 	}
 	if _, err := f.api.AssignLabel(ctx, 1, second.ID); err != nil {
 		t.Fatalf("another tab's mark: %v", err)
 	}
-	f.p.loadCommits(f.p.compoCtx)
+	f.p.loadSavedStates(f.p.compoCtx)
 	f.run()
 
 	// Another tab deletes the label: the server refuses the mark and the UI

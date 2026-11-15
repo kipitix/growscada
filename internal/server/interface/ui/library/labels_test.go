@@ -20,7 +20,7 @@ func TestSavedStateLabels_AssignAndUnassign(t *testing.T) {
 	f.run()
 	f.l.saveAuthor = "Ada"
 	f.l.saveTitle = "Widgets before the demo"
-	f.l.saveCommit()
+	f.l.saveSavedState()
 	f.run()
 	f.e.TakeToasts() // the Save's own confirmation
 
@@ -38,8 +38,8 @@ func TestSavedStateLabels_AssignAndUnassign(t *testing.T) {
 	f.l.assignLabel(f.l.compoCtx, 1, label.ID)
 	f.run()
 	f.noToasts()
-	if len(f.l.commits) != 1 || len(f.l.commits[0].Labels) != 1 || f.l.commits[0].Labels[0].ID != label.ID {
-		t.Fatalf("the saved state's labels: %+v", f.l.commits)
+	if len(f.l.savedStates) != 1 || len(f.l.savedStates[0].Labels) != 1 || f.l.savedStates[0].Labels[0].ID != label.ID {
+		t.Fatalf("the saved state's labels: %+v", f.l.savedStates)
 	}
 	html := app.HTMLString(f.l.Render())
 	for _, want := range []string{`data-saved-state-labels="1"`, `data-label-id="` + label.ID.String() + `"`, label.Name} {
@@ -51,8 +51,8 @@ func TestSavedStateLabels_AssignAndUnassign(t *testing.T) {
 	f.l.unassignLabel(f.l.compoCtx, 1, label.ID)
 	f.run()
 	f.noToasts()
-	if len(f.l.commits) != 1 || len(f.l.commits[0].Labels) != 0 {
-		t.Errorf("the saved state's labels after taking one off: %+v", f.l.commits)
+	if len(f.l.savedStates) != 1 || len(f.l.savedStates[0].Labels) != 0 {
+		t.Errorf("the saved state's labels after taking one off: %+v", f.l.savedStates)
 	}
 
 	// Another tab deletes the label: the server refuses the mark and the UI

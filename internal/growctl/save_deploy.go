@@ -98,8 +98,8 @@ func (t workflowTarget) save(ctx context.Context, title, author string) (apiv0.S
 	return t.library.SaveSavedState(ctx, req)
 }
 
-// commits returns the target's saved state history, newest first.
-func (t workflowTarget) commits(ctx context.Context) ([]apiv0.SavedStateResponse, error) {
+// savedStates returns the target's saved state history, newest first.
+func (t workflowTarget) savedStates(ctx context.Context) ([]apiv0.SavedStateResponse, error) {
 	if t.kind == "project" {
 		return t.project.SavedStates(ctx)
 	}
@@ -157,11 +157,11 @@ func newSaveCommand(s *settings) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			commit, err := target.save(cmd.Context(), title, author)
+			saved, err := target.save(cmd.Context(), title, author)
 			if err != nil {
 				return fmt.Errorf("%s: %w", target.ref(), err)
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "%s saved state %d\n", target.ref(), commit.Number)
+			fmt.Fprintf(cmd.OutOrStdout(), "%s saved state %d\n", target.ref(), saved.Number)
 			return nil
 		},
 	}
@@ -172,9 +172,9 @@ func newSaveCommand(s *settings) *cobra.Command {
 }
 
 func newDeployCommand(s *settings) *cobra.Command {
-	var commit int
+	var savedState int
 	cmd := &cobra.Command{
-		Use:   "deploy <project> --commit <n>",
+		Use:   "deploy <project> --saved-state <n>",
 		Short: "Make a saved state the Project's running Deployment",
 		Long: "Deploy makes an existing saved state the running Deployment\n" +
 			"of the Project (ADR 0021, task 85_4). It takes a saved state, never the Draft:\n" +
@@ -183,14 +183,14 @@ func newDeployCommand(s *settings) *cobra.Command {
 			"one.",
 		Args: exactlyOneArg,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := requirePositive(cmd, "commit", commit); err != nil {
+			if err := requirePositive(cmd, "saved-state", savedState); err != nil {
 				return err
 			}
 			target, err := resolveProjectTarget(cmd.Context(), s.client(), args[0])
 			if err != nil {
 				return err
 			}
-			deployed, err := target.project.DeploySavedState(cmd.Context(), commit)
+			deployed, err := target.project.DeploySavedState(cmd.Context(), savedState)
 			if err != nil {
 				return fmt.Errorf("%s: %w", target.ref(), err)
 			}
@@ -198,14 +198,14 @@ func newDeployCommand(s *settings) *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().IntVar(&commit, "commit", 0, "the number of the saved state to deploy")
+	cmd.Flags().IntVar(&savedState, "saved-state", 0, "the number of the saved state to deploy")
 	return cmd
 }
 
-func newCommitsCommand(s *settings) *cobra.Command {
+func newSavedStatesCommand(s *settings) *cobra.Command {
 	var asLibrary bool
 	cmd := &cobra.Command{
-		Use:   "commits <project|library> [--library]",
+		Use:   "saved-states <project|library> [--library]",
 		Short: "List the saved states of a Draft, newest first",
 		Long: "List the saved states of the Project's or the Library's Draft, newest first:\n" +
 			"their numbers, titles, authors, times and labels. The name is a Project's,\n" +
@@ -216,17 +216,17 @@ func newCommitsCommand(s *settings) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			commits, err := target.commits(cmd.Context())
+			savedStates, err := target.savedStates(cmd.Context())
 			if err != nil {
 				return fmt.Errorf("%s: %w", target.ref(), err)
 			}
-			if len(commits) == 0 {
+			if len(savedStates) == 0 {
 				fmt.Fprintf(cmd.ErrOrStderr(), "%s has no saved states.\n", target.ref())
 				return nil
 			}
 			w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 3, ' ', 0)
 			fmt.Fprintln(w, "NUMBER\tTITLE\tAUTHOR\tCREATED\tLABELS")
-			for _, c := range commits {
+			for _, c := range savedStates {
 				fmt.Fprintf(w, "%d\t%s\t%s\t%s\t%s\n", c.Number, c.Title, c.Author, formatTime(c.CreatedAt), labelNames(c.Labels))
 			}
 			return w.Flush()

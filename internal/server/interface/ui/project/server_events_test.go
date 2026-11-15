@@ -98,7 +98,7 @@ var deployPath = "GET " + mainContent + "/deployment"
 var changesPath = "GET " + mainContent + apiv0.DraftChangesPath
 
 // draftPath is the read of the Draft's state: whether it holds changes its last
-// Commit does not, the Draft's own flag (task 74).
+// saved state does not, the Draft's own flag (task 74).
 var draftPath = "GET " + mainContent + apiv0.DraftPath
 
 func TestWidgetEvent_SceneNotShown_RereadsThatSceneOnly(t *testing.T) {

@@ -160,7 +160,7 @@ func (l *Library) rejectedDraftWrite(ctx app.Context, err error) {
 		l.loadList(ctx)
 		l.loadDraftState(ctx)
 		l.loadDraftChanges(ctx)
-		l.loadCommits(ctx)
+		l.loadSavedStates(ctx)
 		l.loadLibraries(ctx)
 	}
 	ctx.Update()

@@ -23,20 +23,20 @@ import (
 // the Draft's own unsaved-changes flag, its Version against its Clean Version
 // (ADR 0016, amendment 2026-11-10; task 74).
 
-// loadCommits (re)loads the history of the selected library's Draft. A 404
+// loadSavedStates (re)loads the history of the selected library's Draft. A 404
 // means the library is gone and leaves it (libraryGone).
-func (l *Library) loadCommits(ctx app.Context) {
+func (l *Library) loadSavedStates(ctx app.Context) {
 	if l.libraryID == uuid.Nil {
-		l.commits, l.commitsLoaded = nil, false
+		l.savedStates, l.savedStatesLoaded = nil, false
 		return
 	}
-	uiutil.LoadForGone(l.compoCtx, &l.commitsReloader, l.draft,
+	uiutil.LoadForGone(l.compoCtx, &l.savedStatesReloader, l.draft,
 		func(c context.Context, lib *apiclient.LibraryClient) ([]apiv0.SavedStateResponse, error) {
 			return lib.SavedStates(c)
 		},
-		func(ctx app.Context, _ *apiclient.LibraryClient, commits []apiv0.SavedStateResponse) {
-			l.commits, l.commitsLoaded = commits, true
-		}, l.libraryGone, l.loadCommits)
+		func(ctx app.Context, _ *apiclient.LibraryClient, savedStates []apiv0.SavedStateResponse) {
+			l.savedStates, l.savedStatesLoaded = savedStates, true
+		}, l.libraryGone, l.loadSavedStates)
 }
 
 // hasUnsavedChanges reports whether the Draft moved since its content last
@@ -62,17 +62,17 @@ func (l *Library) openSaveDialog() {
 // saveFromShortcut is Ctrl+S: the Save dialog when the Draft has unsaved
 // changes, nothing otherwise (task 72_7; ADR 0021).
 func (l *Library) saveFromShortcut(ctx app.Context) {
-	if !l.hasUnsavedChanges() || l.savingCommit {
+	if !l.hasUnsavedChanges() || l.savingSavedState {
 		return
 	}
 	l.openSaveDialog()
 }
 
-// saveCommit confirms the Save dialog: the Draft as it is becomes a saved
+// saveSavedState confirms the Save dialog: the Draft as it is becomes a saved
 // state.
-func (l *Library) saveCommit() {
+func (l *Library) saveSavedState() {
 	draft := l.draft()
-	if draft == nil || l.savingCommit {
+	if draft == nil || l.savingSavedState {
 		return
 	}
 	title, author := strings.TrimSpace(l.saveTitle), strings.TrimSpace(l.saveAuthor)
@@ -80,32 +80,32 @@ func (l *Library) saveCommit() {
 		uiutil.ShowError(l.compoCtx, fmt.Errorf("a title and an author are required"))
 		return
 	}
-	l.savingCommit = true
+	l.savingSavedState = true
 	l.compoCtx.LocalStorage().Set(uiutil.AuthorKey, author)
 	version := l.draftVersion()
 	uiutil.Call(l.compoCtx, func(c context.Context) (apiv0.SavedStateResponse, error) {
 		return draft.SaveSavedState(c, apiv0.CreateSavedStateRequest{Version: version, Title: title, Author: author})
 	}, func(ctx app.Context, saved apiv0.SavedStateResponse) {
 		if draft != l.draft() {
-			l.savingCommit = false
+			l.savingSavedState = false
 			return
 		}
-		l.savingCommit = false
+		l.savingSavedState = false
 		l.saveDialog = false
 		ctx.NewActionWithValue(toast.ActionAdd, toast.Problem{Problem: apiv0.Problem{
 			Title:  fmt.Sprintf("Saved state %d saved", saved.Number),
 			Detail: saved.Title,
 		}})
-		l.loadCommits(ctx)
+		l.loadSavedStates(ctx)
 		l.loadDraftState(ctx) // the Save made the Draft its saved state's content
 		l.loadLibraries(ctx)  // the status follows the new last saved state
 		ctx.Update()
 	}, func(ctx app.Context, err error) {
 		if draft != l.draft() {
-			l.savingCommit = false
+			l.savingSavedState = false
 			return
 		}
-		l.savingCommit = false
+		l.savingSavedState = false
 		uiutil.ShowError(ctx, err)
 		if errors.Is(err, apiclient.ErrConflict) {
 			l.forgetDraftVersion()
@@ -113,7 +113,7 @@ func (l *Library) saveCommit() {
 			l.loadDraftChanges(ctx)
 			l.loadList(ctx)
 		}
-		l.loadCommits(ctx)
+		l.loadSavedStates(ctx)
 		l.loadLibraries(ctx)
 		ctx.Update()
 	})
@@ -138,7 +138,7 @@ func (l *Library) openHistory() {
 		return
 	}
 	l.historyScreen = true
-	l.loadCommits(l.compoCtx)
+	l.loadSavedStates(l.compoCtx)
 	l.loadHistoryLabels(l.compoCtx)
 	l.compoCtx.Update()
 }
@@ -168,18 +168,18 @@ func (l *Library) renameSavedState(ctx app.Context, number int, title string) {
 		if draft != l.draft() {
 			return
 		}
-		l.loadCommits(ctx)
+		l.loadSavedStates(ctx)
 		ctx.Update()
 	}, nil)
 }
 
-// renderCommitBar is the panel's Save, its unsaved-changes indicator and the
+// renderSavedStateBar is the panel's Save, its unsaved-changes indicator and the
 // History button (task 72_7; task 84; ADR 0021).
-func (l *Library) renderCommitBar() []app.UI {
+func (l *Library) renderSavedStateBar() []app.UI {
 	editable := l.libraryID != uuid.Nil
 	saveTitle := "Save the Draft as a saved state"
 	switch {
-	case l.savingCommit:
+	case l.savingSavedState:
 		saveTitle = "The Draft is being saved"
 	case !l.hasUnsavedChanges():
 		saveTitle = "Nothing to save since the last save"
@@ -192,12 +192,12 @@ func (l *Library) renderCommitBar() []app.UI {
 	switch {
 	case l.hasUnsavedChanges():
 		indicator = indicator.
-			Attr("data-commit-unsaved", "true").
+			Attr("data-saved-state-unsaved", "true").
 			Style("color", "var(--toast-warn-title)").
 			Text("Unsaved changes")
-	case l.draftStateLoaded && len(l.commits) > 0:
+	case l.draftStateLoaded && len(l.savedStates) > 0:
 		indicator = indicator.
-			Attr("data-commit-saved", "true").
+			Attr("data-saved-state-saved", "true").
 			Style("color", "var(--text-muted)").
 			Text("Saved")
 	default:
@@ -206,7 +206,7 @@ func (l *Library) renderCommitBar() []app.UI {
 	// Each action also names its own app.EventScope, so a reused element can
 	// never keep another action's handler.
 	return []app.UI{
-		uiutil.PanelButton(uiutil.IconSave(), editable && l.hasUnsavedChanges() && !l.savingCommit,
+		uiutil.PanelButton(uiutil.IconSave(), editable && l.hasUnsavedChanges() && !l.savingSavedState,
 			saveTitle, func(app.Context, app.Event) { l.openSaveDialog() }, app.EventScope("save")),
 		indicator,
 		uiutil.PanelButton(uiutil.IconHistory(), l.libraryID != uuid.Nil,
@@ -279,7 +279,7 @@ func (l *Library) renderSaveDialog() app.UI {
 					l.saveAuthor = ctx.JSSrc().Get("value").String()
 				}),
 			app.Div().Style("display", "flex").Style("gap", "4px").Body(
-				smallButton("Save", !l.savingCommit, "accent", "Save the Draft as a saved state", l.saveCommit),
+				smallButton("Save", !l.savingSavedState, "accent", "Save the Draft as a saved state", l.saveSavedState),
 				smallButton("Cancel", true, "", "Close without saving", func() {
 					l.saveDialog = false
 					l.compoCtx.Update()
@@ -293,7 +293,7 @@ func (l *Library) renderSaveDialog() app.UI {
 func (l *Library) renderHistoryScreen() app.UI {
 	screen := l.history
 	screen.Rows = l.historyRows()
-	screen.Loaded = l.commitsLoaded
+	screen.Loaded = l.savedStatesLoaded
 	screen.Loading = l.loadingSavedState != 0
 	screen.AllLabels = l.historyLabels
 	screen.OnBack = func(ctx app.Context) { l.closeHistory() }
@@ -314,8 +314,8 @@ func (l *Library) renderHistoryScreen() app.UI {
 // historyRows maps the history to the screen's rows: each carries the labels
 // that mark it (task 84, task 85_3).
 func (l *Library) historyRows() []savedstates.Row {
-	rows := make([]savedstates.Row, len(l.commits))
-	for i, saved := range l.commits {
+	rows := make([]savedstates.Row, len(l.savedStates))
+	for i, saved := range l.savedStates {
 		rows[i] = savedstates.Row{
 			Number:  saved.Number,
 			Title:   saved.Title,

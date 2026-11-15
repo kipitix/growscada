@@ -36,7 +36,7 @@ func (p *Project) assignLabel(ctx app.Context, number int, labelID uuid.UUID) {
 	callContent(p, func(c context.Context, pc *apiclient.ProjectClient) ([]apiv0.LabelResponse, error) {
 		return pc.AssignLabel(c, number, labelID)
 	}, func(ctx app.Context, list []apiv0.LabelResponse) {
-		p.applyCommitLabels(number, list)
+		p.applySavedStateLabels(number, list)
 		p.loadHistoryLabels(ctx) // the label's assigned count follows
 		ctx.Update()
 	}, nil)
@@ -48,7 +48,7 @@ func (p *Project) unassignLabel(ctx app.Context, number int, labelID uuid.UUID) 
 	callContent(p, func(c context.Context, pc *apiclient.ProjectClient) ([]apiv0.LabelResponse, error) {
 		return pc.UnassignLabel(c, number, labelID)
 	}, func(ctx app.Context, list []apiv0.LabelResponse) {
-		p.applyCommitLabels(number, list)
+		p.applySavedStateLabels(number, list)
 		p.loadHistoryLabels(ctx)
 		ctx.Update()
 	}, nil)
@@ -60,12 +60,12 @@ func (p *Project) manageLabels(ctx app.Context) {
 	ctx.NewAction(labels.ActionOpen)
 }
 
-// applyCommitLabels replaces the labels of the saved state number of the
+// applySavedStateLabels replaces the labels of the saved state number of the
 // history with the server's answer.
-func (p *Project) applyCommitLabels(number int, list []apiv0.LabelResponse) {
-	for i := range p.commits {
-		if p.commits[i].Number == number {
-			p.commits[i].Labels = list
+func (p *Project) applySavedStateLabels(number int, list []apiv0.LabelResponse) {
+	for i := range p.savedStates {
+		if p.savedStates[i].Number == number {
+			p.savedStates[i].Labels = list
 			return
 		}
 	}

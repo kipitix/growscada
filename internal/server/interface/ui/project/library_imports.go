@@ -74,7 +74,7 @@ type importListKey struct {
 func (p *Project) openImportDialog(ctx app.Context) {
 	p.importDialog = true
 	p.importLibraryID = uuid.Nil
-	p.importCommits, p.importCommitsLoaded = nil, false
+	p.importSavedStates, p.importSavedStatesLoaded = nil, false
 	p.loadImports(ctx)
 	p.loadLibraries(ctx)
 	p.loadHistoryLabels(ctx)
@@ -85,7 +85,7 @@ func (p *Project) openImportDialog(ctx app.Context) {
 func (p *Project) closeImportDialog() {
 	p.importDialog = false
 	p.importLibraryID = uuid.Nil
-	p.importCommits, p.importCommitsLoaded = nil, false
+	p.importSavedStates, p.importSavedStatesLoaded = nil, false
 	p.importLabel = uuid.Nil
 }
 
@@ -97,7 +97,7 @@ func (p *Project) setImportLabel(ctx app.Context, labelID uuid.UUID) {
 		return
 	}
 	p.importLabel = labelID
-	p.loadImportCommits(ctx)
+	p.loadImportSavedStates(ctx)
 	ctx.Update()
 }
 
@@ -106,28 +106,28 @@ func (p *Project) setImportLabel(ctx app.Context, labelID uuid.UUID) {
 func (p *Project) selectImportLibrary(ctx app.Context, libraryID uuid.UUID) {
 	if p.importLibraryID == libraryID {
 		p.importLibraryID = uuid.Nil
-		p.importCommits, p.importCommitsLoaded = nil, false
+		p.importSavedStates, p.importSavedStatesLoaded = nil, false
 		ctx.Update()
 		return
 	}
 	p.importLibraryID = libraryID
-	p.importCommits, p.importCommitsLoaded = nil, false
-	p.loadImportCommits(ctx)
+	p.importSavedStates, p.importSavedStatesLoaded = nil, false
+	p.loadImportSavedStates(ctx)
 	ctx.Update()
 }
 
-// loadImportCommits (re)loads the saved states of the opened library, newest
+// loadImportSavedStates (re)loads the saved states of the opened library, newest
 // first: every one, or those the chosen label marks. A library whose read
 // fails — it was removed meanwhile — closes its list rather than showing
 // another library's states in its place.
-func (p *Project) loadImportCommits(ctx app.Context) {
+func (p *Project) loadImportSavedStates(ctx app.Context) {
 	libraryID := p.importLibraryID
 	if p.client == nil || libraryID == uuid.Nil {
-		p.importCommits, p.importCommitsLoaded = nil, false
+		p.importSavedStates, p.importSavedStatesLoaded = nil, false
 		return
 	}
 	library := p.client.Library(libraryID)
-	uiutil.LoadForGone(ctx, &p.importCommitsReloader,
+	uiutil.LoadForGone(ctx, &p.importSavedStatesReloader,
 		func() importListKey { return importListKey{library: library, label: p.importLabel} },
 		func(c context.Context, k importListKey) ([]apiv0.SavedStateResponse, error) {
 			if k.label == uuid.Nil {
@@ -135,40 +135,40 @@ func (p *Project) loadImportCommits(ctx app.Context) {
 			}
 			return k.library.SavedStatesByLabel(c, k.label)
 		},
-		func(ctx app.Context, _ importListKey, commits []apiv0.SavedStateResponse) {
+		func(ctx app.Context, _ importListKey, savedStates []apiv0.SavedStateResponse) {
 			if p.importLibraryID != libraryID {
 				return
 			}
-			p.importCommits, p.importCommitsLoaded = commits, true
+			p.importSavedStates, p.importSavedStatesLoaded = savedStates, true
 		},
 		func(ctx app.Context, k importListKey) {
 			// The library was removed meanwhile: its states say nothing of the
 			// project, and the list of libraries is reread.
 			if p.importLibraryID == libraryID {
-				p.importLibraryID, p.importCommits, p.importCommitsLoaded = uuid.Nil, nil, false
+				p.importLibraryID, p.importSavedStates, p.importSavedStatesLoaded = uuid.Nil, nil, false
 			}
 			p.loadLibraries(ctx)
 			ctx.Update()
-		}, p.loadImportCommits)
+		}, p.loadImportSavedStates)
 }
 
-// changeImport imports the saved state numbered commit of the library, or
+// changeImport imports the saved state of the library the row names, or
 // removes the import for 0, after its preview: orphaned Widgets refuse it,
 // broken bindings are confirmed.
-func (p *Project) changeImport(libraryID uuid.UUID, commit int) {
-	if p.waitMoves(p.compoCtx, func(ctx app.Context) { p.changeImport(libraryID, commit) }) {
+func (p *Project) changeImport(libraryID uuid.UUID, savedState int) {
+	if p.waitMoves(p.compoCtx, func(ctx app.Context) { p.changeImport(libraryID, savedState) }) {
 		return
 	}
 	imported, hasImport := p.importOf(libraryID)
-	if p.content == nil || (hasImport && imported.SavedStateNumber == commit) || (!hasImport && commit == 0) {
+	if p.content == nil || (hasImport && imported.SavedStateNumber == savedState) || (!hasImport && savedState == 0) {
 		return
 	}
 	content := p.content
 	uiutil.Call(p.compoCtx, func(c context.Context) (apiv0.ImportImpactResponse, error) {
-		return content.ImportImpact(c, libraryID, commit)
+		return content.ImportImpact(c, libraryID, savedState)
 	}, func(ctx app.Context, impact apiv0.ImportImpactResponse) {
-		what := fmt.Sprintf("import saved state %d of %s", commit, p.libraryName(libraryID))
-		if commit == 0 {
+		what := fmt.Sprintf("import saved state %d of %s", savedState, p.libraryName(libraryID))
+		if savedState == 0 {
 			what = "remove the import of " + p.libraryName(libraryID)
 		}
 		if len(impact.OrphanedWidgets) > 0 {
@@ -185,18 +185,18 @@ func (p *Project) changeImport(libraryID uuid.UUID, commit int) {
 				return
 			}
 		}
-		p.saveImport(content, libraryID, commit, p.draftVersion())
+		p.saveImport(content, libraryID, savedState, p.draftVersion())
 	}, nil)
 }
 
-// saveImport imports (commit > 0) or removes (commit 0) the import.
-func (p *Project) saveImport(content *apiclient.ProjectClient, libraryID uuid.UUID, commit, version int) {
+// saveImport imports (a positive saved state) or removes (0) the import.
+func (p *Project) saveImport(content *apiclient.ProjectClient, libraryID uuid.UUID, savedState, version int) {
 	mark := p.markDraft()
 	uiutil.Call(p.compoCtx, func(c context.Context) (apiv0.LibraryImportResponse, error) {
-		if commit == 0 {
+		if savedState == 0 {
 			return content.RemoveImport(c, libraryID, version)
 		}
-		return content.ImportLibrary(c, libraryID, apiv0.PutLibraryImportRequest{SavedState: commit, Version: version})
+		return content.ImportLibrary(c, libraryID, apiv0.PutLibraryImportRequest{SavedState: savedState, Version: version})
 	}, func(ctx app.Context, saved apiv0.LibraryImportResponse) {
 		p.observeDraftVersion(mark, saved.Version)
 		p.loadImports(ctx)
@@ -488,18 +488,18 @@ func (p *Project) renderImportLibraryRow(lib apiv0.LibraryResponse) app.UI {
 func (p *Project) renderImportSavedStates(lib apiv0.LibraryResponse) app.UI {
 	rows := []app.UI{}
 	switch {
-	case !p.importCommitsLoaded:
+	case !p.importSavedStatesLoaded:
 		rows = append(rows, app.P().Style("margin", "4px 0").Style("color", "var(--text-muted)").
 			Text("Loading saved states…"))
-	case len(p.importCommits) == 0 && p.importLabel != uuid.Nil:
+	case len(p.importSavedStates) == 0 && p.importLabel != uuid.Nil:
 		rows = append(rows, app.P().Style("margin", "4px 0").Text("No saved state carries this label."))
-	case len(p.importCommits) == 0:
+	case len(p.importSavedStates) == 0:
 		rows = append(rows, app.P().
-			Attr("data-import-no-commits", "true").
+			Attr("data-import-no-saved-states", "true").
 			Style("margin", "4px 0").
 			Text("No saved states: save the library first."))
 	default:
-		for _, saved := range p.importCommits {
+		for _, saved := range p.importSavedStates {
 			rows = append(rows, p.renderImportSavedStateRow(lib, saved))
 		}
 	}
@@ -551,11 +551,11 @@ func (p *Project) renderImportSavedStateRow(lib apiv0.LibraryResponse, saved api
 		if hasImport {
 			label, title = "Switch", fmt.Sprintf("Switch the import to saved state %d", saved.Number)
 		}
-		libraryID, commit := lib.ID, saved.Number
+		libraryID, savedState := lib.ID, saved.Number
 		control = rowButton(label, "accent", true, title,
-			func(ctx app.Context) { p.changeImport(libraryID, commit) },
-			app.EventScope("import-commit/"+libraryID.String()+"/"+number)).
-			Attr("data-import-commit", number)
+			func(ctx app.Context) { p.changeImport(libraryID, savedState) },
+			app.EventScope("import-saved-state/"+libraryID.String()+"/"+number)).
+			Attr("data-import-saved-state", number)
 	}
 	return app.Div().
 		Attr("data-import-saved-state", number).

@@ -27,7 +27,7 @@ func (l *Library) renderHeader() app.UI {
 		l.renderBackButton(),
 		uiutil.BarDivider(),
 	}
-	body = append(body, l.renderCommitBar()...)
+	body = append(body, l.renderSavedStateBar()...)
 	body = append(body,
 		uiutil.BarDivider(),
 		l.renderDraftChangesBar(),

@@ -55,17 +55,17 @@ type Library struct {
 	// its content alone, never raising the known Version (task 74).
 	unsavedReloader uiutil.Reloader
 	// ── saved states (task 72_2; ADR 0021) ─────────────────────────────────
-	// commits is the history of the selected library's Draft, newest first;
-	// commitsLoaded is false until its first answer. saveDialog is true while
+	// savedStates is the history of the selected library's Draft, newest first;
+	// savedStatesLoaded is false until its first answer. saveDialog is true while
 	// the Save dialog is open, saveTitle and saveAuthor its fields;
-	// savingCommit marks the request in flight.
-	commits         []apiv0.SavedStateResponse
-	commitsLoaded   bool
-	commitsReloader uiutil.Reloader
-	saveDialog      bool
-	savingCommit    bool
-	saveTitle       string
-	saveAuthor      string
+	// savingSavedState marks the request in flight.
+	savedStates         []apiv0.SavedStateResponse
+	savedStatesLoaded   bool
+	savedStatesReloader uiutil.Reloader
+	saveDialog          bool
+	savingSavedState    bool
+	saveTitle           string
+	saveAuthor          string
 	// historyScreen is true while the saved states are shown in place of the
 	// editor (task 84): History opens them and the way back closes them.
 	// loadingSavedState is the number of the saved state being loaded into the
@@ -149,7 +149,7 @@ func (l *Library) OnMount(ctx app.Context) {
 	l.loadDraftState(ctx)
 	l.loadDraftChanges(ctx)
 	ctx.LocalStorage().Get(uiutil.AuthorKey, &l.saveAuthor)
-	l.loadCommits(ctx)
+	l.loadSavedStates(ctx)
 	l.listenShortcuts()
 	l.handleServerEvents(ctx)
 }
@@ -275,8 +275,8 @@ func (l *Library) selectLibrary(ctx app.Context, id uuid.UUID) {
 	l.clearSelection()
 	l.changes, l.changesLoaded = apiv0.DraftChangesResponse{}, false
 	l.undoing, l.redoing = false, false
-	l.commits, l.commitsLoaded = nil, false
-	l.saveDialog, l.savingCommit = false, false
+	l.savedStates, l.savedStatesLoaded = nil, false
+	l.saveDialog, l.savingSavedState = false, false
 	l.historyScreen, l.loadingSavedState = false, 0
 	l.contentReplacements, l.appliedReplacements = 0, 0
 	l.history.Reset()
@@ -286,7 +286,7 @@ func (l *Library) selectLibrary(ctx app.Context, id uuid.UUID) {
 	l.loadList(ctx)
 	l.loadDraftState(ctx)
 	l.loadDraftChanges(ctx)
-	l.loadCommits(ctx)
+	l.loadSavedStates(ctx)
 }
 
 // itemIdx returns the index of the WidgetType id in the list; -1 if absent.

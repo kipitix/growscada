@@ -1007,7 +1007,7 @@ func TestGetProjects_TableAndYAML(t *testing.T) {
 }
 
 // TestSaveDeploy_Project walks the closing workflow: apply edits the Draft,
-// save fixes a Commit, deploy makes it the running Deployment (ADR 0021,
+// save fixes a saved state, deploy makes it the running Deployment (ADR 0021,
 // task 85_4), and the lists report each step.
 func TestSaveDeploy_Project(t *testing.T) {
 	srv, _ := servertest.StartAPI(t, postgres.DB(t))
@@ -1015,9 +1015,9 @@ func TestSaveDeploy_Project(t *testing.T) {
 		t.Fatalf("apply: %v", err)
 	}
 
-	out, stderr, err := execGrowctl(t, srv, "", "commits", "Main")
+	out, stderr, err := execGrowctl(t, srv, "", "saved-states", "Main")
 	if err != nil || out != "" || !strings.Contains(stderr, "has no saved states") {
-		t.Fatalf("commits before the save: %q, %q, %v", out, stderr, err)
+		t.Fatalf("saved states before the save: %q, %q, %v", out, stderr, err)
 	}
 	out, _, err = execGrowctl(t, srv, "", "save", "Main", "--title", "Before the demo", "--author", "Grace")
 	if err != nil || out != "project/Main saved state 1\n" {
@@ -1026,16 +1026,16 @@ func TestSaveDeploy_Project(t *testing.T) {
 	if _, stderr, err := execGrowctl(t, srv, "", "save", "Main", "--title", "Again", "--author", "Grace"); err == nil {
 		t.Errorf("a save of an unchanged Draft must fail, stderr %q", stderr)
 	}
-	out, _, err = execGrowctl(t, srv, "", "commits", "Main")
+	out, _, err = execGrowctl(t, srv, "", "saved-states", "Main")
 	if err != nil || !strings.Contains(out, "Before the demo") || !strings.Contains(out, "Grace") {
-		t.Fatalf("commits after the save: %q, %v", out, err)
+		t.Fatalf("saved states after the save: %q, %v", out, err)
 	}
 
-	out, _, err = execGrowctl(t, srv, "", "deploy", "Main", "--commit", "1")
+	out, _, err = execGrowctl(t, srv, "", "deploy", "Main", "--saved-state", "1")
 	if err != nil || out != "project/Main deployed 1\n" {
 		t.Fatalf("deploy: %q, %v", out, err)
 	}
-	if _, stderr, err := execGrowctl(t, srv, "", "deploy", "Main", "--commit", "1"); err == nil {
+	if _, stderr, err := execGrowctl(t, srv, "", "deploy", "Main", "--saved-state", "1"); err == nil {
 		t.Errorf("a deploy of the running saved state must fail, stderr %q", stderr)
 	}
 	running, err := apiclient.New(srv.URL, srv.Client()).Project(servertest.MainProject).Deployment(context.Background())
@@ -1056,8 +1056,8 @@ func TestSave_AuthorFromTheEnvironment(t *testing.T) {
 	if err != nil || out != "project/Main saved state 1\n" {
 		t.Fatalf("save: %q, %v", out, err)
 	}
-	out, _, err = execGrowctl(t, srv, "", "commits", "Main")
+	out, _, err = execGrowctl(t, srv, "", "saved-states", "Main")
 	if err != nil || !strings.Contains(out, "From the environment") {
-		t.Fatalf("commits: %q, %v", out, err)
+		t.Fatalf("saved states: %q, %v", out, err)
 	}
 }

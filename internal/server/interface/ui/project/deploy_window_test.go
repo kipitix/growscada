@@ -54,7 +54,7 @@ func saveState(t *testing.T, api *testAPI, title string) apiv0.SavedStateRespons
 	saved, err := api.SaveSavedState(ctx, apiv0.CreateSavedStateRequest{
 		Version: state.Version, Title: title, Author: "Ada"})
 	if err != nil {
-		t.Fatalf("save commit: %v", err)
+		t.Fatalf("save saved state: %v", err)
 	}
 	return saved
 }
@@ -270,7 +270,7 @@ func TestDeployWindow_ProjectGone_TellsTheSwitcher(t *testing.T) {
 		gone = append(gone, a.Value.(uuid.UUID))
 	})
 
-	f.p.loadDeployCommits(f.p.compoCtx)
+	f.p.loadDeploySavedStates(f.p.compoCtx)
 	f.run()
 
 	f.noToasts()
@@ -290,8 +290,8 @@ func TestDeployWindow_UnknownDeploymentMarksNoRow(t *testing.T) {
 	f.p.deployed, f.p.deploymentLoaded = true, true
 	f.p.deployment = apiv0.DeploymentResponse{Number: 4, SavedStateNumber: &first}
 	f.p.deploymentFailed = true
-	f.p.deployCommits = []apiv0.SavedStateResponse{{Number: first, Title: "First"}}
-	f.p.deployCommitsLoaded = true
+	f.p.deploySavedStates = []apiv0.SavedStateResponse{{Number: first, Title: "First"}}
+	f.p.deploySavedStatesLoaded = true
 	f.p.historyLabelsLoaded = true
 	f.p.deployDialog = true
 
@@ -345,7 +345,7 @@ func TestDeployWindow_ProjectFileDownload(t *testing.T) {
 	f.p.openDeployDialog(f.p.compoCtx)
 	f.run()
 
-	f.p.downloadCommitProjectFile(f.p.compoCtx, saved.Number)
+	f.p.downloadSavedStateProjectFile(f.p.compoCtx, saved.Number)
 	f.run()
 	f.noToasts()
 }

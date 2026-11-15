@@ -337,14 +337,14 @@ func validateProject(doc manifestv0.ProjectDocument) (ProjectManifest, error) {
 	m := ProjectManifest{Name: name}
 	if doc.Spec != nil && doc.Spec.LibraryImports != nil {
 		m.LibraryImports = make(map[string]int, len(doc.Spec.LibraryImports))
-		for libraryName, commit := range doc.Spec.LibraryImports {
+		for libraryName, savedState := range doc.Spec.LibraryImports {
 			if _, err := library.NewLibraryName(libraryName); err != nil {
 				return ProjectManifest{}, fmt.Errorf("project/%s: invalid spec.libraryImports: %w", name, err)
 			}
-			if commit < 1 {
-				return ProjectManifest{}, fmt.Errorf("project/%s: invalid spec.libraryImports.%s: a saved state number is positive, got %d", name, libraryName, commit)
+			if savedState < 1 {
+				return ProjectManifest{}, fmt.Errorf("project/%s: invalid spec.libraryImports.%s: a saved state number is positive, got %d", name, libraryName, savedState)
 			}
-			m.LibraryImports[libraryName] = commit
+			m.LibraryImports[libraryName] = savedState
 		}
 	}
 	return m, nil

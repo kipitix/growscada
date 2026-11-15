@@ -22,19 +22,19 @@ import (
 // history, so the indicator is the Draft's own unsaved-changes flag, its
 // Version against its Clean Version (ADR 0016, amendment 2026-11-10; task 74).
 
-// loadCommits (re)loads the history of the project's Draft.
-func (p *Project) loadCommits(ctx app.Context) {
+// loadSavedStates (re)loads the history of the project's Draft.
+func (p *Project) loadSavedStates(ctx app.Context) {
 	if p.content == nil {
-		p.commits, p.commitsLoaded = nil, false
+		p.savedStates, p.savedStatesLoaded = nil, false
 		return
 	}
-	uiutil.LoadOfProject(p.compoCtx, &p.commitsReloader, p.projectContent,
+	uiutil.LoadOfProject(p.compoCtx, &p.savedStatesReloader, p.projectContent,
 		func(c context.Context, pc *apiclient.ProjectClient) ([]apiv0.SavedStateResponse, error) {
 			return pc.SavedStates(c)
 		},
-		func(ctx app.Context, commits []apiv0.SavedStateResponse) {
-			p.commits, p.commitsLoaded = commits, true
-		}, p.loadCommits)
+		func(ctx app.Context, savedStates []apiv0.SavedStateResponse) {
+			p.savedStates, p.savedStatesLoaded = savedStates, true
+		}, p.loadSavedStates)
 }
 
 // hasUnsavedChanges reports whether the Draft moved since its content last
@@ -58,19 +58,19 @@ func (p *Project) openSaveDialog(ctx app.Context) {
 // saveFromShortcut is Ctrl+S: the Save dialog when the Draft has unsaved
 // changes, nothing otherwise (task 72_6).
 func (p *Project) saveFromShortcut(ctx app.Context) {
-	if !p.hasUnsavedChanges() || p.savingCommit {
+	if !p.hasUnsavedChanges() || p.savingSavedState {
 		return
 	}
 	p.openSaveDialog(ctx)
 }
 
-// saveCommit confirms the Save dialog: the Draft as it is becomes a saved
+// saveSavedState confirms the Save dialog: the Draft as it is becomes a saved
 // state.
-func (p *Project) saveCommit(ctx app.Context) {
-	if p.content == nil || p.savingCommit || p.deploying || p.loadingSavedState != 0 {
+func (p *Project) saveSavedState(ctx app.Context) {
+	if p.content == nil || p.savingSavedState || p.deploying || p.loadingSavedState != 0 {
 		return
 	}
-	if p.waitMoves(ctx, func(ctx app.Context) { p.saveCommit(ctx) }) {
+	if p.waitMoves(ctx, func(ctx app.Context) { p.saveSavedState(ctx) }) {
 		return
 	}
 	title, author := strings.TrimSpace(p.saveTitle), strings.TrimSpace(p.saveAuthor)
@@ -78,28 +78,28 @@ func (p *Project) saveCommit(ctx app.Context) {
 		uiutil.ShowError(ctx, fmt.Errorf("a title and an author are required"))
 		return
 	}
-	p.savingCommit = true
+	p.savingSavedState = true
 	ctx.LocalStorage().Set(uiutil.AuthorKey, author)
 	callContent(p, func(c context.Context, pc *apiclient.ProjectClient) (apiv0.SavedStateResponse, error) {
 		return pc.SaveSavedState(c, apiv0.CreateSavedStateRequest{
 			Version: p.draftVersion(), Title: title, Author: author,
 		})
 	}, func(ctx app.Context, saved apiv0.SavedStateResponse) {
-		p.savingCommit = false
+		p.savingSavedState = false
 		p.saveDialog = false
 		ctx.NewActionWithValue(toast.ActionAdd, toast.Problem{Problem: apiv0.Problem{
 			Title:  fmt.Sprintf("Saved state %d saved", saved.Number),
 			Detail: saved.Title,
 		}})
-		p.loadCommits(ctx)
+		p.loadSavedStates(ctx)
 		p.loadDraftState(ctx) // the Save made the Draft its saved state's content
 		ctx.Update()
 	}, func(ctx app.Context, err error) {
-		p.savingCommit = false
+		p.savingSavedState = false
 		// A conflict drops the Draft's Version and rereads the content, the
 		// stack and the history; a nothing_to_save means the history moved.
 		p.rejectedDraftWrite(ctx, err, func(ctx app.Context) {
-			p.loadCommits(ctx)
+			p.loadSavedStates(ctx)
 			p.loadDraftChanges(ctx)
 		})
 		ctx.Update()
@@ -134,7 +134,7 @@ func prompt(message, value string) (string, bool) {
 // and their labels alone (task 85_5, task 85_7).
 func (p *Project) openHistory(ctx app.Context) {
 	p.historyScreen = true
-	p.loadCommits(ctx)
+	p.loadSavedStates(ctx)
 	p.loadHistoryLabels(ctx)
 	ctx.Update()
 }
@@ -160,35 +160,35 @@ func (p *Project) renameSavedState(ctx app.Context, number int, title string) {
 	callContent(p, func(c context.Context, pc *apiclient.ProjectClient) (apiv0.SavedStateResponse, error) {
 		return pc.RenameSavedState(c, number, apiv0.RenameSavedStateRequest{Title: title})
 	}, func(ctx app.Context, _ apiv0.SavedStateResponse) {
-		p.loadCommits(ctx)
+		p.loadSavedStates(ctx)
 		ctx.Update()
 	}, nil)
 }
 
-// renderCommitBar is the panel's Save, its unsaved-changes indicator and
+// renderSavedStateBar is the panel's Save, its unsaved-changes indicator and
 // History (task 72_2, task 72_6; task 84).
-func (p *Project) renderCommitBar() []app.UI {
+func (p *Project) renderSavedStateBar() []app.UI {
 	saveTitle := "Save the Draft as a saved state"
 	switch {
-	case p.savingCommit:
+	case p.savingSavedState:
 		saveTitle = "The Draft is being saved"
 	case !p.hasUnsavedChanges():
 		saveTitle = "Nothing to save since the last save"
 	}
 	body := []app.UI{
-		p.panelButton("save", uiutil.IconSave(), saveTitle, p.hasUnsavedChanges() && !p.savingCommit,
+		p.panelButton("save", uiutil.IconSave(), saveTitle, p.hasUnsavedChanges() && !p.savingSavedState,
 			func(ctx app.Context) { p.openSaveDialog(ctx) }),
 	}
 	indicator := app.Span().Style("font-size", "12px")
 	switch {
 	case p.hasUnsavedChanges():
 		indicator = indicator.
-			Attr("data-commit-unsaved", "true").
+			Attr("data-saved-state-unsaved", "true").
 			Style("color", "var(--toast-warn-title)").
 			Text("Unsaved changes")
-	case p.draftStateLoaded && len(p.commits) > 0:
+	case p.draftStateLoaded && len(p.savedStates) > 0:
 		indicator = indicator.
-			Attr("data-commit-saved", "true").
+			Attr("data-saved-state-saved", "true").
 			Style("color", "var(--text-muted)").
 			Text("Saved")
 	default:
@@ -196,7 +196,7 @@ func (p *Project) renderCommitBar() []app.UI {
 	}
 	body = append(body, indicator)
 	body = append(body,
-		p.panelButton("history", uiutil.IconHistory(), "The saved states of the project", !p.savingCommit,
+		p.panelButton("history", uiutil.IconHistory(), "The saved states of the project", !p.savingSavedState,
 			func(ctx app.Context) { p.openHistory(ctx) }),
 	)
 	return body
@@ -295,15 +295,15 @@ func (p *Project) renderSaveDialog() app.UI {
 						}),
 					app.Button().
 						Attr("data-save-confirm", "true").
-						Disabled(p.savingCommit).
+						Disabled(p.savingSavedState).
 						Style("padding", "4px 12px").
 						Style("font-size", "13px").
 						Style("cursor", "pointer").
 						Style("background", "var(--accent)").
 						Style("color", "var(--accent-text)").
-						Text(saveConfirmLabel(p.savingCommit)).
+						Text(saveConfirmLabel(p.savingSavedState)).
 						OnClick(func(ctx app.Context, e app.Event) {
-							p.saveCommit(ctx)
+							p.saveSavedState(ctx)
 						}),
 				),
 		)
@@ -325,7 +325,7 @@ func saveConfirmLabel(saving bool) string {
 func (p *Project) renderHistoryScreen() app.UI {
 	screen := p.history
 	screen.Rows = p.historyRows()
-	screen.Loaded = p.commitsLoaded
+	screen.Loaded = p.savedStatesLoaded
 	screen.Loading = p.loadingSavedState != 0 || p.deploying
 	screen.AllLabels = p.historyLabels
 	screen.OnBack = func(ctx app.Context) { p.closeHistory() }
@@ -347,8 +347,8 @@ func (p *Project) renderHistoryScreen() app.UI {
 // labels that mark it (task 84, task 85_3). A Deploy takes the saved state
 // itself (task 85_5).
 func (p *Project) historyRows() []savedstates.Row {
-	rows := make([]savedstates.Row, len(p.commits))
-	for i, saved := range p.commits {
+	rows := make([]savedstates.Row, len(p.savedStates))
+	for i, saved := range p.savedStates {
 		rows[i] = savedstates.Row{
 			Number:  saved.Number,
 			Title:   saved.Title,

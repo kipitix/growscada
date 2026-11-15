@@ -80,8 +80,8 @@ func TestEventTypeInfo_Describe(t *testing.T) {
 // TestEventRef: a saved state event is described by its number, not by the ID of
 // the Project or Library it names (task 72_2; ADR 0021).
 func TestEventRef(t *testing.T) {
-	commit := apiv0.Event{Type: apiv0.EventSavedStateCreated, ID: "project-id", SavedState: 3}
-	if got := eventTypeInfoByType[commit.Type].describe(eventRef(commit)); got != "Saved state 3 saved" {
+	savedState := apiv0.Event{Type: apiv0.EventSavedStateCreated, ID: "project-id", SavedState: 3}
+	if got := eventTypeInfoByType[savedState.Type].describe(eventRef(savedState)); got != "Saved state 3 saved" {
 		t.Errorf("a saved state saved: got %q", got)
 	}
 	renamed := apiv0.Event{Type: apiv0.EventSavedStateTitleUpdated, ID: "library-id", SavedState: 4}
@@ -90,6 +90,6 @@ func TestEventRef(t *testing.T) {
 	}
 	scene := apiv0.Event{Type: apiv0.EventSceneCreated, ID: "scene-id"}
 	if got := eventRef(scene); got != "scene-id" {
-		t.Errorf("an event without a commit: got %q", got)
+		t.Errorf("an event without a saved state: got %q", got)
 	}
 }

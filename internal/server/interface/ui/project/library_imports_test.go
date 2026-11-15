@@ -30,7 +30,7 @@ func libraryWithState(t *testing.T, api *testAPI) (uuid.UUID, uuid.UUID) {
 	}
 	if _, err := api.Library(lib.ID).SaveSavedState(ctx, apiv0.CreateSavedStateRequest{
 		Version: created.Version, Title: "First save", Author: "Ada"}); err != nil {
-		t.Fatalf("save commit: %v", err)
+		t.Fatalf("save saved state: %v", err)
 	}
 	return lib.ID, created.ID
 }
@@ -47,7 +47,7 @@ func saveLibraryState(t *testing.T, api *testAPI, libraryID uuid.UUID, title str
 	saved, err := api.Library(libraryID).SaveSavedState(ctx, apiv0.CreateSavedStateRequest{
 		Version: state.Version, Title: title, Author: "Ada"})
 	if err != nil {
-		t.Fatalf("save commit: %v", err)
+		t.Fatalf("save saved state: %v", err)
 	}
 	return saved
 }
@@ -101,7 +101,7 @@ func TestImportWindow_ListsTheLibrariesAndTheirSavedStates(t *testing.T) {
 		`data-import-saved-states="` + libraryID.String() + `"`,
 		`data-import-saved-state="1"`,
 		"First save", "Ada", "1 widget types",
-		`data-import-commit="1"`,
+		`data-import-saved-state="1"`,
 	} {
 		if !strings.Contains(html, want) {
 			t.Errorf("the opened library does not show %q: %s", want, html)
@@ -145,7 +145,7 @@ func TestImportWindow_LibraryWithoutSavedStatesSaysHowToMakeOne(t *testing.T) {
 	f.run()
 	f.noToasts()
 	html := app.HTMLString(f.p.Render())
-	if !strings.Contains(html, `data-import-no-commits`) ||
+	if !strings.Contains(html, `data-import-no-saved-states`) ||
 		!strings.Contains(html, "No saved states: save the library first.") {
 		t.Errorf("the library without saved states does not say how to make one: %s", html)
 	}

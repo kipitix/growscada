@@ -38,7 +38,7 @@ func (l *Library) assignLabel(ctx app.Context, number int, labelID uuid.UUID) {
 		if draft != l.draft() {
 			return
 		}
-		l.applyCommitLabels(number, list)
+		l.applySavedStateLabels(number, list)
 		l.loadHistoryLabels(ctx) // the label's assigned count follows
 		ctx.Update()
 	}, nil)
@@ -57,7 +57,7 @@ func (l *Library) unassignLabel(ctx app.Context, number int, labelID uuid.UUID) 
 		if draft != l.draft() {
 			return
 		}
-		l.applyCommitLabels(number, list)
+		l.applySavedStateLabels(number, list)
 		l.loadHistoryLabels(ctx)
 		ctx.Update()
 	}, nil)
@@ -69,12 +69,12 @@ func (l *Library) manageLabels(ctx app.Context) {
 	ctx.NewAction(labels.ActionOpen)
 }
 
-// applyCommitLabels replaces the labels of the saved state number of the
+// applySavedStateLabels replaces the labels of the saved state number of the
 // history with the server's answer.
-func (l *Library) applyCommitLabels(number int, list []apiv0.LabelResponse) {
-	for i := range l.commits {
-		if l.commits[i].Number == number {
-			l.commits[i].Labels = list
+func (l *Library) applySavedStateLabels(number int, list []apiv0.LabelResponse) {
+	for i := range l.savedStates {
+		if l.savedStates[i].Number == number {
+			l.savedStates[i].Labels = list
 			return
 		}
 	}

@@ -200,7 +200,7 @@ func newLabelCommand(s *settings) *cobra.Command {
 }
 
 func newLabelAssignCommand(s *settings, assign bool) *cobra.Command {
-	var commit int
+	var savedState int
 	var label string
 	var asLibrary bool
 	verb, short := "assign", "Mark a saved state with a label"
@@ -208,7 +208,7 @@ func newLabelAssignCommand(s *settings, assign bool) *cobra.Command {
 		verb, short = "unassign", "Take a label off a saved state"
 	}
 	cmd := &cobra.Command{
-		Use:   verb + " <project|library> --commit <n> --label <name|id> [--library]",
+		Use:   verb + " <project|library> --saved-state <n> --label <name|id> [--library]",
 		Short: short,
 		Long: short + " of a Project's or a Library's Draft (task 85_3; ADR 0025):\n" +
 			"the saved state is named by its number within the Draft, the label by its name\n" +
@@ -216,7 +216,7 @@ func newLabelAssignCommand(s *settings, assign bool) *cobra.Command {
 			"--library. No Draft Version is stated.",
 		Args: exactlyOneArg,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := requirePositive(cmd, "commit", commit); err != nil {
+			if err := requirePositive(cmd, "saved-state", savedState); err != nil {
 				return err
 			}
 			if strings.TrimSpace(label) == "" {
@@ -231,19 +231,19 @@ func newLabelAssignCommand(s *settings, assign bool) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			labels, err := target.setLabel(cmd.Context(), assign, commit, found.ID)
+			labels, err := target.setLabel(cmd.Context(), assign, savedState, found.ID)
 			if err != nil {
-				return fmt.Errorf("%s saved state %d: %w", target.ref(), commit, err)
+				return fmt.Errorf("%s saved state %d: %w", target.ref(), savedState, err)
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "%s saved state %d: %s %s\n",
-				target.ref(), commit, verb+"ed", found.Name)
+				target.ref(), savedState, verb+"ed", found.Name)
 			if names := labelNames(labels); names != "" {
 				fmt.Fprintf(cmd.OutOrStdout(), "labels: %s\n", names)
 			}
 			return nil
 		},
 	}
-	cmd.Flags().IntVar(&commit, "commit", 0, "the number of the saved state within its Draft")
+	cmd.Flags().IntVar(&savedState, "saved-state", 0, "the number of the saved state within its Draft")
 	cmd.Flags().StringVar(&label, "label", "", "the label's name (ignoring case) or ID")
 	cmd.Flags().BoolVar(&asLibrary, "library", false, "the name is a Library's, not a Project's")
 	return cmd
@@ -272,20 +272,20 @@ func resolveLabel(ctx context.Context, client *Client, ref string) (apiv0.LabelR
 }
 
 // setLabel places the label on the target's saved state, or takes it off.
-func (t workflowTarget) setLabel(ctx context.Context, assign bool, commit int, labelID uuid.UUID) ([]apiv0.LabelResponse, error) {
+func (t workflowTarget) setLabel(ctx context.Context, assign bool, savedState int, labelID uuid.UUID) ([]apiv0.LabelResponse, error) {
 	switch {
 	case t.kind == "project" && assign:
-		return t.project.AssignLabel(ctx, commit, labelID)
+		return t.project.AssignLabel(ctx, savedState, labelID)
 	case t.kind == "project":
-		return t.project.UnassignLabel(ctx, commit, labelID)
+		return t.project.UnassignLabel(ctx, savedState, labelID)
 	case assign:
-		return t.library.AssignLabel(ctx, commit, labelID)
+		return t.library.AssignLabel(ctx, savedState, labelID)
 	default:
-		return t.library.UnassignLabel(ctx, commit, labelID)
+		return t.library.UnassignLabel(ctx, savedState, labelID)
 	}
 }
 
-// labelNames is the labels of a saved state as `commits` prints them: their
+// labelNames is the labels of a saved state as `saved-states` prints them: their
 // names, a color in parentheses when they have one.
 func labelNames(labels []apiv0.LabelResponse) string {
 	names := make([]string, len(labels))

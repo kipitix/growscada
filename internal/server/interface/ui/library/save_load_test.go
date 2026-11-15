@@ -16,12 +16,12 @@ import (
 // The Library's Save flow of task 72_7: Ctrl+S, the status of the list, a load
 // of a saved state and a Discard made in another tab.
 
-// saveWithUI fixes the Draft as a Commit through the Save dialog and consumes
+// saveWithUI fixes the Draft as a saved state through the Save dialog and consumes
 // its confirmation toast.
 func saveWithUI(t *testing.T, f *fixture, title string) {
 	t.Helper()
 	f.l.saveAuthor, f.l.saveTitle = "Ada", title
-	f.l.saveCommit()
+	f.l.saveSavedState()
 	f.run()
 	if got := f.oneToast(); !strings.Contains(got.Title, "saved") {
 		t.Fatalf("the Save confirmation: %+v", got)
@@ -29,7 +29,7 @@ func saveWithUI(t *testing.T, f *fixture, title string) {
 }
 
 // TestSaveFromShortcut_OpensTheDialogOnlyWithChanges: Ctrl+S opens the Save
-// dialog when the Draft moved since its last Commit, nothing otherwise
+// dialog when the Draft moved since its last saved state, nothing otherwise
 // (task 72_7; ADR 0021).
 func TestSaveFromShortcut_OpensTheDialogOnlyWithChanges(t *testing.T) {
 	f, _ := selected(t)
@@ -49,10 +49,10 @@ func TestSaveFromShortcut_OpensTheDialogOnlyWithChanges(t *testing.T) {
 	}
 }
 
-// TestSaveCommit_ConflictRereadsTheDraft: another tab edits the Draft before
+// TestSaveSavedState_ConflictRereadsTheDraft: another tab edits the Draft before
 // this one saves: the 409 is a toast, and the Draft, the stack and the history
 // are read again so the next Save states the server's Version (task 72_7).
-func TestSaveCommit_ConflictRereadsTheDraft(t *testing.T) {
+func TestSaveSavedState_ConflictRereadsTheDraft(t *testing.T) {
 	f, id := selected(t)
 	f.run()
 	wt := f.widgetType(id)
@@ -64,7 +64,7 @@ func TestSaveCommit_ConflictRereadsTheDraft(t *testing.T) {
 	}
 
 	f.l.saveAuthor, f.l.saveTitle = "Ada", "Stale save"
-	f.l.saveCommit()
+	f.l.saveSavedState()
 	f.run()
 	if got := f.oneToast(); got.Status != http.StatusConflict {
 		t.Fatalf("the toast %+v: want the server's 409", got)
@@ -75,7 +75,7 @@ func TestSaveCommit_ConflictRereadsTheDraft(t *testing.T) {
 
 	// The next Save starts from the Version the conflict left.
 	f.l.saveAuthor, f.l.saveTitle = "Ada", "After the conflict"
-	f.l.saveCommit()
+	f.l.saveSavedState()
 	f.run()
 	if got := f.oneToast(); !strings.Contains(got.Title, "saved") {
 		t.Fatalf("the second Save: %+v", got)
@@ -192,7 +192,7 @@ func TestLibraryState_ListsTheStates(t *testing.T) {
 	}
 }
 
-// TestServerEvents_AnotherLibraryLeavesTheSelectedAlone: a Commit of another
+// TestServerEvents_AnotherLibraryLeavesTheSelectedAlone: a saved state of another
 // library is not the selected one's business (task 72_7).
 func TestServerEvents_AnotherLibraryLeavesTheSelectedAlone(t *testing.T) {
 	url, api := newServer(t)
@@ -202,14 +202,14 @@ func TestServerEvents_AnotherLibraryLeavesTheSelectedAlone(t *testing.T) {
 	}
 	f := mount(t, url, api)
 	f.run()
-	f.l.commits = []apiv0.SavedStateResponse{{Number: 99}}
+	f.l.savedStates = []apiv0.SavedStateResponse{{Number: 99}}
 
 	for _, ev := range []apiv0.Event{
 		{Type: apiv0.EventSavedStateCreated, ID: other.ID.String(), SavedState: 7},
 	} {
 		f.event(ev)
-		if len(f.l.commits) != 1 || f.l.commits[0].Number != 99 {
-			t.Fatalf("%s of another library reloaded the history: %+v", ev.Type, f.l.commits)
+		if len(f.l.savedStates) != 1 || f.l.savedStates[0].Number != 99 {
+			t.Fatalf("%s of another library reloaded the history: %+v", ev.Type, f.l.savedStates)
 		}
 	}
 }
@@ -220,11 +220,11 @@ func TestServerEvents_AnotherLibraryLeavesTheSelectedAlone(t *testing.T) {
 func TestServerEvents_ProjectResyncLeavesTheLibraryAlone(t *testing.T) {
 	f, _ := selected(t)
 	f.run()
-	f.l.commits = []apiv0.SavedStateResponse{{Number: 99}}
+	f.l.savedStates = []apiv0.SavedStateResponse{{Number: 99}}
 
 	f.event(apiv0.Event{Type: eventlog.EventProjectResync})
-	if len(f.l.commits) != 1 || f.l.commits[0].Number != 99 {
-		t.Errorf("a project resync reloaded the history: %+v", f.l.commits)
+	if len(f.l.savedStates) != 1 || f.l.savedStates[0].Number != 99 {
+		t.Errorf("a project resync reloaded the history: %+v", f.l.savedStates)
 	}
 }
 
@@ -240,7 +240,7 @@ func TestDiscard_AnotherTabsDiscardClearsTheIndicator(t *testing.T) {
 	f.l.loadUnsavedChanges(f.l.compoCtx)
 	f.run()
 	if !f.l.hasUnsavedChanges() {
-		t.Fatal("the change after the Commit is not unsaved")
+		t.Fatal("the change after the saved state is not unsaved")
 	}
 
 	if _, err := f.api.Discard(context.Background()); err != nil {
@@ -254,7 +254,7 @@ func TestDiscard_AnotherTabsDiscardClearsTheIndicator(t *testing.T) {
 	if f.l.hasUnsavedChanges() {
 		t.Errorf("the indicator stays after another tab's Discard")
 	}
-	if html := app.HTMLString(app.Div().Body(f.l.renderCommitBar()...)); strings.Contains(html, "data-commit-unsaved") {
+	if html := app.HTMLString(app.Div().Body(f.l.renderSavedStateBar()...)); strings.Contains(html, "data-saved-state-unsaved") {
 		t.Errorf("the header still marks unsaved changes: %s", html)
 	}
 }

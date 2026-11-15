@@ -48,7 +48,7 @@ func (p *Project) handleServerEvents(ctx app.Context) {
 			// task 85_5). A write of the Draft changes neither.
 			p.loadDeploy(ctx)
 			if p.deployDialog {
-				p.loadDeployCommits(ctx)
+				p.loadDeploySavedStates(ctx)
 			}
 			if p.deploymentsDialog {
 				p.loadDeployments(ctx)
@@ -76,10 +76,10 @@ func (p *Project) handleServerEvents(ctx app.Context) {
 			p.loadTags(ctx)
 		}
 		if targets.SavedStates {
-			p.loadCommits(ctx)
+			p.loadSavedStates(ctx)
 			p.loadUnsavedChanges(ctx) // a Save makes the Draft its saved state's content
 			if p.deployDialog {
-				p.loadDeployCommits(ctx) // the window lists the saved states too
+				p.loadDeploySavedStates(ctx) // the window lists the saved states too
 			}
 		}
 		if eventlog.IsLabelEvent(ev.Type) {

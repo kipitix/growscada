@@ -11,13 +11,13 @@ import (
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 )
 
-// TestSaveCommit_HistoryRowAndIndicator: Save fixes the Draft as Commit 1, the
+// TestSaveSavedState_HistoryRowAndIndicator: Save fixes the Draft as saved state 1, the
 // history shows it and the unsaved-changes indicator goes off (task 72_2;
 // ADR 0021).
-func TestSaveCommit_HistoryRowAndIndicator(t *testing.T) {
+func TestSaveSavedState_HistoryRowAndIndicator(t *testing.T) {
 	f := startProject(t)
 	f.run()
-	if !f.p.commitsLoaded {
+	if !f.p.savedStatesLoaded {
 		t.Fatal("the history was not loaded")
 	}
 	// A Draft nothing was written to has no unsaved changes and no badge
@@ -28,26 +28,26 @@ func TestSaveCommit_HistoryRowAndIndicator(t *testing.T) {
 	f.p.createScene(f.p.compoCtx)
 	f.run()
 	if !f.p.hasUnsavedChanges() {
-		t.Fatalf("the change after the Commit is not unsaved")
+		t.Fatalf("the change after the saved state is not unsaved")
 	}
-	if html := app.HTMLString(f.p.Render()); !strings.Contains(html, `data-commit-unsaved`) {
+	if html := app.HTMLString(f.p.Render()); !strings.Contains(html, `data-saved-state-unsaved`) {
 		t.Errorf("the header does not mark unsaved changes: %s", html)
 	}
 
 	f.p.openSaveDialog(f.p.compoCtx)
 	f.p.saveAuthor = "Ada"
 	f.p.saveTitle = "First save"
-	f.p.saveCommit(f.p.compoCtx)
+	f.p.saveSavedState(f.p.compoCtx)
 	f.run()
 
 	f.e.TakeToasts() // the Save's own confirmation
-	if len(f.p.commits) != 1 || f.p.commits[0].Number != 1 || f.p.commits[0].Author != "Ada" {
-		t.Fatalf("the history: %+v", f.p.commits)
+	if len(f.p.savedStates) != 1 || f.p.savedStates[0].Number != 1 || f.p.savedStates[0].Author != "Ada" {
+		t.Fatalf("the history: %+v", f.p.savedStates)
 	}
 	if f.p.hasUnsavedChanges() {
 		t.Errorf("the Draft still reports unsaved changes after a Save")
 	}
-	if html := app.HTMLString(f.p.Render()); !strings.Contains(html, `data-commit-saved`) {
+	if html := app.HTMLString(f.p.Render()); !strings.Contains(html, `data-saved-state-saved`) {
 		t.Errorf("the header does not mark the Draft saved: %s", html)
 	}
 
@@ -67,20 +67,20 @@ func TestSaveCommit_HistoryRowAndIndicator(t *testing.T) {
 	}
 }
 
-// TestSaveCommit_SuccessAndNothingToSave: a Save shows its toast, the shortcut
+// TestSaveSavedState_SuccessAndNothingToSave: a Save shows its toast, the shortcut
 // opens the dialog only while the Draft has changes, and a Save of an unchanged
 // Draft is the server's 409 (task 72_6; ADR 0021).
-func TestSaveCommit_SuccessAndNothingToSave(t *testing.T) {
+func TestSaveSavedState_SuccessAndNothingToSave(t *testing.T) {
 	f := startProject(t)
 	f.run()
 	f.p.saveAuthor = "Ada"
 	f.p.saveTitle = "First save"
-	f.p.saveCommit(f.p.compoCtx)
+	f.p.saveSavedState(f.p.compoCtx)
 	f.run()
 	if got := f.oneToast(); !strings.Contains(got.Title, "Saved state 1 saved") {
 		t.Errorf("the Save showed %+v, want its confirmation", got)
 	}
-	if html := app.HTMLString(f.p.Render()); !strings.Contains(html, `data-commit-saved`) {
+	if html := app.HTMLString(f.p.Render()); !strings.Contains(html, `data-saved-state-saved`) {
 		t.Errorf("the header does not mark the Draft saved: %s", html)
 	}
 
@@ -98,7 +98,7 @@ func TestSaveCommit_SuccessAndNothingToSave(t *testing.T) {
 
 	// A Save forced anyway is the server's refusal.
 	f.p.openSaveDialog(f.p.compoCtx)
-	f.p.saveCommit(f.p.compoCtx)
+	f.p.saveSavedState(f.p.compoCtx)
 	f.run()
 	if got := f.oneToast(); got.Status != http.StatusConflict {
 		t.Errorf("a Save of an unchanged Draft: toast %+v, want a 409", got)
@@ -112,7 +112,7 @@ func TestSaveShortcut_WithChangesOpensTheDialog(t *testing.T) {
 	f.run()
 	f.p.saveAuthor = "Ada"
 	f.p.saveTitle = "First save"
-	f.p.saveCommit(f.p.compoCtx)
+	f.p.saveSavedState(f.p.compoCtx)
 	f.run()
 	f.e.TakeToasts() // the Save's own confirmation
 	f.p.saveDialog = false
@@ -143,10 +143,10 @@ func TestAuthorBar_ShowsTheStoredName(t *testing.T) {
 	}
 }
 
-// TestSaveCommit_ShortcutsWaitForTheDialogs: the Save, History and Deploy
+// TestSaveSavedState_ShortcutsWaitForTheDialogs: the Save, History and Deploy
 // dialogs of the mode hold the Draft's shortcuts, like its other dialogs
 // (task 72_2, task 85_5; ADR 0021).
-func TestSaveCommit_ShortcutsWaitForTheDialogs(t *testing.T) {
+func TestSaveSavedState_ShortcutsWaitForTheDialogs(t *testing.T) {
 	f := startProject(t)
 	f.run()
 	if !f.p.keyActionAllowed() {
@@ -166,15 +166,15 @@ func TestSaveCommit_ShortcutsWaitForTheDialogs(t *testing.T) {
 	}
 }
 
-// TestSaveCommit_ConflictRereadsAndRename: a Save of a stale Version is a
-// conflict that rereads the Draft, and a Commit's title is renamed in place
+// TestSaveSavedState_ConflictRereadsAndRename: a Save of a stale Version is a
+// conflict that rereads the Draft, and a saved state's title is renamed in place
 // (task 72_2; ADR 0021).
-func TestSaveCommit_ConflictRereadsAndRename(t *testing.T) {
+func TestSaveSavedState_ConflictRereadsAndRename(t *testing.T) {
 	f := startProject(t)
 	f.run()
 	f.p.saveAuthor = "Ada"
 	f.p.saveTitle = "First save"
-	f.p.saveCommit(f.p.compoCtx)
+	f.p.saveSavedState(f.p.compoCtx)
 	f.run()
 	f.e.TakeToasts() // the Save's own confirmation
 
@@ -187,22 +187,22 @@ func TestSaveCommit_ConflictRereadsAndRename(t *testing.T) {
 	// Save state 0, which the server refuses as stale.
 	f.p.forgetDraftVersion()
 	f.p.saveTitle = "Stale save"
-	f.p.saveCommit(f.p.compoCtx)
+	f.p.saveSavedState(f.p.compoCtx)
 	f.run()
 
 	if got := f.oneToast(); got.Status != 409 {
 		t.Fatalf("a stale Save: toast %+v, want a 409", got)
 	}
-	if len(f.p.commits) == 0 || f.p.draftVersion() <= f.p.commits[0].DraftVersion {
-		t.Errorf("the conflict did not reread the Draft: version %d, last commit %d",
-			f.p.draftVersion(), f.p.commits[0].DraftVersion)
+	if len(f.p.savedStates) == 0 || f.p.draftVersion() <= f.p.savedStates[0].DraftVersion {
+		t.Errorf("the conflict did not reread the Draft: version %d, last saved state %d",
+			f.p.draftVersion(), f.p.savedStates[0].DraftVersion)
 	}
 	f.p.saveDialog = false
 
 	f.p.renameSavedState(f.p.compoCtx, 1, "Before the demo")
 	f.run()
 	f.noToasts()
-	if len(f.p.commits) != 1 || f.p.commits[0].Title != "Before the demo" {
-		t.Errorf("the renamed history: %+v", f.p.commits)
+	if len(f.p.savedStates) != 1 || f.p.savedStates[0].Title != "Before the demo" {
+		t.Errorf("the renamed history: %+v", f.p.savedStates)
 	}
 }

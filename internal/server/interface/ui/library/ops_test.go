@@ -209,14 +209,14 @@ func TestDeleteItem_LastType_KeepsTheDraftVersion(t *testing.T) {
 	f.run()
 	f.noToasts()
 
-	if err := saveAndCommit(context.Background(), f.api.LibraryClient); err != nil {
+	if err := saveSavedState(context.Background(), f.api.LibraryClient); err != nil {
 		t.Fatalf("save of the emptied Draft at the known version: %v", err)
 	}
 }
 
-// saveAndCommit saves the library's Draft as a Commit, at the Version the
-// server states. A Draft already at its last Commit keeps that one.
-func saveAndCommit(ctx context.Context, lib *apiclient.LibraryClient) error {
+// saveSavedState saves the library's Draft as a saved state, at the Version the
+// server states. A Draft already at its last saved state keeps that one.
+func saveSavedState(ctx context.Context, lib *apiclient.LibraryClient) error {
 	state, err := lib.DraftState(ctx)
 	if err != nil {
 		return err
@@ -232,11 +232,11 @@ func saveAndCommit(ctx context.Context, lib *apiclient.LibraryClient) error {
 // the Save changes.
 func saveNow(t *testing.T, f *fixture) {
 	t.Helper()
-	if err := saveAndCommit(context.Background(), f.api.LibraryClient); err != nil {
+	if err := saveSavedState(context.Background(), f.api.LibraryClient); err != nil {
 		t.Fatalf("save: %v", err)
 	}
 	f.l.loadLibraries(f.l.compoCtx)
-	f.l.loadCommits(f.l.compoCtx)
+	f.l.loadSavedStates(f.l.compoCtx)
 	f.l.loadDraftState(f.l.compoCtx)
 	f.run()
 	f.noToasts()
@@ -299,7 +299,7 @@ func TestLibraryGone_AnyReadOfTheSelectedLibraryFiresTheAction(t *testing.T) {
 		{"widget types", func(f *fixture) { f.l.loadList(f.l.compoCtx) }},
 		{"draft state", func(f *fixture) { f.l.loadDraftState(f.l.compoCtx) }},
 		{"draft changes", func(f *fixture) { f.l.loadDraftChanges(f.l.compoCtx) }},
-		{"commits", func(f *fixture) { f.l.loadCommits(f.l.compoCtx) }},
+		{"saved states", func(f *fixture) { f.l.loadSavedStates(f.l.compoCtx) }},
 	}
 	for _, read := range reads {
 		t.Run(read.name, func(t *testing.T) {

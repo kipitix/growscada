@@ -13,7 +13,7 @@ import (
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 )
 
-// deployDraft saves the Draft as a Commit and deploys it: a Deploy takes a
+// deployDraft saves the Draft as a saved state and deploys it: a Deploy takes a
 // saved state since task 85_4.
 func deployDraft(t *testing.T, api *testAPI) apiv0.DeployResponse {
 	t.Helper()
@@ -22,11 +22,11 @@ func deployDraft(t *testing.T, api *testAPI) apiv0.DeployResponse {
 	if err != nil {
 		t.Fatalf("draft state: %v", err)
 	}
-	commit, err := api.SaveSavedState(ctx, apiv0.CreateSavedStateRequest{Version: state.Version, Title: "Save", Author: "Ada"})
+	savedState, err := api.SaveSavedState(ctx, apiv0.CreateSavedStateRequest{Version: state.Version, Title: "Save", Author: "Ada"})
 	if err != nil {
-		t.Fatalf("save commit: %v", err)
+		t.Fatalf("save saved state: %v", err)
 	}
-	deployed, err := api.DeploySavedState(ctx, commit.Number)
+	deployed, err := api.DeploySavedState(ctx, savedState.Number)
 	if err != nil {
 		t.Fatalf("deploy saved state: %v", err)
 	}
@@ -70,7 +70,7 @@ func TestDeployWindow_DeploysASavedStateAndMovesTheMark(t *testing.T) {
 	}
 	if _, err := f.api.SaveSavedState(context.Background(), apiv0.CreateSavedStateRequest{
 		Version: state.Version, Title: "Second save", Author: "Ada"}); err != nil {
-		t.Fatalf("save commit: %v", err)
+		t.Fatalf("save saved state: %v", err)
 	}
 
 	f.p.openDeployDialog(f.p.compoCtx)
@@ -108,8 +108,8 @@ func TestDeployWindow_DeploymentWithoutSavedState(t *testing.T) {
 	f.p.deployed = true
 	f.p.deploymentLoaded = true
 	f.p.deployment = apiv0.DeploymentResponse{Number: 4, DeployedAt: "2026-11-04T10:00:00Z"}
-	f.p.deployCommits = []apiv0.SavedStateResponse{{Number: 1, Title: "First"}}
-	f.p.deployCommitsLoaded = true
+	f.p.deploySavedStates = []apiv0.SavedStateResponse{{Number: 1, Title: "First"}}
+	f.p.deploySavedStatesLoaded = true
 	f.p.deployDialog = true
 
 	html := app.HTMLString(f.p.Render())
@@ -154,7 +154,7 @@ func TestLoadSavedState_ResetsToTheLastSavedState(t *testing.T) {
 	f.noToasts()
 	f.p.saveAuthor = "Ada"
 	f.p.saveTitle = "First save"
-	f.p.saveCommit(f.p.compoCtx)
+	f.p.saveSavedState(f.p.compoCtx)
 	f.run()
 	f.e.TakeToasts() // the Save's own confirmation
 
@@ -209,12 +209,12 @@ func TestLoadSavedState_RestoresTheContentShown(t *testing.T) {
 	f.run()
 	f.noToasts()
 	f.p.saveAuthor, f.p.saveTitle = "Ada", "First save"
-	f.p.saveCommit(f.p.compoCtx)
+	f.p.saveSavedState(f.p.compoCtx)
 	f.run()
 	f.e.TakeToasts() // the Save's own confirmation
 
 	// Another tab renames the Scene and drops its Widget: the Draft this tab
-	// shows no longer matches its Commit.
+	// shows no longer matches its last saved state.
 	sc := f.scene(sceneID)
 	if _, err := f.api.UpdateScene(context.Background(), sceneID, apiv0.UpdateSceneRequest{
 		Name: "Second", Width: sc.Width, Height: sc.Height, Version: sc.Version,
@@ -237,7 +237,7 @@ func TestLoadSavedState_RestoresTheContentShown(t *testing.T) {
 		t.Errorf("the load confirmation: %+v", got)
 	}
 	if sc := f.scene(sceneID); sc.Name != "First" {
-		t.Fatalf("server scene after the Discard: %+v, want the Commit's", sc)
+		t.Fatalf("server scene after the Discard: %+v, want the saved state's", sc)
 	}
 	if len(f.p.scenes) != 1 || f.p.scenes[0].Name != "First" {
 		t.Errorf("the shown scenes after the Discard: %+v, want the restored one", f.p.scenes)
@@ -247,7 +247,7 @@ func TestLoadSavedState_RestoresTheContentShown(t *testing.T) {
 		t.Fatalf("server widgets: %v", err)
 	}
 	if len(widgets) != 1 {
-		t.Fatalf("server widgets after the Discard: %+v, want the Commit's one", widgets)
+		t.Fatalf("server widgets after the Discard: %+v, want the saved state's one", widgets)
 	}
 	if len(f.p.widgets) != 1 {
 		t.Errorf("the shown widgets after the Discard: %+v, want the restored one", f.p.widgets)
@@ -266,7 +266,7 @@ func TestLoadSavedState_LaterSceneListFollowsTheVersion(t *testing.T) {
 	f.run()
 	f.noToasts()
 	f.p.saveAuthor, f.p.saveTitle = "Ada", "First save"
-	f.p.saveCommit(f.p.compoCtx)
+	f.p.saveSavedState(f.p.compoCtx)
 	f.run()
 	f.e.TakeToasts() // the Save's own confirmation
 
@@ -355,14 +355,14 @@ func TestDiscard_AnotherTabsDiscardClearsTheBadge(t *testing.T) {
 	f := startProject(t)
 	f.run()
 	f.p.saveAuthor, f.p.saveTitle = "Ada", "First save"
-	f.p.saveCommit(f.p.compoCtx)
+	f.p.saveSavedState(f.p.compoCtx)
 	f.run()
 	f.e.TakeToasts() // the Save's own confirmation
 
 	f.p.createScene(f.p.compoCtx)
 	f.run()
 	if !f.p.hasUnsavedChanges() {
-		t.Fatal("the change after the Commit is not unsaved")
+		t.Fatal("the change after the saved state is not unsaved")
 	}
 
 	if _, err := f.api.Discard(context.Background()); err != nil {
@@ -373,7 +373,7 @@ func TestDiscard_AnotherTabsDiscardClearsTheBadge(t *testing.T) {
 	if f.p.hasUnsavedChanges() {
 		t.Errorf("the badge stays after another tab's Discard")
 	}
-	if html := app.HTMLString(f.p.Render()); strings.Contains(html, "data-commit-unsaved") {
+	if html := app.HTMLString(f.p.Render()); strings.Contains(html, "data-saved-state-unsaved") {
 		t.Errorf("the header still marks unsaved changes: %s", html)
 	}
 }
