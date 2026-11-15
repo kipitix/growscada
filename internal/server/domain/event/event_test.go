@@ -114,6 +114,28 @@ func TestNewEventType_UnrecognisedString_ReturnsErrorAndZeroValue(t *testing.T) 
 	}
 }
 
+// TestNewEventType_RetiredNames_ReadAsTheCurrentType: a row stored before task
+// 88_2 carries the name the saved state events had then. It decodes as the
+// type that name means now, which publishes under the current name alone
+// (ADR 0026).
+func TestNewEventType_RetiredNames_ReadAsTheCurrentType(t *testing.T) {
+	for retired, want := range map[string]event.EventType{
+		"commit_created":       event.EventTypeSavedStateCreated,
+		"commit_title_updated": event.EventTypeSavedStateTitleUpdated,
+	} {
+		got, err := event.NewEventType(retired)
+		if err != nil {
+			t.Fatalf("NewEventType(%q): %v", retired, err)
+		}
+		if got != want {
+			t.Errorf("NewEventType(%q) = %v, want %v", retired, got, want)
+		}
+		if got.String() == retired {
+			t.Errorf("%v still answers its retired name %q", got, retired)
+		}
+	}
+}
+
 func TestEventType_IsValid(t *testing.T) {
 	if !event.EventTypeTagCreated.IsValid() {
 		t.Error("expected EventTypeTagCreated to be valid")

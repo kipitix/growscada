@@ -121,6 +121,17 @@ var eventTypeNames = []struct {
 	{EventTypeLabelUnassigned, "label_unassigned"},
 }
 
+// retiredEventTypeNames are the names a type had before it was renamed, so a
+// row stored then still decodes (task 88_2; ADR 0026). They are read alone:
+// nothing writes or publishes them, and String never answers one.
+var retiredEventTypeNames = []struct {
+	eventType EventType
+	name      string
+}{
+	{EventTypeSavedStateCreated, "commit_created"},
+	{EventTypeSavedStateTitleUpdated, "commit_title_updated"},
+}
+
 // AllEventTypes returns every known EventType.
 func AllEventTypes() []EventType {
 	types := make([]EventType, len(eventTypeNames))
@@ -131,9 +142,16 @@ func AllEventTypes() []EventType {
 }
 
 // NewEventType creates a new EventType from a string representation.
-// Returns an error if the string does not match any known event type.
+// Returns an error if the string does not match any known event type. A name
+// a type had before a rename is read as the type it names now: a stored row
+// written then still decodes, while nothing writes or publishes the old name.
 func NewEventType(s string) (EventType, error) {
 	for _, entry := range eventTypeNames {
+		if entry.name == s {
+			return entry.eventType, nil
+		}
+	}
+	for _, entry := range retiredEventTypeNames {
 		if entry.name == s {
 			return entry.eventType, nil
 		}
