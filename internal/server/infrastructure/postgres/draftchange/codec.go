@@ -69,6 +69,11 @@ func Decode(data []byte) ([]draft.Snapshot, error) {
 }
 
 func decodeState(kind draft.Kind, data []byte) (draft.State, error) {
+	// An import is read on its own: a change written before task 88_2 names
+	// its saved state "commit", and the stack it sits in is read, not guessed.
+	if kind == draft.KindLibraryImport {
+		return decodeLibraryImportState(data)
+	}
 	var state draft.State
 	switch kind {
 	case draft.KindTag:
@@ -83,8 +88,6 @@ func decodeState(kind draft.Kind, data []byte) (draft.State, error) {
 		state = &draft.EnvironmentState{}
 	case draft.KindEnvironmentDevice:
 		state = &draft.EnvironmentDeviceState{}
-	case draft.KindLibraryImport:
-		state = &draft.LibraryImportState{}
 	case draft.KindWidgetType:
 		state = &draft.WidgetTypeState{}
 	default:
@@ -107,10 +110,29 @@ func decodeState(kind draft.Kind, data []byte) (draft.State, error) {
 		return *typed, nil
 	case *draft.EnvironmentDeviceState:
 		return *typed, nil
-	case *draft.LibraryImportState:
-		return *typed, nil
 	case *draft.WidgetTypeState:
 		return *typed, nil
 	}
 	return nil, fmt.Errorf("unknown state for kind %q", kind)
+}
+
+// decodeLibraryImportState reads the state of a Library Import, accepting the
+// name its saved state number had before task 88_2: a member "commit" is read
+// as SavedState, so a change written then still decodes and the undo of it
+// restores the import it named. A state written now carries only
+// "saved_state".
+func decodeLibraryImportState(data []byte) (draft.State, error) {
+	var doc struct {
+		LibraryID  uuid.UUID `json:"library_id"`
+		SavedState int       `json:"saved_state"`
+		Legacy     int       `json:"commit"`
+	}
+	if err := json.Unmarshal(data, &doc); err != nil {
+		return nil, err
+	}
+	number := doc.SavedState
+	if number == 0 {
+		number = doc.Legacy
+	}
+	return draft.LibraryImportState{LibraryID: doc.LibraryID, SavedState: number}, nil
 }

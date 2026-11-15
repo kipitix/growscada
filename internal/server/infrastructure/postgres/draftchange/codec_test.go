@@ -64,3 +64,27 @@ func TestDecode_UnknownFormat_IsRefused(t *testing.T) {
 		}
 	}
 }
+
+// TestDecode_LibraryImportWrittenBeforeTheRename: a change written before
+// task 88_2 names the saved state of an import "commit". The stack keeps
+// reading it, so its undo restores the import the change made (ADR 0017).
+func TestDecode_LibraryImportWrittenBeforeTheRename(t *testing.T) {
+	libraryID := uuid.New()
+	raw := `{"format": 1, "entities": [{"kind": "library_import", "id": "` + libraryID.String() +
+		`", "state": {"library_id": "` + libraryID.String() + `", "commit": 3}}]}`
+
+	decoded, err := Decode([]byte(raw))
+	if err != nil {
+		t.Fatalf("Decode: %v", err)
+	}
+	if len(decoded) != 1 {
+		t.Fatalf("decoded %d snapshots, want 1", len(decoded))
+	}
+	state, ok := decoded[0].State.(draft.LibraryImportState)
+	if !ok {
+		t.Fatalf("decoded %T, want a draft.LibraryImportState", decoded[0].State)
+	}
+	if state.SavedState != 3 || state.LibraryID != libraryID {
+		t.Errorf("the import read as %+v, want library %s saved state 3", state, libraryID)
+	}
+}
