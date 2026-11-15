@@ -1,5 +1,18 @@
 # growscada [CHANGELOG](https://keepachangelog.com/en/1.1.0/)
 
+## [0.0.103] - 2026-11-15
+
+### Changed
+
+- **Домен, приложение и база говорят saved state вместо Commit** (задача 88_1; ADR 0026 отменяет решение задачи 84 оставить `Commit` в идентификаторах)
+  - `domain/draft`: `Commit`/`CommitContent`/`CommitTitle`/`CommitNumber`/`CommitFilter`/`CommitEvent` → `SavedState`/`SavedStateContent`/`SavedStateTitle`/`SavedStateNumber`/`SavedStateFilter`/`SavedStateEvent`, `ErrCommitNotFound` → `ErrSavedStateNotFound`; файлы `commit*.go` → `saved_state*.go`; репозиторий — `SaveSavedState`, `RenameSavedState`, `FindSavedStates`, `FindLastSavedState`, `FindSavedState`, `Replace(cleanSavedState)`, `loader.LibrarySavedState`
+  - `domain/libraryimport`: `Commit`/`NewCommit` → `SavedState`/`NewSavedState`, `LibraryImport.CommitID`/`CommitNumber` → `SavedStateID`/`SavedStateNumber`; `domain/label`: `Assignment.CommitID`/`CommitNumber` → `SavedStateID`/`SavedStateNumber`
+  - application: `CommitService` → `SavedStateService` (`saved_state_application_service.go`), `appdto.Commit`/`CommitCounts` → `appdto.SavedState`/`SavedStateCounts`, `MissingCommitError` → `MissingSavedStateError`, `RuntimeNode.DeployCommit` → `DeploySavedState`, поля DTO (`LatestSavedState`, `SavedStateNumber`, `SavedState`), тексты ошибок («saved state number must be positive»), типы событий outbox и кодек
+  - миграции `engineering/20261116000000_saved_states` и `runtime/20261116000000_saved_states`: `commits` → `saved_states`, `commit_labels` → `saved_state_labels`, `commit_library_imports` → `saved_state_library_imports`, колонки `commit_id`/`commit_number`/`last_commit_number`/`last_commit_draft_version` → `saved_state_*`, имена constraints и indexes, на которые ссылается код; Down возвращает старые имена поверх тех же строк; сид `test_data` обновлён
+  - не менялись намеренно: JSONB-документы (`commits.content`, `library_imports[].commit`, `commit_number` в Journal, Checkpoint и пейлоаде outbox), имена событий `commit_created`/`commit_title_updated`, маршруты `/commits…`, JSON-поля API и `contract/` (это 88_2), старые миграции и их имена
+  - Поведение не менялось: только имена; миграция проверена тестом на данных (`TestMigrationSavedStates_RenamesCommitsAndColumns`)
+  - Проверки: `make build`, `make test`, `make bruno_test` (219 + 6 запросов); обход PWA — Project (Save, Deploy, Import libraries), Library (Saved states, label, Load), Operation; консоль без ошибок приложения
+
 ## [0.0.102] - 2026-11-15
 
 ### Changed
