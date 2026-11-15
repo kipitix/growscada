@@ -48,7 +48,8 @@ so the breaks below are allowed and the CHANGELOG lists them as breaks.
 - **An old client is told where to go, not left with a 404.** Every method of
   `/commits…`, its `load`, `deploy`, `projectfile` and `labels`, answers
   `410 Gone` with `application/problem+json` naming the saved-state route; the
-  stubs are removed together with `/api/v1`.
+  stubs are removed at API 1.0, where `/api/v1` becomes the real prefix
+  (ADR 0005).
 - **An old file is refused, not half-read.** A ProjectFile whose
   `library_imports[]` carries `commit` instead of `saved_state` is `400` with
   `file_issues`: the strict decoder names the unknown field, and the validator

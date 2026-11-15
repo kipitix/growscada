@@ -15,7 +15,7 @@
 
 ### Breaking
 
-- **Маршруты `/commits…`** — все методы, `load`, `deploy`, `projectfile` и `labels` — отвечают `410 Gone` с указанием нового пути `/saved-states…`; заглушки удаляются вместе с `/api/v1`. Старые события `commit_created`/`commit_title_updated` больше не публикуются
+- **Маршруты `/commits…`** — все методы, `load`, `deploy`, `projectfile` и `labels` — отвечают `410 Gone` с указанием нового пути `/saved-states…`; заглушки удаляются в API 1.0, где `/api/v1` становится настоящим префиксом (ADR 0005). Старые события `commit_created`/`commit_title_updated` больше не публикуются
 - **Внешние ProjectFile** со старым `library_imports[].commit` отклоняются 400 с `file_issues`: строгий декодер называет неизвестное поле, а не импортирует сохранённое состояние с нулевым номером; новый ключ — `saved_state`
 - **growctl**: команда `commits` и флаги `deploy --commit`/`label assign|unassign --commit` удалены без алиасов; скрипты переходят на `saved-states` и `--saved-state`
 - Миграции `engineering/20261116000000_saved_states`, `engineering/20261116000001_saved_state_documents`, `runtime/20261116000000_saved_states` и `runtime/20261116000001_saved_state_documents` переименовывают таблицы, колонки, constraints и indexes и переписывают JSONB-документы (`saved_states.content`, `deployments.config`, Journal, Checkpoint) с поднятием `schema_version`; Down возвращает старые имена поверх тех же строк. Journal-записи, Checkpoint'ы, строки стека DraftChange и очереди outbox, записанные до переименования, читаются кодеком по старым именам, поэтому история и undo не теряются
