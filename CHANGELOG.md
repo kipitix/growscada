@@ -1,5 +1,21 @@
 # growscada [CHANGELOG](https://keepachangelog.com/en/1.1.0/)
 
+## [0.0.102] - 2026-11-15
+
+### Changed
+
+- **Проза и имена больше не говорят «Release»** (задача 86)
+  - комментарии `application/project_cleanup_policy.go`, `application/library_application_service.go`, `application/deploy_application_service.go`, `interface/ui/project/{buttons,commits,project}.go`, `infrastructure/postgres/repositories/draft_repository_postgres.go`, `domain/library/library.go`, `domain/draft/repository.go` и `growctl/manifest.go` называют saved state; рассказ о «позднем upsert» из `Run` убран вместе с путём, которого нет
+  - `domain/draft/commit_content.go`: `releasedWidgetTypeDocument` → `widgetTypeCopyDocument`; `draft.Session.ReplaceWidgetTypes` и `library.RecreateWidgetType` принимают `copies`/`copy`
+  - JSON-поля сохранённых документов не менялись; `event_type.go` (номера 23, 39–41 не переиспользуются) и `runtime/journal_codec.go` (`EntryTypeRevision` — чтение старых записей) сохранили слово намеренно; `Release()` таймеров и потоков, `releaseTouch` и `releasePointerCapture` — не про Release домена
+  - `docs/architecture/application.md` больше не называет `UpsertTagDefinitions` среди методов `TagStateService`
+  - Поведение, маршруты, контракты, схемы, миграции и Bruno не менялись
+  - Проверки: `make build`, `make test`, `make bruno_test`; обход PWA — Library и Project, экран Saved states
+
+### Removed
+
+- **Мёртвый `TagStateService.UpsertTagDefinitions`** (задача 86; ADR 0011): метод и его реализация, `appdto.TagDefinition`/`NewTagDefinition`, тест невалидного определения и фейк `stateUpsertingAfterRemoval`. Определение Tag'а попадает в Runtime только с Deploy — единственный путь, которым появляется состояние; тест очистки Project теперь деплоит проект и проверяет, что состояния уходят вместе со строкой, а тесты `TagStateService` наполняют свой репозиторий через `tagstate.Repository.UpsertDefinitions`, как это делает Deploy. `UpsertDefinitions` самого репозитория остаётся
+
 ## [0.0.101] - 2026-11-15
 
 ### Changed
