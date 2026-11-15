@@ -196,6 +196,15 @@ func (r *Root) OnMount(ctx app.Context) {
 			r.entityGone(ModeLibrary, id)
 		}
 	})
+	// A read of the project Operation or History shows found it gone — the
+	// Player's 404 of the starting state, or any read of its content: the mode
+	// leaves it, so no stale name hangs in the navigation line and the next
+	// reload does not look for it again (task 89).
+	ctx.Handle(uiutil.ActionProjectGone, func(ctx app.Context, a app.Action) {
+		if id, ok := a.Value.(uuid.UUID); ok {
+			r.projectGoneOperation(id)
+		}
+	})
 	// A mode's history screen opens the Labels window through this action: the
 	// window is the header's one, and Root owns whether it is shown (task 85_3).
 	ctx.Handle(labels.ActionOpen, func(ctx app.Context, _ app.Action) {

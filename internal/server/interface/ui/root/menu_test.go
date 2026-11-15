@@ -385,3 +385,35 @@ func TestHeader_CarriesTheMenuAndNoTabs(t *testing.T) {
 		t.Errorf("the header still carries tabs: %s", html)
 	}
 }
+
+// TestProjectGone_LeavesOperationAndHistoryWithoutAProject: a read of the
+// project they show found it gone — the Player's 404 of the starting state
+// included — and the modes keep none: no stale name in the navigation line,
+// and the next reload does not look for it (task 89).
+func TestProjectGone_LeavesOperationAndHistoryWithoutAProject(t *testing.T) {
+	id := uuid.New()
+	s := menuSession(t, "http://127.0.0.1:0", map[string]string{
+		projectKey(ModeOperation): id.String(),
+		projectKey(ModeHistory):   id.String(),
+	})
+	for _, mode := range projectModes {
+		s.selected[mode], s.entityName[mode] = id, "Gone"
+	}
+
+	s.compoCtx.Dispatch(func(ctx app.Context) {
+		ctx.NewActionWithValue(uiutil.ActionProjectGone, id)
+	})
+	s.settle()
+
+	for _, mode := range projectModes {
+		if got := s.selected[mode]; got != uuid.Nil {
+			t.Errorf("%s still shows %v", mode, got)
+		}
+		if got := s.entityName[mode]; got != "" {
+			t.Errorf("%s still names %q", mode, got)
+		}
+		if got := uiutil.LoadID(s.probe.ctx, projectKey(mode)); got != uuid.Nil {
+			t.Errorf("%s still keeps %v", mode, got)
+		}
+	}
+}

@@ -13,5 +13,5 @@ func NoProject() app.UI {
 		Style("justify-content", "center").
 		Style("color", "var(--text-muted)").
 		Style("font-size", "14px").
-		Text("No project selected: create one or pick one above")
+		Text("No project selected: choose one in the main menu")
 }

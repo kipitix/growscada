@@ -48,6 +48,10 @@ var modeLabels = map[Mode]string{
 // modeOrder is the order the menu lists the modes in.
 var modeOrder = []Mode{ModeLibrary, ModeProject, ModeOperation, ModeHistory}
 
+// projectModes are the modes that only show a Project and have no selection
+// page of their own.
+var projectModes = []Mode{ModeOperation, ModeHistory}
+
 // modeLabel is the name of mode, "" for a mode the menu has no row for.
 func modeLabel(mode Mode) string { return modeLabels[mode] }
 
@@ -278,7 +282,7 @@ func (r *Root) storeMode() {
 // 89). A failed read says nothing — the modes' own reads report the server.
 func (r *Root) restoreProjects(ctx app.Context) {
 	kept := false
-	for _, mode := range []Mode{ModeOperation, ModeHistory} {
+	for _, mode := range projectModes {
 		if r.selected[mode] != uuid.Nil {
 			kept = true
 		}
@@ -291,7 +295,7 @@ func (r *Root) restoreProjects(ctx app.Context) {
 		for _, project := range list {
 			byID[project.ID] = project
 		}
-		for _, mode := range []Mode{ModeOperation, ModeHistory} {
+		for _, mode := range projectModes {
 			id := r.selected[mode]
 			if id == uuid.Nil {
 				continue
@@ -307,6 +311,23 @@ func (r *Root) restoreProjects(ctx app.Context) {
 	}, func(app.Context, error) {})
 }
 
+// projectGoneOperation drops the project a read found gone from Operation and
+// History: the project modes have no page to fall back to, so they keep none —
+// the navigation line names the mode alone until another project is chosen
+// (task 89).
+func (r *Root) projectGoneOperation(id uuid.UUID) {
+	for _, mode := range projectModes {
+		if r.selected[mode] != id {
+			continue
+		}
+		r.selectProject(mode, uuid.Nil)
+		uiutil.StoreID(r.compoCtx, projectKey(mode), uuid.Nil)
+	}
+	if r.mounted {
+		r.compoCtx.Update()
+	}
+}
+
 // handleProjectEvents follows the project Operation or History shows: renamed
 // elsewhere, it is renamed in the navigation line; deleted, the mode keeps no
 // project at all (task 89).
@@ -315,7 +336,7 @@ func (r *Root) handleProjectEvents(ctx app.Context, ev apiv0.Event) {
 		return
 	}
 	id := uiutil.ParseID(ev.ID)
-	for _, mode := range []Mode{ModeOperation, ModeHistory} {
+	for _, mode := range projectModes {
 		if id == uuid.Nil || r.selected[mode] != id {
 			continue
 		}
