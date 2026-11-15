@@ -1,5 +1,16 @@
 # growscada [CHANGELOG](https://keepachangelog.com/en/1.1.0/)
 
+## [0.0.107] - 2026-11-15
+
+### Changed
+
+- **Финальная проверка переименования Commit → saved state** (задача 88_5; ADR 0026)
+  - живых имён `Commit`/`Release`/`Revision`/`EditLock`/`Pin` в рабочем коде и документах нет: остались только транзакция БД и git (`tx.Commit`, `after commit`, `racing commits`), история формата (`EntryTypeRevision`, retired event types 23/39–41, кодеки `snapshot.go`, `draftchange` и `outbox` с `LegacySavedState`), имена старых миграций, замороженные схемы (api ≤ 0.42, project ≤ 0.3, record ≤ 0.6) и заглушки `410 Gone`
+  - тестовые имена тоже говорят saved state: локальные переменные и сообщения REST-тестов (`libraries_test.go`, `project_helpers_test.go`, `widgets_test.go`, `events_test.go`), поле `testServices.savedStates` и `TestRuntimeNode_DeploySavedState_…`; `version.Committed`/`IsCommitted` оставлены — там commit о записи в базу, а не о сохранённом состоянии
+  - старый клиент: `/commits…` (все методы, `load`, `deploy`, `projectfile` и `labels`) отвечает `410 application/problem+json` с новым путём `/saved-states…`; ProjectFile со старым `library_imports[].commit` — 400 `file_issues` (`unknown field "commit"`)
+  - миграция на данных: сид и база называют `engineering.saved_states`, `saved_state_labels`, `saved_state_library_imports` и `runtime.deployments.saved_state_number`; `GET …/library-imports` отдаёт `saved_state_number`, Deployment из сохранённого состояния работает
+  - Проверки: `make build`, `make test`, `make bruno_test` (235 + 6 запросов); `make schemas` не изменил ни одного файла; обход PWA — Library (Saved states, Load), Project (Save, History, Deploy a saved state, Deployments, Import libraries), Operation; консоль без ошибок приложения
+
 ## [0.0.106] - 2026-11-15
 
 Сводная запись цепочки 88_1–88_4: Commit → saved state. Подробности каждой
