@@ -6,7 +6,7 @@ Priority: 1
 
 Это спецификация цепочки; части — `88_1`…`88_5` (строка `Parts:` ниже, конвейер её пропускает). Каждая часть оставляет `make build` и `make test` зелёными и коммитится отдельно.
 
-Parts: 88_1, 88_2, 88_3, 88_4, 88_5
+Parts: 88_1_domain_saved_state, 88_2_contract_api_saved_state, 88_3_tools_ui_saved_state, 88_4_docs_saved_state, 88_5_final_check
 
 ## Терминология: таблица соответствия
 
