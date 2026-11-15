@@ -555,7 +555,7 @@ func (p *Project) renderImportSavedStateRow(lib apiv0.LibraryResponse, saved api
 		control = rowButton(label, "accent", true, title,
 			func(ctx app.Context) { p.changeImport(libraryID, savedState) },
 			app.EventScope("import-saved-state/"+libraryID.String()+"/"+number)).
-			Attr("data-import-saved-state", number)
+			Attr("data-import-saved-state-action", number)
 	}
 	return app.Div().
 		Attr("data-import-saved-state", number).

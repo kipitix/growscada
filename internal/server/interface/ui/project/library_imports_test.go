@@ -101,7 +101,7 @@ func TestImportWindow_ListsTheLibrariesAndTheirSavedStates(t *testing.T) {
 		`data-import-saved-states="` + libraryID.String() + `"`,
 		`data-import-saved-state="1"`,
 		"First save", "Ada", "1 widget types",
-		`data-import-saved-state="1"`,
+		`data-import-saved-state-action="1"`,
 	} {
 		if !strings.Contains(html, want) {
 			t.Errorf("the opened library does not show %q: %s", want, html)
