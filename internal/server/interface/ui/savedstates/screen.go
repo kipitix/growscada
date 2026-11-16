@@ -51,12 +51,15 @@ type Screen struct {
 	// a saved state may carry any number of them (task 85_3).
 	AllLabels []apiv0.LabelResponse
 
-	// CanSave reports whether the Draft has changes worth saving and Saving
-	// marks a Save in flight; the form at the top offers Save only then
-	// (task 91). OnSave fixes the Draft as a new saved state under the name
-	// the form holds.
+	// CanSave reports whether the Draft has changes worth saving, Saving marks
+	// a Save in flight, Busy a load or a Deploy of the Draft the form waits
+	// for, and Author the name a Save signs with — empty until the User name
+	// page sets one, and then no Save is made (task 90; task 91). OnSave fixes
+	// the Draft as a new saved state under the name the form holds.
 	CanSave bool
 	Saving  bool
+	Busy    bool
+	Author  string
 	OnSave  func(ctx app.Context, title string)
 
 	// OnLoad and OnRename act on the row they name. OnAssign places a label
@@ -97,9 +100,12 @@ func (s *Screen) Reset() { s.renaming, s.renameText, s.labelMenu, s.newTitle = 0
 func (s *Screen) StartNew(title string) { s.newTitle = title }
 
 // canSave reports whether the form may fix the Draft as a saved state: the
-// mode says the Draft has changes, no Save is in flight and a name is given.
+// mode says the Draft has changes, no Save or other write of the Draft is in
+// flight, a name is typed and the user name page has given an author — without
+// one a Save is refused, and no field of the screen could fix it (task 91).
 func (s *Screen) canSave() bool {
-	return s.CanSave && !s.Saving && strings.TrimSpace(s.newTitle) != ""
+	return s.CanSave && !s.Saving && !s.Busy &&
+		strings.TrimSpace(s.newTitle) != "" && strings.TrimSpace(s.Author) != ""
 }
 
 // save hands the name to the mode, which sends the Save: the screen keeps the
@@ -168,11 +174,65 @@ func (s *Screen) Render() app.UI {
 // Draft has changes (task 91).
 func (s *Screen) renderDraftRow() app.UI {
 	saveTitle := "Save the Draft as a saved state"
+	nameMissing := strings.TrimSpace(s.newTitle) == ""
+	authorMissing := strings.TrimSpace(s.Author) == ""
 	switch {
 	case s.Saving:
 		saveTitle = "The Draft is being saved"
+	case s.Busy:
+		saveTitle = "Wait for the load or the Deploy to finish"
 	case !s.CanSave:
 		saveTitle = "Nothing to save since the last save"
+	case nameMissing:
+		saveTitle = "Name the saved state first"
+	case authorMissing:
+		saveTitle = "Set the user name in Misc → User name first"
+	}
+	body := []app.UI{
+		app.Span().
+			Attr("data-draft-state-label", "true").
+			Style("font-size", "11px").
+			Style("font-weight", "600").
+			Style("width", "118px").
+			Style("flex-shrink", "0").
+			Text("Draft"),
+		app.Input().
+			Attr("data-save-title", "true").
+			Type("text").
+			Value(s.newTitle).
+			Placeholder("Name of the saved state").
+			Style("flex", "1").
+			Style("min-width", "160px").
+			Style("box-sizing", "border-box").
+			Style("padding", "3px 6px").
+			Style("font-size", "12px").
+			Style("border", "1px solid var(--border-input)").
+			Style("border-radius", "4px").
+			Style("background", "var(--input-bg)").
+			Style("color", "var(--text)").
+			OnInput(func(ctx app.Context, e app.Event) {
+				s.newTitle = ctx.JSSrc().Get("value").String()
+				ctx.Update()
+			}).
+			OnKeyDown(func(ctx app.Context, e app.Event) {
+				if e.Get("key").String() == "Enter" {
+					s.save(ctx)
+				}
+			}),
+		uiutil.IconButton(uiutil.IconSave(), "accent", s.canSave(), saveTitle,
+			uiutil.ButtonRow, func(ctx app.Context, e app.Event) { s.save(ctx) }).
+			Attr("data-save-confirm", "true"),
+	}
+	if authorMissing && s.CanSave {
+		// The author is the stored user name and the screen has no field for
+		// it: without this line a fresh browser presses a disabled floppy and
+		// learns nothing (task 90; task 91).
+		body = append(body, app.Span().
+			Attr("data-save-author-hint", "true").
+			Style("flex-basis", "100%").
+			Style("font-size", "11px").
+			Style("color", "var(--text-muted)").
+			Text("Set the user name in Misc → User name to save."))
 	}
 	return app.Div().
 		Attr("data-draft-state-row", "true").
@@ -182,41 +242,7 @@ func (s *Screen) renderDraftRow() app.UI {
 		Style("gap", "10px").
 		Style("padding", "6px 4px").
 		Style("border-bottom", "1px solid var(--border)").
-		Body(
-			app.Span().
-				Attr("data-draft-state-label", "true").
-				Style("font-size", "11px").
-				Style("font-weight", "600").
-				Style("width", "118px").
-				Style("flex-shrink", "0").
-				Text("Draft"),
-			app.Input().
-				Attr("data-save-title", "true").
-				Type("text").
-				Value(s.newTitle).
-				Placeholder("Name of the saved state").
-				Style("flex", "1").
-				Style("min-width", "160px").
-				Style("box-sizing", "border-box").
-				Style("padding", "3px 6px").
-				Style("font-size", "12px").
-				Style("border", "1px solid var(--border-input)").
-				Style("border-radius", "4px").
-				Style("background", "var(--input-bg)").
-				Style("color", "var(--text)").
-				OnInput(func(ctx app.Context, e app.Event) {
-					s.newTitle = ctx.JSSrc().Get("value").String()
-					ctx.Update()
-				}).
-				OnKeyDown(func(ctx app.Context, e app.Event) {
-					if e.Get("key").String() == "Enter" {
-						s.save(ctx)
-					}
-				}),
-			uiutil.IconButton(uiutil.IconSave(), "accent", s.canSave(), saveTitle,
-				uiutil.ButtonRow, func(ctx app.Context, e app.Event) { s.save(ctx) }).
-				Attr("data-save-confirm", "true"),
-		)
+		Body(body...)
 }
 
 // renderRow is one saved state: the time it was saved, its name and labels —

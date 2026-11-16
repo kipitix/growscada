@@ -21,8 +21,7 @@ func TestSavedStateLabels_AssignAndUnassign(t *testing.T) {
 	f := startProject(t)
 	f.run()
 	f.p.saveAuthor = "Ada"
-	f.p.saveTitle = "First save"
-	f.p.saveSavedState(f.p.compoCtx)
+	f.p.saveSavedState(f.p.compoCtx, "First save")
 	f.run()
 	f.e.TakeToasts() // the Save's own confirmation
 

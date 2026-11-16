@@ -52,8 +52,12 @@ func TestSavedStatesButton_TogglesTheEditor(t *testing.T) {
 	if !f.l.historyScreen {
 		t.Fatal("the saved-states button did not open the history")
 	}
-	if html := app.HTMLString(f.l.renderHeader()); !strings.Contains(html, `aria-label="Back to the Draft"`) {
-		t.Errorf("the button does not offer the way back while the history is open: %s", html)
+	html := app.HTMLString(f.l.renderHeader())
+	if !strings.Contains(html, `aria-label="Back to the Draft"`) {
+		t.Errorf("the panel does not offer the way back while the history is open: %s", html)
+	}
+	if !strings.Contains(html, `aria-label="Close the saved states"`) {
+		t.Errorf("the list does not say it closes the history: %s", html)
 	}
 	f.l.toggleHistory()
 	f.run()
@@ -83,15 +87,14 @@ func TestSaveSavedState_LibraryHistoryAndRename(t *testing.T) {
 	}
 
 	f.l.saveAuthor = "Ada"
-	f.l.saveTitle = "Widgets before the demo"
-	f.l.openSaveForm()
+	f.l.openHistory()
 	if !f.l.historyScreen {
 		t.Fatal("the Save button did not open the history screen")
 	}
 	if html := app.HTMLString(f.l.Render()); !strings.Contains(html, `data-save-title`) {
 		t.Errorf("the history screen has no Save form: %s", html)
 	}
-	f.l.saveSavedState()
+	f.l.saveSavedState("Widgets before the demo")
 	f.run()
 
 	if got := f.oneToast(); !strings.Contains(got.Title, "Saved state 1 saved") {
@@ -154,7 +157,7 @@ func TestHeader_HasNoAuthorBar(t *testing.T) {
 	if f.l.saveAuthor != "Grace" {
 		t.Errorf("the author after the User name page wrote one: %q", f.l.saveAuthor)
 	}
-	f.l.openSaveForm()
+	f.l.openHistory()
 	f.run()
 	html := app.HTMLString(f.l.Render())
 	if !strings.Contains(html, `data-save-title`) {

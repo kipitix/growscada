@@ -14,14 +14,14 @@ import (
 	"github.com/kipitix/growscada/internal/server/interface/ui/savedstates"
 	"github.com/kipitix/growscada/internal/server/interface/ui/toast"
 	"github.com/kipitix/growscada/internal/server/interface/ui/uiutil"
-	"github.com/kipitix/growscada/internal/server/interface/ui/username"
 )
 
 // The Project mode's Save and its history (task 72_2; ADR 0021): Save fixes
 // the Draft as a saved state, the history lists them and their names are renamed.
 // The Draft is still written at once — Save only records a named point of
 // history, so the indicator is the Draft's own unsaved-changes flag, its
-// Version against its Clean Version (ADR 0016, amendment 2026-11-10; task 74).
+// Version against its Clean Version (ADR 0016, amendments 2026-11-10 and
+// 2026-11-16; task 74).
 
 // loadSavedStates (re)loads the history of the project's Draft.
 func (p *Project) loadSavedStates(ctx app.Context) {
@@ -39,24 +39,12 @@ func (p *Project) loadSavedStates(ctx app.Context) {
 }
 
 // hasUnsavedChanges reports whether the Draft moved since its content last
-// equalled its last saved state. The flag is the server's — the Draft's own
-// Clean Version marker (ADR 0016, amendment 2026-11-10; task 74) —, so a
-// Discard, a Revert and a Save all follow it without this tab remembering
-// anything.
+// equalled a saved state's. The flag is the server's — the Draft's own Clean
+// Version marker (ADR 0016, amendments 2026-11-10 and 2026-11-16; task 74) —,
+// so a Discard, a Load, a Revert and a Save all follow it without this tab
+// remembering anything.
 func (p *Project) hasUnsavedChanges() bool {
 	return p.draftUnsaved
-}
-
-// openSaveForm shows the history with a fresh name in its Save form: the Save
-// button and Ctrl+S land here, ready to fix a new saved state. The form takes
-// the stored user name as the author; the User name page sets the name it
-// starts from (task 90, task 91).
-func (p *Project) openSaveForm(ctx app.Context) {
-	p.saveTitle = "Save " + uiutil.FormatTime(time.Now())
-	if p.mounted {
-		p.saveAuthor = username.Stored(ctx)
-	}
-	p.openHistory(ctx)
 }
 
 // saveFromShortcut is Ctrl+S: the history screen with its Save form when the
@@ -65,19 +53,20 @@ func (p *Project) saveFromShortcut(ctx app.Context) {
 	if !p.hasUnsavedChanges() || p.savingSavedState {
 		return
 	}
-	p.openSaveForm(ctx)
+	p.openHistory(ctx)
 }
 
 // saveSavedState confirms the Save form: the Draft as it is becomes a saved
-// state with the title the form holds.
-func (p *Project) saveSavedState(ctx app.Context) {
+// state with the title the form holds. The author is the stored user name,
+// which the User name page sets and OnMount's Watch follows (task 90; task 91).
+func (p *Project) saveSavedState(ctx app.Context, title string) {
 	if p.content == nil || p.savingSavedState || p.deploying || p.loadingSavedState != 0 {
 		return
 	}
-	if p.waitMoves(ctx, func(ctx app.Context) { p.saveSavedState(ctx) }) {
+	if p.waitMoves(ctx, func(ctx app.Context) { p.saveSavedState(ctx, title) }) {
 		return
 	}
-	title, author := strings.TrimSpace(p.saveTitle), strings.TrimSpace(p.saveAuthor)
+	title, author := strings.TrimSpace(title), strings.TrimSpace(p.saveAuthor)
 	if title == "" || author == "" {
 		uiutil.ShowError(ctx, fmt.Errorf("a title and an author are required"))
 		return
@@ -90,8 +79,7 @@ func (p *Project) saveSavedState(ctx app.Context) {
 		})
 	}, func(ctx app.Context, saved apiv0.SavedStateResponse) {
 		p.savingSavedState = false
-		p.saveTitle = "Save " + uiutil.FormatTime(time.Now())
-		p.history.StartNew(p.saveTitle)
+		p.history.StartNew("Save " + uiutil.FormatTime(time.Now()))
 		ctx.NewActionWithValue(toast.ActionAdd, toast.Problem{Problem: apiv0.Problem{
 			Title:  fmt.Sprintf("Saved state %d saved", saved.Number),
 			Detail: saved.Title,
@@ -113,14 +101,13 @@ func (p *Project) saveSavedState(ctx app.Context) {
 
 // openHistory shows the saved states of the project, read afresh (task 84): a
 // screen of its own, in place of the content. The rows carry the saved states
-// and their labels alone, and the form at the top names a new one (task 85_5,
-// task 85_7, task 91).
+// and their labels alone, and the form at the top starts on a fresh name, so
+// the Save button and Ctrl+S land ready to fix a new one (task 85_5, task 85_7,
+// task 91). The screen owns that name: the mode keeps none, so a name typed for
+// one project never reaches another (task 91).
 func (p *Project) openHistory(ctx app.Context) {
-	if p.saveTitle == "" {
-		p.saveTitle = "Save " + uiutil.FormatTime(time.Now())
-	}
 	p.historyScreen = true
-	p.history.StartNew(p.saveTitle)
+	p.history.StartNew("Save " + uiutil.FormatTime(time.Now()))
 	p.loadSavedStates(ctx)
 	p.loadHistoryLabels(ctx)
 	p.onHistory()
@@ -188,7 +175,7 @@ func (p *Project) renameSavedState(ctx app.Context, number int, title string) {
 func (p *Project) renderSaveButton() app.UI {
 	title := "The saved states of the project"
 	if p.historyScreen {
-		title = "Back to the Draft"
+		title = "Close the saved states"
 	}
 	return p.panelButton("saved-states", uiutil.IconSavedStates(), title,
 		true, func(ctx app.Context) { p.toggleHistory(ctx) })
@@ -219,10 +206,9 @@ func (p *Project) renderHistoryScreen() app.UI {
 	screen.AllLabels = p.historyLabels
 	screen.CanSave = p.hasUnsavedChanges()
 	screen.Saving = p.savingSavedState
-	screen.OnSave = func(ctx app.Context, title string) {
-		p.saveTitle = title
-		p.saveSavedState(p.compoCtx)
-	}
+	screen.Busy = p.deploying || p.loadingSavedState != 0
+	screen.Author = p.saveAuthor
+	screen.OnSave = func(ctx app.Context, title string) { p.saveSavedState(ctx, title) }
 	screen.OnLoad = func(ctx app.Context, number int) { p.loadSavedState(ctx, number) }
 	screen.OnRename = func(ctx app.Context, number int, title string) {
 		p.renameSavedState(ctx, number, title)

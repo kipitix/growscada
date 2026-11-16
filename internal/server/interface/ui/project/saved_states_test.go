@@ -22,8 +22,12 @@ func TestSavedStatesButton_TogglesTheContent(t *testing.T) {
 	if !f.p.historyScreen {
 		t.Fatal("the saved-states button did not open the history")
 	}
-	if html := app.HTMLString(f.p.Render()); !strings.Contains(html, `aria-label="Back to the Draft"`) {
-		t.Errorf("the button does not offer the way back while the history is open: %s", html)
+	html := app.HTMLString(f.p.Render())
+	if !strings.Contains(html, `aria-label="Back to the Draft"`) {
+		t.Errorf("the panel does not offer the way back while the history is open: %s", html)
+	}
+	if !strings.Contains(html, `aria-label="Close the saved states"`) {
+		t.Errorf("the list does not say it closes the history: %s", html)
 	}
 	f.p.toggleHistory(f.p.compoCtx)
 	f.run()
@@ -55,9 +59,8 @@ func TestSaveSavedState_HistoryRowAndIndicator(t *testing.T) {
 		t.Errorf("the header does not mark unsaved changes: %s", html)
 	}
 
-	f.p.openSaveForm(f.p.compoCtx)
+	f.p.openHistory(f.p.compoCtx)
 	f.p.saveAuthor = "Ada"
-	f.p.saveTitle = "First save"
 	f.run()
 	html := app.HTMLString(f.p.Render())
 	if !f.p.historyScreen || !strings.Contains(html, `data-save-title`) {
@@ -66,7 +69,7 @@ func TestSaveSavedState_HistoryRowAndIndicator(t *testing.T) {
 	if strings.Contains(html, `data-save-dialog`) {
 		t.Errorf("the Save dialog still exists: %s", html)
 	}
-	f.p.saveSavedState(f.p.compoCtx)
+	f.p.saveSavedState(f.p.compoCtx, "First save")
 	f.run()
 
 	f.e.TakeToasts() // the Save's own confirmation
@@ -106,8 +109,7 @@ func TestSaveSavedState_SuccessAndNothingToSave(t *testing.T) {
 	f := startProject(t)
 	f.run()
 	f.p.saveAuthor = "Ada"
-	f.p.saveTitle = "First save"
-	f.p.saveSavedState(f.p.compoCtx)
+	f.p.saveSavedState(f.p.compoCtx, "First save")
 	f.run()
 	if got := f.oneToast(); !strings.Contains(got.Title, "Saved state 1 saved") {
 		t.Errorf("the Save showed %+v, want its confirmation", got)
@@ -131,8 +133,8 @@ func TestSaveSavedState_SuccessAndNothingToSave(t *testing.T) {
 	}
 
 	// A Save forced anyway is the server's refusal.
-	f.p.openSaveForm(f.p.compoCtx)
-	f.p.saveSavedState(f.p.compoCtx)
+	f.p.openHistory(f.p.compoCtx)
+	f.p.saveSavedState(f.p.compoCtx, "Unchanged")
 	f.run()
 	if got := f.oneToast(); got.Status != http.StatusConflict {
 		t.Errorf("a Save of an unchanged Draft: toast %+v, want a 409", got)
@@ -145,8 +147,7 @@ func TestSaveShortcut_WithChangesOpensTheHistory(t *testing.T) {
 	f := startProject(t)
 	f.run()
 	f.p.saveAuthor = "Ada"
-	f.p.saveTitle = "First save"
-	f.p.saveSavedState(f.p.compoCtx)
+	f.p.saveSavedState(f.p.compoCtx, "First save")
 	f.run()
 	f.e.TakeToasts() // the Save's own confirmation
 	f.p.closeHistory()
@@ -184,7 +185,7 @@ func TestHeader_HasNoAuthorBar(t *testing.T) {
 	if f.p.saveAuthor != "Grace" {
 		t.Errorf("the author after the User name page wrote one: %q", f.p.saveAuthor)
 	}
-	f.p.openSaveForm(f.p.compoCtx)
+	f.p.openHistory(f.p.compoCtx)
 	f.run()
 	html = app.HTMLString(f.p.Render())
 	if !strings.Contains(html, `data-save-title`) {
@@ -221,8 +222,7 @@ func TestSaveSavedState_ConflictRereadsAndRename(t *testing.T) {
 	f := startProject(t)
 	f.run()
 	f.p.saveAuthor = "Ada"
-	f.p.saveTitle = "First save"
-	f.p.saveSavedState(f.p.compoCtx)
+	f.p.saveSavedState(f.p.compoCtx, "First save")
 	f.run()
 	f.e.TakeToasts() // the Save's own confirmation
 
@@ -234,8 +234,7 @@ func TestSaveSavedState_ConflictRereadsAndRename(t *testing.T) {
 	// This tab still states the Version it knew: forgetting it makes the next
 	// Save state 0, which the server refuses as stale.
 	f.p.forgetDraftVersion()
-	f.p.saveTitle = "Stale save"
-	f.p.saveSavedState(f.p.compoCtx)
+	f.p.saveSavedState(f.p.compoCtx, "Stale save")
 	f.run()
 
 	if got := f.oneToast(); got.Status != 409 {
@@ -252,5 +251,26 @@ func TestSaveSavedState_ConflictRereadsAndRename(t *testing.T) {
 	f.noToasts()
 	if len(f.p.savedStates) != 1 || f.p.savedStates[0].Title != "Before the demo" {
 		t.Errorf("the renamed history: %+v", f.p.savedStates)
+	}
+}
+
+// TestOpenHistory_StartsWithAFreshName: the name of the saved state being made
+// lives in the history screen alone, so a name typed for one project never
+// reaches the next history screen — it opens on a fresh one (task 91).
+func TestOpenHistory_StartsWithAFreshName(t *testing.T) {
+	f := startProject(t)
+	f.run()
+	f.p.openHistory(f.p.compoCtx)
+	f.p.history.StartNew("Typed for this project")
+	f.p.closeHistory()
+	f.p.openHistory(f.p.compoCtx)
+	f.run()
+
+	html := app.HTMLString(f.p.Render())
+	if strings.Contains(html, "Typed for this project") {
+		t.Errorf("the history reopened with the name of the project before: %s", html)
+	}
+	if !strings.Contains(html, `data-save-title`) {
+		t.Errorf("the history reopened without its Save form: %s", html)
 	}
 }

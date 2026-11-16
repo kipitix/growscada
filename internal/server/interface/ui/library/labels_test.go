@@ -19,8 +19,7 @@ func TestSavedStateLabels_AssignAndUnassign(t *testing.T) {
 	f := mount(t, url, api)
 	f.run()
 	f.l.saveAuthor = "Ada"
-	f.l.saveTitle = "Widgets before the demo"
-	f.l.saveSavedState()
+	f.l.saveSavedState("Widgets before the demo")
 	f.run()
 	f.e.TakeToasts() // the Save's own confirmation
 

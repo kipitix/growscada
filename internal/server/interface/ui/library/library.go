@@ -57,14 +57,13 @@ type Library struct {
 	unsavedReloader uiutil.Reloader
 	// ── saved states (task 72_2; ADR 0021) ─────────────────────────────────
 	// savedStates is the history of the selected library's Draft, newest first;
-	// savedStatesLoaded is false until its first answer. saveTitle and
-	// saveAuthor are the Save form's fields; savingSavedState marks the request
-	// in flight.
+	// savedStatesLoaded is false until its first answer. saveAuthor is the name
+	// a Save signs with; savingSavedState marks the request in flight. The name
+	// of the saved state being made lives in the history screen alone.
 	savedStates         []apiv0.SavedStateResponse
 	savedStatesLoaded   bool
 	savedStatesReloader uiutil.Reloader
 	savingSavedState    bool
-	saveTitle           string
 	saveAuthor          string
 	// historyScreen is true while the saved states are shown in place of the
 	// editor (task 84): History opens them and the way back closes them.

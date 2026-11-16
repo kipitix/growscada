@@ -21,7 +21,7 @@ import (
 // the selected library's Draft as a saved state, the history lists them and
 // their titles are renamed. The Draft is still written at once, so the
 // indicator is the Draft's own unsaved-changes flag, its Version against its
-// Clean Version (ADR 0016, amendment 2026-11-10; task 74).
+// Clean Version (ADR 0016, amendments 2026-11-10 and 2026-11-16; task 74).
 
 // loadSavedStates (re)loads the history of the selected library's Draft. A 404
 // means the library is gone and leaves it (libraryGone).
@@ -40,10 +40,10 @@ func (l *Library) loadSavedStates(ctx app.Context) {
 }
 
 // hasUnsavedChanges reports whether the Draft moved since its content last
-// equalled its last saved state. The flag is the server's — the Draft's own
-// Clean Version marker (ADR 0016, amendment 2026-11-10; task 74) —, so a
-// Discard, a Revert and a Save all follow it without this tab remembering
-// anything.
+// equalled a saved state's. The flag is the server's — the Draft's own Clean
+// Version marker (ADR 0016, amendments 2026-11-10 and 2026-11-16; task 74) —,
+// so a Discard, a Load, a Revert and a Save all follow it without this tab
+// remembering anything.
 func (l *Library) hasUnsavedChanges() bool {
 	return l.draftUnsaved
 }
@@ -54,27 +54,18 @@ func (l *Library) saveFromShortcut(ctx app.Context) {
 	if !l.hasUnsavedChanges() || l.savingSavedState {
 		return
 	}
-	l.openSaveForm()
-}
-
-// openSaveForm shows the history with a fresh name in its Save form: the Save
-// button and Ctrl+S land here, ready to fix a new saved state (task 91).
-func (l *Library) openSaveForm() {
-	if l.draft() == nil {
-		return
-	}
-	l.saveTitle = "Save " + uiutil.FormatTime(time.Now())
 	l.openHistory()
 }
 
 // saveSavedState confirms the Save form: the Draft as it is becomes a saved
-// state with the title the form holds.
-func (l *Library) saveSavedState() {
+// state with the title the form holds. The author is the stored user name,
+// which the User name page sets and OnMount's Watch follows (task 90; task 91).
+func (l *Library) saveSavedState(title string) {
 	draft := l.draft()
-	if draft == nil || l.savingSavedState {
+	if draft == nil || l.savingSavedState || l.loadingSavedState != 0 {
 		return
 	}
-	title, author := strings.TrimSpace(l.saveTitle), strings.TrimSpace(l.saveAuthor)
+	title, author := strings.TrimSpace(title), strings.TrimSpace(l.saveAuthor)
 	if title == "" || author == "" {
 		uiutil.ShowError(l.compoCtx, fmt.Errorf("a title and an author are required"))
 		return
@@ -90,8 +81,7 @@ func (l *Library) saveSavedState() {
 			return
 		}
 		l.savingSavedState = false
-		l.saveTitle = "Save " + uiutil.FormatTime(time.Now())
-		l.history.StartNew(l.saveTitle)
+		l.history.StartNew("Save " + uiutil.FormatTime(time.Now()))
 		ctx.NewActionWithValue(toast.ActionAdd, toast.Problem{Problem: apiv0.Problem{
 			Title:  fmt.Sprintf("Saved state %d saved", saved.Number),
 			Detail: saved.Title,
@@ -121,17 +111,15 @@ func (l *Library) saveSavedState() {
 
 // openHistory shows the saved states of the selected library, read afresh
 // (task 84): a screen of its own, in place of the editor. The form at its top
-// starts with a fresh name, so the Save button and Ctrl+S land on the form
-// ready to fix a new saved state (task 91).
+// starts on a fresh name, so the Save button and Ctrl+S land ready to fix a new
+// saved state; the screen owns that name and the mode keeps none, so a name
+// typed for one library never reaches another (task 91).
 func (l *Library) openHistory() {
 	if l.libraryID == uuid.Nil {
 		return
 	}
-	if l.saveTitle == "" {
-		l.saveTitle = "Save " + uiutil.FormatTime(time.Now())
-	}
 	l.historyScreen = true
-	l.history.StartNew(l.saveTitle)
+	l.history.StartNew("Save " + uiutil.FormatTime(time.Now()))
 	l.loadSavedStates(l.compoCtx)
 	l.loadHistoryLabels(l.compoCtx)
 	l.onHistory()
@@ -203,7 +191,7 @@ func (l *Library) renameSavedState(ctx app.Context, number int, title string) {
 func (l *Library) renderSaveButton() app.UI {
 	title := "The saved states of the library"
 	if l.historyScreen {
-		title = "Back to the Draft"
+		title = "Close the saved states"
 	}
 	return uiutil.PanelButton(uiutil.IconSavedStates(), l.libraryID != uuid.Nil,
 		title, func(app.Context, app.Event) { l.toggleHistory() },
@@ -234,10 +222,9 @@ func (l *Library) renderHistoryScreen() app.UI {
 	screen.AllLabels = l.historyLabels
 	screen.CanSave = l.hasUnsavedChanges()
 	screen.Saving = l.savingSavedState
-	screen.OnSave = func(ctx app.Context, title string) {
-		l.saveTitle = title
-		l.saveSavedState()
-	}
+	screen.Busy = l.loadingSavedState != 0
+	screen.Author = l.saveAuthor
+	screen.OnSave = func(ctx app.Context, title string) { l.saveSavedState(title) }
 	screen.OnLoad = func(ctx app.Context, number int) { l.loadSavedState(number) }
 	screen.OnRename = func(ctx app.Context, number int, title string) {
 		l.renameSavedState(ctx, number, title)

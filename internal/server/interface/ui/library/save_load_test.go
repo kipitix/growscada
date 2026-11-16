@@ -20,8 +20,8 @@ import (
 // consumes its confirmation toast.
 func saveWithUI(t *testing.T, f *fixture, title string) {
 	t.Helper()
-	f.l.saveAuthor, f.l.saveTitle = "Ada", title
-	f.l.saveSavedState()
+	f.l.saveAuthor = "Ada"
+	f.l.saveSavedState(title)
 	f.run()
 	if got := f.oneToast(); !strings.Contains(got.Title, "saved") {
 		t.Fatalf("the Save confirmation: %+v", got)
@@ -68,8 +68,8 @@ func TestSaveSavedState_ConflictRereadsTheDraft(t *testing.T) {
 		t.Fatalf("update widget type: %v", err)
 	}
 
-	f.l.saveAuthor, f.l.saveTitle = "Ada", "Stale save"
-	f.l.saveSavedState()
+	f.l.saveAuthor = "Ada"
+	f.l.saveSavedState("Stale save")
 	f.run()
 	if got := f.oneToast(); got.Status != http.StatusConflict {
 		t.Fatalf("the toast %+v: want the server's 409", got)
@@ -79,8 +79,8 @@ func TestSaveSavedState_ConflictRereadsTheDraft(t *testing.T) {
 	}
 
 	// The next Save starts from the Version the conflict left.
-	f.l.saveAuthor, f.l.saveTitle = "Ada", "After the conflict"
-	f.l.saveSavedState()
+	f.l.saveAuthor = "Ada"
+	f.l.saveSavedState("After the conflict")
 	f.run()
 	if got := f.oneToast(); !strings.Contains(got.Title, "saved") {
 		t.Fatalf("the second Save: %+v", got)

@@ -160,8 +160,7 @@ func TestLoadSavedState_ResetsToTheLastSavedState(t *testing.T) {
 	f.run()
 	f.noToasts()
 	f.p.saveAuthor = "Ada"
-	f.p.saveTitle = "First save"
-	f.p.saveSavedState(f.p.compoCtx)
+	f.p.saveSavedState(f.p.compoCtx, "First save")
 	f.run()
 	f.e.TakeToasts() // the Save's own confirmation
 
@@ -215,8 +214,8 @@ func TestLoadSavedState_RestoresTheContentShown(t *testing.T) {
 	f.p.loadWidgets(f.p.compoCtx)
 	f.run()
 	f.noToasts()
-	f.p.saveAuthor, f.p.saveTitle = "Ada", "First save"
-	f.p.saveSavedState(f.p.compoCtx)
+	f.p.saveAuthor = "Ada"
+	f.p.saveSavedState(f.p.compoCtx, "First save")
 	f.run()
 	f.e.TakeToasts() // the Save's own confirmation
 
@@ -272,8 +271,8 @@ func TestLoadSavedState_LaterSceneListFollowsTheVersion(t *testing.T) {
 	f.p.loadScenes(f.p.compoCtx)
 	f.run()
 	f.noToasts()
-	f.p.saveAuthor, f.p.saveTitle = "Ada", "First save"
-	f.p.saveSavedState(f.p.compoCtx)
+	f.p.saveAuthor = "Ada"
+	f.p.saveSavedState(f.p.compoCtx, "First save")
 	f.run()
 	f.e.TakeToasts() // the Save's own confirmation
 
@@ -361,8 +360,8 @@ func TestDeployWindow_UnknownDeployment(t *testing.T) {
 func TestDiscard_AnotherTabsDiscardClearsTheBadge(t *testing.T) {
 	f := startProject(t)
 	f.run()
-	f.p.saveAuthor, f.p.saveTitle = "Ada", "First save"
-	f.p.saveSavedState(f.p.compoCtx)
+	f.p.saveAuthor = "Ada"
+	f.p.saveSavedState(f.p.compoCtx, "First save")
 	f.run()
 	f.e.TakeToasts() // the Save's own confirmation
 

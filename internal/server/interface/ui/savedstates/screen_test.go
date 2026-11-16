@@ -179,6 +179,48 @@ func TestScreen_LabelMenuWithNoLabels(t *testing.T) {
 	}
 }
 
+// TestScreen_SaveNeedsTheUserName: the Save on the Draft row is enabled only
+// when the user name page has given an author — the form has no author field —
+// and the row says where to set it rather than offering a Save the mode would
+// refuse. A load or a Deploy in flight waits too (task 90; task 91).
+func TestScreen_SaveNeedsTheUserName(t *testing.T) {
+	s := New()
+	s.Loaded = true
+	s.CanSave = true
+	s.StartNew("A new name")
+
+	if s.canSave() {
+		t.Error("the Save is enabled without the author a Save signs with")
+	}
+	html := app.HTMLString(s.Render())
+	for _, want := range []string{`data-save-author-hint`, "Misc → User name"} {
+		if !strings.Contains(html, want) {
+			t.Errorf("the row does not say where the user name is set (%q): %s", want, html)
+		}
+	}
+
+	s.Author = "Ada"
+	if !s.canSave() {
+		t.Error("the Save is disabled with an author, a name and changes")
+	}
+	if html := app.HTMLString(s.Render()); strings.Contains(html, `data-save-author-hint`) {
+		t.Errorf("the row still asks for the user name: %s", html)
+	}
+
+	s.Busy = true
+	if s.canSave() {
+		t.Error("the Save is enabled while a load or a Deploy writes the Draft")
+	}
+	if html := app.HTMLString(s.Render()); !strings.Contains(html, "Wait for the load or the Deploy to finish") {
+		t.Errorf("the row does not say why the Save waits: %s", html)
+	}
+
+	s.Busy, s.CanSave = false, false
+	if html := app.HTMLString(s.Render()); !strings.Contains(html, "Nothing to save since the last save") {
+		t.Errorf("a clean Draft does not say there is nothing to save: %s", html)
+	}
+}
+
 // TestScreen_Reset: closing the screen drops the name being edited and the
 // open labels menu (task 84, task 85_3).
 func TestScreen_Reset(t *testing.T) {

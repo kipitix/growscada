@@ -96,17 +96,18 @@ type Project struct {
 
 	// ── saved states (task 72_2; ADR 0021) ─────────────────────────────────
 	// savedStates is the history of the Draft, newest first; savedStatesLoaded is
-	// false until its first answer. saveTitle and saveAuthor are the Save
-	// form's fields; savingSavedState marks the request in flight.
+	// false until its first answer. saveAuthor is the name a Save signs with;
+	// savingSavedState marks the request in flight. The name of the saved state
+	// being made lives in the history screen alone.
 	savedStates         []apiv0.SavedStateResponse
 	savedStatesLoaded   bool
 	savedStatesReloader uiutil.Reloader
 	savingSavedState    bool
-	saveTitle           string
 	saveAuthor          string
 	// draftUnsaved is the unsaved-changes flag of the project's Draft, as the
-	// server answers it: its Version is above its Clean Version (ADR 0016,
-	// amendment 2026-11-10; task 74). The editor draws it and never derives it.
+	// server answers it: its Version is above its Clean Version, the one whose
+	// content matched a saved state's (ADR 0016, amendments 2026-11-10 and
+	// 2026-11-16; task 74). The editor draws it and never derives it.
 	draftUnsaved bool
 	// draftStateLoaded is false until the first answer of the Draft's state:
 	// the header says nothing about saved changes before it.
