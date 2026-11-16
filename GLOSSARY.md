@@ -116,6 +116,10 @@ _Avoid_: user, session, account
 The name an Engineer declares when saving a Draft; it is recorded with the save and shown to other Engineers (task 72_2). A declared name, not an account: Users come with tasks 49/50.
 _Avoid_: user, owner, editor
 
+**User name**:
+The UI's name for the Author until Users and authentication exist: the name the Save dialogs prefill, set on the Misc section's `User name` page. A declaration kept in the browser, not an account; a Save dialog may override the author for that one save.
+_Avoid_: username, login
+
 ### Nodes
 
 **Engineering node**:
