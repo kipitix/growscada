@@ -33,9 +33,10 @@ type Row struct {
 	Labels []apiv0.LabelResponse
 }
 
-// Screen draws the saved states of one Draft and the way back to it. The mode
-// sets its fields before rendering it and keeps the commands: the screen calls
-// them with the row they act on.
+// Screen draws the saved states of one Draft, the Draft itself as its top row.
+// The mode sets its fields before rendering it and keeps the commands: the
+// screen calls them with the row they act on. The way back belongs to the
+// panel, not to the screen (task 91).
 type Screen struct {
 	app.Compo
 
@@ -317,7 +318,7 @@ func (s *Screen) renderName(row Row) app.UI {
 }
 
 // renderLabels is the saved state's marks: one colored chip per label and the
-// "+ label" control. The control opens the menu of the Organization's labels,
+// tag that opens the menu of them. The control opens the menu of the Organization's labels,
 // each marked when the saved state carries it; clicking one places it or takes
 // it off. A menu with no label says so and offers the Labels page instead.
 func (s *Screen) renderLabels(row Row) app.UI {

@@ -32,8 +32,9 @@ func (r draftRepositoryPostgres) SaveSavedState(ctx context.Context, scope draft
 		if expected.Number() != row.version {
 			return nil, draft.ConflictError{Expected: expected.Number(), Current: row.version, Scope: scope}
 		}
-		// A Draft at its Clean Version equals its last saved state: nothing is
-		// there to fix (ADR 0016, amendment 2026-11-10).
+		// A Draft at its Clean Version holds what a saved state holds already:
+		// there is nothing new to fix (ADR 0016, amendments 2026-11-10 and
+		// 2026-11-16).
 		if row.cleanVersion == row.version {
 			return nil, fmt.Errorf("%w: %s", draft.ErrNothingToSave, scope)
 		}

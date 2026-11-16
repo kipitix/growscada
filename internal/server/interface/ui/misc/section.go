@@ -1,6 +1,6 @@
 // Package misc is the Misc section of the PWA (task 90): the pages that belong
-// to no mode of their own — the Labels of the Organization and the user name
-// the Save dialogs prefill — under one entry of the main menu. The section
+// to no mode of their own — the Labels of the Organization and the user name a
+// Save signs with — under one entry of the main menu. The section
 // shows its contents when it is opened and a page when one is chosen; each page
 // carries the way back to the contents.
 package misc
@@ -117,7 +117,7 @@ func (s *Section) renderContents() app.UI {
 					s.renderEntry(PageLabels, "Labels",
 						"The names and colors of the marks on saved states."),
 					s.renderEntry(PageUserName, "User name",
-						"The name the Save dialogs sign a saved state with."),
+						"The name a Save signs a saved state with."),
 				),
 		)
 }

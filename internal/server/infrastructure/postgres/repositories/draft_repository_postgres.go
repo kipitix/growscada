@@ -514,7 +514,8 @@ func updateDraftProgress(ctx context.Context, tx *sql.Tx, draftID uuid.UUID, con
 }
 
 // updateDraftCleanVersion makes version the Draft's Clean Version: the content
-// stored at it equals the last saved state's (ADR 0016, amendment 2026-11-10).
+// stored at it equals a saved state's, whichever one the caller restored
+// (ADR 0016, amendments 2026-11-10 and 2026-11-16).
 func updateDraftCleanVersion(ctx context.Context, tx *sql.Tx, draftID uuid.UUID, version int) error {
 	if _, err := tx.ExecContext(ctx,
 		`UPDATE engineering.drafts SET clean_version = $2, updated_at = now() WHERE id = $1`,

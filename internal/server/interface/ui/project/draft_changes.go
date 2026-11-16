@@ -222,7 +222,7 @@ func (p *Project) noKeyDown() {
 // redo the Draft, and Ctrl+S saves it. All but Save are ignored in a field the
 // user types in, behind a dialog of the mode and while another mode is shown;
 // Save is taken even there, because the browser's own Save Page is never what
-// the mode means — a dialog of the mode holds the Save itself.
+// the mode means — the history screen holds the Save form itself.
 func (p *Project) handleKeyDown(ev app.Value) {
 	if !p.shown() {
 		return
@@ -233,8 +233,9 @@ func (p *Project) handleKeyDown(ev app.Value) {
 	key := ev.Get("key").String()
 	code := ev.Get("code").String()
 	// Ctrl+S takes the browser's Save Page away wherever it is pressed while
-	// the mode is shown; the Draft is saved when no dialog of the mode is
-	// open, like the other commands (task 72_6; ADR 0021).
+	// the mode is shown; it opens the history screen with its Save form, and
+	// does nothing while that screen or a dialog of the mode is open
+	// (task 72_6; task 91; ADR 0021).
 	if uiutil.ShortcutKey(key, code, ctrl, meta, shift, false) == uiutil.KeySave {
 		ev.Call("preventDefault")
 		if p.keyActionAllowed() {

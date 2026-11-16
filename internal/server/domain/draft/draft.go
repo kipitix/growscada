@@ -31,13 +31,15 @@ type Draft interface {
 	// Version is the Version of the Draft's content: the token every write
 	// of it states and raises.
 	Version() version.Version[Draft]
-	// CleanVersion is the Version at which the Draft's content last equalled its
-	// last saved state's: a Save puts the Draft there, and so does a reset whose
-	// target is that content (ADR 0016, amendment 2026-11-10). 0 for a Draft whose
-	// content never equalled a saved state's — one never saved.
+	// CleanVersion is the Version at which the Draft's content last equalled a
+	// saved state's: a Save puts the Draft there, and so does a reset whose
+	// target is one of its saved states' content — a Load, a Discard or a
+	// Revert —, whichever saved state that is (ADR 0016, amendments 2026-11-10
+	// and 2026-11-16). 0 for a Draft whose content never equalled a saved
+	// state's — one never saved.
 	CleanVersion() version.Version[Draft]
 	// HasUnsavedChanges reports whether the Draft's Version is above its Clean
-	// Version: its content moved since it last equalled its last saved state. A
+	// Version: its content moved since it last equalled a saved state's. A
 	// Draft never written has no Version above its Clean one, so it is clean.
 	HasUnsavedChanges() bool
 	// StackPosition is the number of DraftChanges applied; the next undo

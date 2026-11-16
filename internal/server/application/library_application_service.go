@@ -125,9 +125,9 @@ func (s libraryServiceImpl) describeAll(ctx context.Context, list []library.Libr
 }
 
 // unsavedChanges reports whether the library's Draft moved since its content
-// last equalled its last saved state: the Draft's own flag, not a comparison of
-// numbers kept here (ADR 0016, amendment 2026-11-10). A Draft never written —
-// no row — is clean.
+// last equalled a saved state's: the Draft's own flag, not a comparison of
+// numbers kept here (ADR 0016, amendments 2026-11-10 and 2026-11-16). A Draft
+// never written — no row — is clean.
 func (s libraryServiceImpl) unsavedChanges(ctx context.Context, libraryID id.ID[library.Library]) (bool, error) {
 	found, ok, err := s.content.Drafts().Read(ctx, s.content.ScopeOf(libraryID))
 	if err != nil {

@@ -43,9 +43,10 @@ var ErrNothingToUndo = errors.New("nothing to undo")
 // nothing was undone, or a new change replaced the redo tail (ADR 0017).
 var ErrNothingToRedo = errors.New("nothing to redo")
 
-// ErrNothingToSave is a Save refused because the Draft is at the Version its
-// last saved state fixed: there is nothing new to save (task 72_2; ADR 0021).
-var ErrNothingToSave = errors.New("nothing to save: the draft has not changed since its last saved state")
+// ErrNothingToSave is a Save refused because the Draft is at the Version at
+// which its content equalled a saved state's: there is nothing new to save
+// (task 72_2; ADR 0021).
+var ErrNothingToSave = errors.New("nothing to save: the draft's content is a saved state's already")
 
 // ErrSavedStateNotFound is a read or a rename of a saved state that the Draft
 // does not have.

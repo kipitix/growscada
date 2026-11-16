@@ -19,19 +19,20 @@ type Project struct {
 }
 
 // ProjectDraftState is what a Project's Draft tells of it: the Version of the
-// Draft and whether it holds changes its last saved state does not (ADR 0016,
-// ADR 0021; task 74).
+// Draft and whether it holds changes that none of its saved states holds (ADR
+// 0016, ADR 0021; task 74).
 type ProjectDraftState struct {
 	// DraftVersion is 0 for a Draft never written: there is nothing to save.
 	DraftVersion int
 	// HasUnsavedChanges is the Draft's own flag: its Version is above its
-	// Clean Version (ADR 0016, amendment 2026-11-10).
+	// Clean Version, the one whose content matched a saved state's (ADR 0016,
+	// amendments 2026-11-10 and 2026-11-16).
 	HasUnsavedChanges bool
 }
 
 // DraftState is the state of a Draft: the Version every content DTO of the
-// Project or Library now carries (ADR 0016) and whether it holds changes its
-// last saved state does not (task 74).
+// Project or Library now carries (ADR 0016) and whether it holds changes that
+// none of its saved states holds (task 74).
 type DraftState struct {
 	Version           int
 	HasUnsavedChanges bool

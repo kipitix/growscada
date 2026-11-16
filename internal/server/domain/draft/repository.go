@@ -84,9 +84,10 @@ type Repository interface {
 
 	// SaveSavedState fixes the Draft as a saved state (task 72_2; ADR 0021): it
 	// locks the Draft's row, checks expected — a stale Version is a ConflictError
-	// —, refuses a Draft at its Clean Version (ErrNothingToSave: there is nothing
-	// the last saved state does not hold already), numbers the saved state after
-	// the last one, writes it with the imports of its ProjectFile, raises
+	// —, refuses a Draft at its Clean Version (ErrNothingToSave: its content is a
+	// saved state's already, so there is nothing new to fix), numbers the saved
+	// state after the last one, writes it with the imports of its ProjectFile,
+	// raises
 	// last_saved_state_number and last_saved_state_draft_version and makes
 	// expected the Clean Version (ADR 0016, amendment 2026-11-10). content is
 	// assembled by the caller from the Draft at expected (a ProjectFile or a

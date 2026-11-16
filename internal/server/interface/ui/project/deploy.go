@@ -513,8 +513,9 @@ func (p *Project) doLoadSavedState(ctx app.Context, number int) {
 	}, func(ctx app.Context, loaded apiv0.LoadSavedStateResponse) {
 		p.loadingSavedState = 0
 		p.observeDraftVersion(mark, loaded.Version)
-		// The server's Draft state says whether the loaded saved state is the
-		// last one; the flag is reread with the content (task 74).
+		// The loaded content is a saved state's, so the server answers a clean
+		// Draft whichever saved state it was; the flag is reread with the
+		// content (ADR 0016, amendment 2026-11-16).
 		p.reloadDraftContent(ctx) // a load clears the stack (ADR 0017)
 		p.showLoadWarnings(ctx, loaded.Warnings)
 		p.closeHistory()

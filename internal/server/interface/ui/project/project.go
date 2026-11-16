@@ -350,7 +350,7 @@ func (p *Project) OnMount(ctx app.Context) {
 	ctx.LocalStorage().Get("project:propertiesWidth", &p.propertiesWidth)
 
 	ctx.LocalStorage().Get(uiutil.AuthorKey, &p.saveAuthor)
-	// The User name page writes another name: the next Save dialog follows it
+	// The User name page writes another name: the next Save signs with it
 	// (task 90).
 	username.Watch(ctx, &p.saveAuthor)
 	var savedTab string

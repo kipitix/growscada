@@ -66,8 +66,9 @@ type SavedStateLabelsResponse struct {
 // LoadSavedStateResponse is the answer of POST …/saved-states/{n}/load: the
 // Draft after the saved state's content replaced it, in one transaction.
 //
-// HasUnsavedChanges is true unless the loaded saved state is the Draft's last
-// one: the Draft then differs from what a Save would fix. Warnings name the
+// HasUnsavedChanges is false: the Draft is the loaded saved state's content, so
+// there is nothing a Save would fix, whichever saved state it is (ADR 0016,
+// amendment 2026-11-16). Warnings name the
 // saved states of Libraries the loaded content used but this server does not
 // have — their imports and the Widgets of their WidgetTypes were dropped from
 // the Draft, which stays writable (task 71); a Library's answer never carries
@@ -83,8 +84,8 @@ type LoadSavedStateResponse struct {
 // made it.
 type CreateSavedStateRequest struct {
 	// Version is the Version of the Draft the client saw; a stale one is 409
-	// draft_conflict, and one equal to the last saved state's is 409
-	// nothing_to_save.
+	// draft_conflict, and one at which the Draft holds a saved state's content
+	// already is 409 nothing_to_save.
 	Version int    `json:"version"`
 	Title   string `json:"title"`
 	Author  string `json:"author"`

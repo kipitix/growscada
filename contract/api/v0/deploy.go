@@ -69,8 +69,8 @@ const RevertToDeployedPath = "/revert-to-deployed"
 const DraftPath = "/draft"
 
 // DraftStateResponse is the state of a Project's or a Library's Draft: its
-// Version and whether it holds changes its last saved state does not (ADR 0016,
-// task 74). GET /projects/{id}/draft and GET /libraries/{id}/draft answer it,
+// Version and whether it holds changes that none of its saved states holds (ADR
+// 0016, task 74). GET /projects/{id}/draft and GET /libraries/{id}/draft answer it,
 // and so do POST /projects/{id}/discard (the reset to the last saved state),
 // POST /projects/{id}/revert-to-deployed (the reset to the Deployment the
 // Project runs) and POST /libraries/{id}/discard (to the last saved state)

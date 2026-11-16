@@ -690,7 +690,7 @@ func (r *Root) renderMiscEntities() app.UI {
 		Style("padding-bottom", "4px").
 		Body(
 			r.renderMiscRow(misc.PageLabels, "Labels", "Manage the Organization's labels"),
-			r.renderMiscRow(misc.PageUserName, "User name", "The name the Save dialogs sign a saved state with"),
+			r.renderMiscRow(misc.PageUserName, "User name", "The name a Save signs a saved state with"),
 		)
 }
 

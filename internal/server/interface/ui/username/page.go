@@ -1,9 +1,9 @@
-// Package username is the Misc section's User name page (task 90): the name
-// the Save dialogs fill in as the author of a saved state. Until Users and
-// authentication exist (tasks 49/50) it is a declaration kept in the browser's
-// LocalStorage, not an account: it blocks nobody and proves nothing. The page is
-// the one place the UI shows the name; a Save dialog prefills it and may
-// override the author for that one save.
+// Package username is the Misc section's User name page (task 90): the name a
+// Save signs a saved state with. Until Users and authentication exist
+// (tasks 49/50) it is a declaration kept in the browser's LocalStorage, not an
+// account: it blocks nobody and proves nothing. The page is the one place the
+// UI shows the name, and a Save without one is refused: the history screen says
+// where to set it, and its Save stays disabled until then (task 91).
 package username
 
 import (
@@ -16,8 +16,8 @@ import (
 	"github.com/kipitix/growscada/internal/server/interface/ui/uiutil"
 )
 
-// ActionChanged tells the modes that the stored name moved: an open Save dialog
-// follows it like the next one (task 90).
+// ActionChanged tells the modes that the stored name moved: the next Save signs
+// with it, and an open history screen offers one (task 90).
 const ActionChanged = "username.changed"
 
 // Page is the full-page editor of the user name. The Misc section owns whether
@@ -40,7 +40,7 @@ type Page struct {
 func New() *Page { return &Page{} }
 
 // Watch makes target follow the stored name: a mode registers it in OnMount, so
-// an open Save dialog of the mode does not keep the previous one.
+// a Save signs with the name as it is now, not the one the mode mounted with.
 func Watch(ctx app.Context, target *string) {
 	ctx.Handle(ActionChanged, func(ctx app.Context, a app.Action) {
 		if name, ok := a.Value.(string); ok {
@@ -50,7 +50,7 @@ func Watch(ctx app.Context, target *string) {
 	})
 }
 
-// Stored is the name the Save dialogs prefill, "" when none is set.
+// Stored is the name a Save signs with, "" when none is set.
 func Stored(ctx app.Context) string {
 	var name string
 	if err := ctx.LocalStorage().Get(uiutil.AuthorKey, &name); err != nil {

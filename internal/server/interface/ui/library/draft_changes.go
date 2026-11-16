@@ -181,8 +181,9 @@ func (l *Library) listenShortcuts() {
 		code := ev.Get("code").String()
 		ctrl, meta, shift := ev.Get("ctrlKey").Bool(), ev.Get("metaKey").Bool(), ev.Get("shiftKey").Bool()
 		// Ctrl+S takes the browser's Save Page away wherever it is pressed
-		// while the mode is shown; the Draft is fixed as a saved state when no
-		// dialog of the mode is open, like the other commands (task 72_7).
+		// while the mode is shown; it opens the history screen with its Save
+		// form, and does nothing while that screen is open (task 72_7;
+		// task 91).
 		if uiutil.ShortcutKey(key, code, ctrl, meta, shift, false) == uiutil.KeySave {
 			if !l.shown() {
 				return nil

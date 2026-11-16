@@ -45,8 +45,8 @@ func (l *Library) doLoadSavedState(ctx app.Context, number int) {
 		l.loadingSavedState = 0
 		l.draftVersions.Forget()
 		l.observeDraftVersion(l.markDraft(), loaded.Version)
-		// The server's Draft state says whether the loaded saved state is the
-		// last one: an older one leaves the Draft unsaved (task 74).
+		// The loaded content is a saved state's, so the server answers a clean
+		// Draft whichever saved state it was (ADR 0016, amendment 2026-11-16).
 		l.loadDraftState(ctx)
 		l.contentReplacements++ // the list fills the editor, never merges it
 		l.loadList(ctx)

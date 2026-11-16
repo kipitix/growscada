@@ -40,7 +40,8 @@ type DiscardService interface {
 	// Load replaces the Draft with the content of the Project's saved state
 	// number, in one transaction: the saved state becomes what is edited, the
 	// DraftChange stack is cleared and the Version raised, as a Discard does. The
-	// Draft is clean exactly when that saved state is its last one. A Library
+	// Draft is clean afterwards: its content is a saved state's, whichever one it
+	// loaded (ADR 0016, amendment 2026-11-16). A Library
 	// Import the saved state names but this server cannot write is dropped with
 	// the Widgets of its WidgetTypes and named in the answer (task 71). Returns
 	// draft.ErrSavedStateNotFound for a number the Project does not have and an
@@ -180,7 +181,10 @@ func (s discardServiceImpl) Revert(ctx context.Context, rawProjectID uuid.UUID) 
 	// The Deployment the Revert writes is a saved state's content when it was
 	// deployed from one and nothing of it was dropped: then the Draft is clean,
 	// as after a Load. A Deployment from a file is no saved state's content
-	// (ADR 0016, amendment 2026-11-16).
+	// (ADR 0016, amendment 2026-11-16). The number is the provenance and not a
+	// guess: DeploySavedState stores a saved state's own document with its
+	// number, Rollback copies both, and DeployFile stores a document with none,
+	// so a number never names another content.
 	clean := deployment.SavedStateNumber != nil && len(warnings) == 0
 	result, err := s.content.Drafts().Replace(ctx, s.content.ScopeOf(projectID), clean, func(session *draft.Session) error {
 		if err := s.lockDiscardedImports(ctx, content, session); err != nil {

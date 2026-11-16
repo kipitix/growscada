@@ -172,9 +172,9 @@ func (s projectServiceImpl) describe(ctx context.Context, p project.Project) (ap
 
 // draftState reads the Version of a project's Draft and its unsaved-changes
 // flag, both from the Draft's row alone: the flag is the Draft's own Clean
-// Version marker (ADR 0016, amendment 2026-11-10). A Draft never written has
-// nothing to save: its state is the zero one, so the project shows no unsaved
-// changes (task 73, task 74).
+// Version marker (ADR 0016, amendments 2026-11-10 and 2026-11-16). A Draft
+// never written has nothing to save: its state is the zero one, so the project
+// shows no unsaved changes (task 73, task 74).
 func (s projectServiceImpl) draftState(ctx context.Context, projectID id.ID[project.Project]) (appdto.ProjectDraftState, error) {
 	foundDraft, ok, err := s.drafts.Read(ctx, draft.ProjectScope(projectID))
 	if err != nil {
