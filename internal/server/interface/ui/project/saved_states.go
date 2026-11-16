@@ -51,6 +51,8 @@ func (p *Project) hasUnsavedChanges() bool {
 // where the name is asked for (task 72_6).
 func (p *Project) openSaveDialog(ctx app.Context) {
 	p.saveTitle = "Save " + uiutil.FormatTime(time.Now())
+	// The User name page may have set another name since this mode mounted.
+	ctx.LocalStorage().Get(uiutil.AuthorKey, &p.saveAuthor)
 	p.saveDialog = true
 	ctx.Update()
 }
@@ -104,29 +106,6 @@ func (p *Project) saveSavedState(ctx app.Context) {
 		})
 		ctx.Update()
 	})
-}
-
-// changeAuthor asks for the author name the Save dialog fills in. It is no
-// lock: it blocks nobody and only fills in the dialog (task 72_6).
-func (p *Project) changeAuthor(ctx app.Context) {
-	name, ok := prompt("Author:", p.saveAuthor)
-	if !ok {
-		return
-	}
-	p.saveAuthor = name
-	ctx.LocalStorage().Set(uiutil.AuthorKey, name)
-	ctx.Update()
-}
-
-// prompt asks the user for a text in the browser's dialog; false if they
-// cancel or leave it empty.
-func prompt(message, value string) (string, bool) {
-	answer := app.Window().Call("prompt", message, value)
-	if answer.IsNull() || answer.IsUndefined() {
-		return "", false
-	}
-	text := strings.TrimSpace(answer.String())
-	return text, text != ""
 }
 
 // openHistory shows the saved states of the project, read afresh (task 84): a
@@ -200,31 +179,6 @@ func (p *Project) renderSavedStateBar() []app.UI {
 			func(ctx app.Context) { p.openHistory(ctx) }),
 	)
 	return body
-}
-
-// renderAuthorBar shows the author the Save dialog fills in, with
-// a button to change it: it is not a lock and blocks nobody (task 72_6).
-func (p *Project) renderAuthorBar() app.UI {
-	name := strings.TrimSpace(p.saveAuthor)
-	label := "Author: not set"
-	if name != "" {
-		label = "Author: " + name
-	}
-	return app.Div().
-		Attr("data-author-bar", "true").
-		Style("display", "flex").
-		Style("align-items", "center").
-		Style("gap", "4px").
-		Body(
-			app.Span().
-				Attr("data-author-name", name).
-				Style("font-size", "12px").
-				Style("color", "var(--text-muted)").
-				Text(label),
-			rowButton("Change", "", true, "Change the author name",
-				func(ctx app.Context) { p.changeAuthor(ctx) }).
-				Attr("data-author-change", "true"),
-		)
 }
 
 // renderSaveDialog is the Save confirmation: a title, the author, and the

@@ -9,6 +9,7 @@ import (
 	"github.com/maxence-charriere/go-app/v11/pkg/app"
 
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
+	"github.com/kipitix/growscada/internal/server/interface/ui/username"
 )
 
 // TestSaveSavedState_HistoryRowAndIndicator: Save fixes the Draft as saved
@@ -127,19 +128,31 @@ func TestSaveShortcut_WithChangesOpensTheDialog(t *testing.T) {
 	}
 }
 
-// TestAuthorBar_ShowsTheStoredName: the header names the author the Save dialog
-// fills in, with a button to change it — not a lock (task 72_6).
-func TestAuthorBar_ShowsTheStoredName(t *testing.T) {
+// TestHeader_HasNoAuthorBar: the user name is set in the Misc section and is
+// not repeated in the header; the Save dialog still fills it in, and the
+// User name page's change reaches the next dialog (task 90).
+func TestHeader_HasNoAuthorBar(t *testing.T) {
 	f := startProject(t)
 	f.run()
 	f.p.saveAuthor = "Ada"
 
 	html := app.HTMLString(f.p.Render())
-	if !strings.Contains(html, "Author: Ada") || !strings.Contains(html, `data-author-name="Ada"`) {
-		t.Errorf("the header does not name the author: %s", html)
+	if strings.Contains(html, `data-author-bar`) || strings.Contains(html, "Author: Ada") {
+		t.Errorf("the header still shows the author: %s", html)
 	}
-	if !strings.Contains(html, `data-author-change`) {
-		t.Errorf("the header offers no way to change the author: %s", html)
+
+	f.p.compoCtx.Dispatch(func(ctx app.Context) {
+		ctx.NewActionWithValue(username.ActionChanged, "Grace")
+	})
+	f.run()
+	if f.p.saveAuthor != "Grace" {
+		t.Errorf("the author after the User name page wrote one: %q", f.p.saveAuthor)
+	}
+	f.p.openSaveDialog(f.p.compoCtx)
+	f.run()
+	if html := app.HTMLString(f.p.Render()); !strings.Contains(html, `data-save-author`) ||
+		!strings.Contains(html, `value="Grace"`) {
+		t.Errorf("the Save dialog does not fill in the user name: %s", html)
 	}
 }
 

@@ -16,9 +16,9 @@ func itoa(n int) string { return strconv.Itoa(n) }
 
 // renderHeader is the panel above the editor (task 84): the way back to the
 // libraries with the name of the one shown, Save with its unsaved-changes
-// indicator, Undo, Redo and History — icons, each with its hover
-// text —, the library's state and the author. The dialogs the panel opens
-// follow it.
+// indicator, Undo, Redo and History — icons, each with its hover text —, and
+// the library's state. The dialogs the panel opens follow it. The user name is
+// set in the Misc section and is not repeated here (task 90).
 func (l *Library) renderHeader() app.UI {
 	if l.libraryID == uuid.Nil {
 		return app.Div()
@@ -34,7 +34,6 @@ func (l *Library) renderHeader() app.UI {
 		uiutil.BarDivider(),
 		l.renderLibraryStatus(),
 		app.Div().Style("flex", "1"),
-		l.renderAuthorBar(),
 	)
 	return app.Div().
 		Attr("data-library-header", "true").

@@ -10,6 +10,7 @@ import (
 
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	"github.com/kipitix/growscada/internal/apiclient"
+	"github.com/kipitix/growscada/internal/server/interface/ui/misc"
 	"github.com/kipitix/growscada/internal/server/interface/ui/picker"
 	"github.com/kipitix/growscada/internal/server/interface/ui/uiutil"
 )
@@ -43,10 +44,11 @@ var modeLabels = map[Mode]string{
 	ModeProject:   "Project",
 	ModeOperation: "Operation",
 	ModeHistory:   "History",
+	ModeMisc:      "Misc",
 }
 
 // modeOrder is the order the menu lists the modes in.
-var modeOrder = []Mode{ModeLibrary, ModeProject, ModeOperation, ModeHistory}
+var modeOrder = []Mode{ModeLibrary, ModeProject, ModeOperation, ModeHistory, ModeMisc}
 
 // projectModes are the modes that only show a Project and have no selection
 // page of their own.
@@ -99,10 +101,15 @@ func (r *Root) openMenu(ctx app.Context) {
 
 // scrollToShown scrolls the panel to the row of what the mode shows — the
 // entity, or the way to the page while the page is shown — so a long list does
-// not hide it (task 89).
+// not hide it (task 89). The Misc section scrolls to the page it shows instead
+// of an entity (task 90).
 func (r *Root) scrollToShown() {
 	target := ""
 	switch {
+	case r.currentMode == ModeMisc:
+		if r.miscPage != misc.PageContents {
+			target = "gs-menu-misc-" + string(r.miscPage)
+		}
 	case hasPage(r.currentMode) && r.showList[r.currentMode]:
 		target = "gs-menu-choose-" + string(r.currentMode)
 	default:
@@ -264,6 +271,12 @@ func (r *Root) choosePage(ctx app.Context, mode Mode) {
 	r.storeMode()
 }
 
+// chooseMiscPage switches to the Misc section and shows the page chosen in its
+// menu, keeping both the mode and the page for the next reload (task 90).
+func (r *Root) chooseMiscPage(ctx app.Context, page misc.Page) {
+	r.openMiscPage(ctx, page)
+}
+
 // chooseProject shows item in mode, one of those without a selection page
 // (Operation, History): the mode keeps it and the next reload restores it
 // (task 89).
@@ -398,11 +411,22 @@ func (r *Root) renderMenuBackdrop() app.UI {
 
 // navigationText is what the line beside the burger says: the mode and the
 // entity it shows, separated by the middle dot, the mode alone when no entity
-// is known yet or the mode shows its selection page (task 89).
+// is known yet or the mode shows its selection page (task 89). The Misc
+// section names the page it shows instead of an entity (task 90).
 func (r *Root) navigationText() string {
 	label := modeLabel(r.currentMode)
 	if label == "" {
 		return ""
+	}
+	if r.currentMode == ModeMisc {
+		switch r.miscPage {
+		case misc.PageLabels:
+			return label + middleDot + "Labels"
+		case misc.PageUserName:
+			return label + middleDot + "User name"
+		default:
+			return label
+		}
 	}
 	if hasPage(r.currentMode) && r.showList[r.currentMode] {
 		// The selection page names no entity: the mode is what is shown.
@@ -535,12 +559,13 @@ func (r *Root) renderModeRow(mode Mode) app.UI {
 		Disabled(true)
 }
 
-// modeEnterable reports whether the menu offers mode at all: the Library and
-// the Project always (their page creates entities), Operation and History while
-// the server has a project to show — the row waits while the list is still
-// being read, and is off once the read finds none (task 89).
+// modeEnterable reports whether the menu offers mode at all: the Library, the
+// Project and Misc always (their pages create entities or belong to no
+// server's list), Operation and History while the server has a project to show
+// — the row waits while the list is still being read, and is off once the read
+// finds none (task 89, task 90).
 func (r *Root) modeEnterable(mode Mode) bool {
-	if hasPage(mode) {
+	if hasPage(mode) || mode == ModeMisc {
 		return true
 	}
 	empty, loaded := r.menuListOf(mode).empty()
@@ -549,8 +574,11 @@ func (r *Root) modeEnterable(mode Mode) bool {
 
 // renderMenuEntities is the block under an expanded mode: the way to its
 // selection page for the Library and the Project, then the entities it has
-// (task 89).
+// (task 89). Misc lists its two pages instead (task 90).
 func (r *Root) renderMenuEntities(mode Mode) app.UI {
+	if mode == ModeMisc {
+		return r.renderMiscEntities()
+	}
 	rows := make([]app.UI, 0, 8)
 	if hasPage(mode) {
 		rows = append(rows, r.renderChooseRow(mode))
@@ -568,6 +596,52 @@ func (r *Root) renderMenuEntities(mode Mode) app.UI {
 		Style("flex-direction", "column").
 		Style("padding-bottom", "4px").
 		Body(rows...)
+}
+
+// renderMiscEntities is the block under Misc: its two pages, the page shown
+// marked and checked (task 90).
+func (r *Root) renderMiscEntities() app.UI {
+	return app.Div().
+		Attr("data-menu-entities", string(ModeMisc)).
+		Style("display", "flex").
+		Style("flex-direction", "column").
+		Style("padding-bottom", "4px").
+		Body(
+			r.renderMiscRow(misc.PageLabels, "Labels", "Manage the Organization's labels"),
+			r.renderMiscRow(misc.PageUserName, "User name", "The name the Save dialogs sign a saved state with"),
+		)
+}
+
+// renderMiscRow is one page of the Misc section in the menu.
+func (r *Root) renderMiscRow(page misc.Page, label, title string) app.UI {
+	chosen := r.currentMode == ModeMisc && r.miscPage == page
+	background, color := "transparent", "var(--text)"
+	if chosen {
+		background, color = "var(--accent-bg)", "var(--accent)"
+	}
+	body := []app.UI{app.Span().Text(label)}
+	if chosen {
+		body = append(body, app.Span().Style("margin-left", "auto").Body(uiutil.IconCheck()))
+	}
+	return app.Button().
+		Attr("id", "gs-menu-misc-"+string(page)).
+		Attr("data-menu-misc", string(page)).
+		Attr("role", "menuitemradio").
+		Attr("aria-checked", boolText(chosen)).
+		Title(title).
+		Style("display", "flex").
+		Style("align-items", "center").
+		Style("gap", "8px").
+		Style("width", "100%").
+		Style("padding", "6px 14px 6px 26px").
+		Style("border", "none").
+		Style("background", background).
+		Style("color", color).
+		Style("font-size", "13px").
+		Style("text-align", "left").
+		Style("cursor", "pointer").
+		Body(body...).
+		OnClick(func(ctx app.Context, e app.Event) { r.chooseMiscPage(ctx, page) })
 }
 
 // renderChooseRow is the way to the selection page of a mode, where the

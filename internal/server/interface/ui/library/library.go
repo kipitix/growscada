@@ -10,6 +10,7 @@ import (
 	"github.com/kipitix/growscada/internal/apiclient"
 	"github.com/kipitix/growscada/internal/server/interface/ui/savedstates"
 	"github.com/kipitix/growscada/internal/server/interface/ui/uiutil"
+	"github.com/kipitix/growscada/internal/server/interface/ui/username"
 )
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -149,6 +150,14 @@ func (l *Library) OnMount(ctx app.Context) {
 	l.loadDraftState(ctx)
 	l.loadDraftChanges(ctx)
 	ctx.LocalStorage().Get(uiutil.AuthorKey, &l.saveAuthor)
+	// The User name page writes another name: the bar and the next Save dialog
+	// follow it (task 90).
+	ctx.Handle(username.ActionChanged, func(ctx app.Context, a app.Action) {
+		if name, ok := a.Value.(string); ok {
+			l.saveAuthor = name
+		}
+		ctx.Update()
+	})
 	l.loadSavedStates(ctx)
 	l.listenShortcuts()
 	l.handleServerEvents(ctx)

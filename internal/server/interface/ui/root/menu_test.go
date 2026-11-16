@@ -12,6 +12,8 @@ import (
 
 	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	"github.com/kipitix/growscada/internal/server/interface/ui/eventlog"
+	"github.com/kipitix/growscada/internal/server/interface/ui/labels"
+	"github.com/kipitix/growscada/internal/server/interface/ui/misc"
 	"github.com/kipitix/growscada/internal/server/interface/ui/picker"
 	"github.com/kipitix/growscada/internal/server/interface/ui/uiutil"
 )
@@ -392,7 +394,8 @@ func TestProjectEvents_RenameAndDeletion(t *testing.T) {
 }
 
 // TestHeader_CarriesTheMenuAndNoTabs: the header is the burger, the navigation
-// line and the shared actions; it carries no tab list any more (task 89).
+// line and the theme toggle; it carries no tab list and no Labels button any
+// more — the Misc section is where Labels live (task 89, task 90).
 func TestHeader_CarriesTheMenuAndNoTabs(t *testing.T) {
 	r := NewRoot("http://127.0.0.1:0")
 	r.currentMode = ModeProject
@@ -400,13 +403,16 @@ func TestHeader_CarriesTheMenuAndNoTabs(t *testing.T) {
 
 	html := app.HTMLString(r.renderHeader())
 	for _, want := range []string{"data-header", "gs-main-menu-button", `aria-expanded="false"`,
-		"aria-haspopup", "gs-main-navigation", "Project \u00b7 Greenhouse", "data-labels-open"} {
+		"aria-haspopup", "gs-main-navigation", "Project \u00b7 Greenhouse"} {
 		if !strings.Contains(html, want) {
 			t.Errorf("the header lacks %s: %s", want, html)
 		}
 	}
 	if strings.Contains(html, "tablist") || strings.Contains(html, `role="tab"`) {
 		t.Errorf("the header still carries tabs: %s", html)
+	}
+	if strings.Contains(html, "data-labels-open") {
+		t.Errorf("the header still carries the Labels button: %s", html)
 	}
 }
 
@@ -534,5 +540,98 @@ func TestMenu_ReadsTheListsWhenItOpensAndFollowsTheirEvents(t *testing.T) {
 	s.settle()
 	if got := len(s.menuProjects.items); got != 2 {
 		t.Errorf("a closed menu reread its lists: %d projects", got)
+	}
+}
+
+// TestMenu_MiscListsItsPages: an expanded Misc lists the Labels and the User
+// name page, and no way to a selection page it does not have (task 90).
+func TestMenu_MiscListsItsPages(t *testing.T) {
+	r := NewRoot("http://127.0.0.1:0")
+	r.menuOpen, r.menuExpanded = true, ModeMisc
+
+	html := app.HTMLString(r.renderMenuPanel())
+	for _, want := range []string{`data-menu-mode="misc"`, `data-menu-misc="labels"`,
+		`data-menu-misc="user"`, `id="gs-menu-misc-labels"`, `id="gs-menu-misc-user"`} {
+		if !strings.Contains(html, want) {
+			t.Errorf("the Misc block lacks %s: %s", want, html)
+		}
+	}
+	if strings.Contains(html, `data-menu-choose="misc"`) {
+		t.Errorf("Misc offers a selection page it does not have: %s", html)
+	}
+}
+
+// TestMenu_ChooseMiscPage: choosing a page of Misc switches to the section,
+// closes the menu and keeps both the mode and the page for the next reload
+// (task 90).
+func TestMenu_ChooseMiscPage(t *testing.T) {
+	s := menuSession(t, "http://127.0.0.1:0", nil)
+
+	s.compoCtx.Dispatch(func(ctx app.Context) {
+		s.openMenu(ctx)
+		s.chooseMiscPage(ctx, misc.PageUserName)
+	})
+	s.settle()
+
+	if s.menuOpen {
+		t.Error("the menu stays open after the choice")
+	}
+	if s.currentMode != ModeMisc || s.miscPage != misc.PageUserName {
+		t.Errorf("mode %q, page %q; want Misc and the User name page", s.currentMode, s.miscPage)
+	}
+	var stored string
+	if err := s.probe.ctx.LocalStorage().Get(miscPageKey, &stored); err != nil || stored != string(misc.PageUserName) {
+		t.Errorf("the stored page is %q (%v), want %q", stored, err, misc.PageUserName)
+	}
+	if got := s.navigationText(); got != "Misc \u00b7 User name" {
+		t.Errorf("the navigation line says %q", got)
+	}
+}
+
+// TestMisc_RestoresTheStoredPage: a reload returns to the Misc page the person
+// left (task 90).
+func TestMisc_RestoresTheStoredPage(t *testing.T) {
+	s := menuSession(t, "http://127.0.0.1:0", map[string]string{
+		"root:mode": string(ModeMisc),
+		miscPageKey: string(misc.PageUserName),
+	})
+	if s.currentMode != ModeMisc {
+		t.Errorf("the mode shown is %q, want Misc", s.currentMode)
+	}
+	if s.miscPage != misc.PageUserName {
+		t.Errorf("the page restored is %q, want User name", s.miscPage)
+	}
+	if got := s.navigationText(); got != "Misc \u00b7 User name" {
+		t.Errorf("the navigation line says %q", got)
+	}
+}
+
+// TestMisc_HistoryOpensTheLabelsPage: the history's "Manage labels" opens
+// Misc · Labels; the User name page is reached from the menu alone (task 90).
+func TestMisc_HistoryOpensTheLabelsPage(t *testing.T) {
+	s := menuSession(t, "http://127.0.0.1:0", nil)
+	s.compoCtx.Dispatch(func(ctx app.Context) { ctx.NewAction(labels.ActionOpen) })
+	s.settle()
+	if s.currentMode != ModeMisc || s.miscPage != misc.PageLabels {
+		t.Errorf("mode %q, page %q; want Misc and the Labels page", s.currentMode, s.miscPage)
+	}
+}
+
+// TestNavigation_NamesTheMiscPage: the Misc section names the page it shows
+// after the middle dot, and only the section on its contents (task 90).
+func TestNavigation_NamesTheMiscPage(t *testing.T) {
+	r := NewRoot("http://127.0.0.1:0")
+	r.currentMode = ModeMisc
+
+	if got := r.navigationText(); got != "Misc" {
+		t.Errorf("on the contents: %q, want the section alone", got)
+	}
+	r.miscPage = misc.PageLabels
+	if got := r.navigationText(); got != "Misc \u00b7 Labels" {
+		t.Errorf("on the Labels page: %q", got)
+	}
+	r.miscPage = misc.PageUserName
+	if got := r.navigationText(); got != "Misc \u00b7 User name" {
+		t.Errorf("on the User name page: %q", got)
 	}
 }

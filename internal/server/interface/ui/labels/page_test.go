@@ -15,7 +15,7 @@ import (
 	"github.com/kipitix/growscada/internal/server/servertest"
 )
 
-// The Labels window runs against the real REST API over Postgres.
+// The Labels page runs against the real REST API over Postgres.
 
 var postgres servertest.Postgres
 
@@ -25,14 +25,14 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-// mountOnHost lets go-app mount the dialog on the host (see uitest).
-type mountOnHost struct{ *Dialog }
+// mountOnHost lets go-app mount the page on the host (see uitest).
+type mountOnHost struct{ *Page }
 
 func (m mountOnHost) OnPreRender(ctx app.Context) { m.OnMount(ctx) }
 
 type fixture struct {
 	t   *testing.T
-	d   *Dialog
+	d   *Page
 	e   *uitest.Engine
 	api *apiclient.Client
 }
@@ -42,7 +42,6 @@ func start(t *testing.T) *fixture {
 	srv, _ := servertest.StartAPI(t, postgres.DB(t))
 	f := &fixture{t: t, api: apiclient.New(srv.URL, srv.Client())}
 	f.d = New(apiclient.New(srv.URL, srv.Client()))
-	f.d.Open = true
 	f.e = uitest.Load(t, mountOnHost{f.d})
 	return f
 }
@@ -77,9 +76,9 @@ func findLabel(t *testing.T, list []apiv0.LabelResponse, name string) apiv0.Labe
 	return label
 }
 
-// TestDialog_ListsTheLabels: the window shows every label with its color chip
+// TestPage_ListsTheLabels: the page shows every label with its color chip
 // and the number of saved states it marks (task 85_2).
-func TestDialog_ListsTheLabels(t *testing.T) {
+func TestPage_ListsTheLabels(t *testing.T) {
 	f := start(t)
 	created, err := f.api.CreateLabel(context.Background(), "Ready", "#22c55e")
 	if err != nil {
@@ -89,8 +88,11 @@ func TestDialog_ListsTheLabels(t *testing.T) {
 	f.e.ConsumeAll()
 
 	html := f.html()
-	if !strings.Contains(html, `data-labels-dialog`) || !strings.Contains(html, "Ready") {
-		t.Fatalf("the window does not show the label: %s", html)
+	if !strings.Contains(html, `data-labels-page`) || !strings.Contains(html, "Ready") {
+		t.Fatalf("the page does not show the label: %s", html)
+	}
+	if !strings.Contains(html, `data-panel-back`) || !strings.Contains(html, "Labels") {
+		t.Errorf("the page lacks its header and way back: %s", html)
 	}
 	if !strings.Contains(html, `data-label-assigned`) {
 		t.Errorf("the assigned count is not 0: %s", html)
@@ -100,9 +102,9 @@ func TestDialog_ListsTheLabels(t *testing.T) {
 	}
 }
 
-// TestDialog_Create: Add sends the name and the optional color, clears the
+// TestPage_Create: Add sends the name and the optional color, clears the
 // row and rereads the list.
-func TestDialog_Create(t *testing.T) {
+func TestPage_Create(t *testing.T) {
 	f := start(t)
 	f.d.newName, f.d.newColor = "Deployable", "#3b82f6"
 	f.d.create(f.d.compoCtx)
@@ -120,9 +122,9 @@ func TestDialog_Create(t *testing.T) {
 	}
 }
 
-// TestDialog_Create_TakenNameIsShownUnderTheFieldAndKeepsTheText: a 409 is the
+// TestPage_Create_TakenNameIsShownUnderTheFieldAndKeepsTheText: a 409 is the
 // server's answer under the field, the typed name stays (task 85_2).
-func TestDialog_Create_TakenNameIsShownUnderTheFieldAndKeepsTheText(t *testing.T) {
+func TestPage_Create_TakenNameIsShownUnderTheFieldAndKeepsTheText(t *testing.T) {
 	f := start(t)
 	if _, err := f.api.CreateLabel(context.Background(), "Prod", ""); err != nil {
 		t.Fatalf("CreateLabel: %v", err)
@@ -142,9 +144,9 @@ func TestDialog_Create_TakenNameIsShownUnderTheFieldAndKeepsTheText(t *testing.T
 	}
 }
 
-// TestDialog_RenameAndRecolor: the name is edited in place and saved, and the
+// TestPage_RenameAndRecolor: the name is edited in place and saved, and the
 // palette recolors the label and clears its color.
-func TestDialog_RenameAndRecolor(t *testing.T) {
+func TestPage_RenameAndRecolor(t *testing.T) {
 	f := start(t)
 	created, err := f.api.CreateLabel(context.Background(), "Ready", "")
 	if err != nil {
@@ -177,9 +179,9 @@ func TestDialog_RenameAndRecolor(t *testing.T) {
 	}
 }
 
-// TestDialog_DeleteAsksFirst: the confirmation names the label and warns how
+// TestPage_DeleteAsksFirst: the confirmation names the label and warns how
 // many saved states lose the mark, and only then is it deleted.
-func TestDialog_DeleteAsksFirst(t *testing.T) {
+func TestPage_DeleteAsksFirst(t *testing.T) {
 	f := start(t)
 	if _, err := f.api.CreateLabel(context.Background(), "Ready", ""); err != nil {
 		t.Fatalf("CreateLabel: %v", err)
@@ -212,9 +214,9 @@ func TestDialog_DeleteAsksFirst(t *testing.T) {
 	}
 }
 
-// TestDialog_RereadsOnAnotherClientsEvent: a label changed in another tab is
-// an event of the server's stream, and the window rereads its list.
-func TestDialog_RereadsOnAnotherClientsEvent(t *testing.T) {
+// TestPage_RereadsOnAnotherClientsEvent: a label changed in another tab is
+// an event of the server's stream, and the page rereads its list.
+func TestPage_RereadsOnAnotherClientsEvent(t *testing.T) {
 	f := start(t)
 	created, err := f.api.CreateLabel(context.Background(), "From another tab", "#a855f7")
 	if err != nil {
@@ -225,6 +227,6 @@ func TestDialog_RereadsOnAnotherClientsEvent(t *testing.T) {
 	f.e.ConsumeAll()
 
 	if html := f.html(); !strings.Contains(html, "From another tab") {
-		t.Errorf("the window did not reread the label: %s", html)
+		t.Errorf("the page did not reread the label: %s", html)
 	}
 }

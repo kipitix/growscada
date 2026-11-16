@@ -6,6 +6,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/maxence-charriere/go-app/v11/pkg/app"
+
+	"github.com/kipitix/growscada/internal/server/interface/ui/username"
 )
 
 // TestSavedStateBar_IndicatorKeepsTheButtonPositions: the unsaved-changes
@@ -107,5 +109,34 @@ func TestSaveSavedState_LibraryShortcutsWaitForTheDialogs(t *testing.T) {
 	f.l.saveDialog, f.l.historyScreen = false, true
 	if f.l.keyActionAllowed() {
 		t.Errorf("a shortcut acts behind the History dialog")
+	}
+}
+
+// TestHeader_HasNoAuthorBar: the user name is set in the Misc section and is
+// not repeated in the header; the Save dialog fills it in, and the User name
+// page's change reaches the next dialog (task 90).
+func TestHeader_HasNoAuthorBar(t *testing.T) {
+	url, api := newServer(t)
+	f := mount(t, url, api)
+	f.run()
+	f.l.saveAuthor = "Ada"
+
+	if html := app.HTMLString(f.l.Render()); strings.Contains(html, `data-author-bar`) ||
+		strings.Contains(html, "Author: Ada") {
+		t.Errorf("the header still shows the author: %s", html)
+	}
+
+	f.l.compoCtx.Dispatch(func(ctx app.Context) {
+		ctx.NewActionWithValue(username.ActionChanged, "Grace")
+	})
+	f.run()
+	if f.l.saveAuthor != "Grace" {
+		t.Errorf("the author after the User name page wrote one: %q", f.l.saveAuthor)
+	}
+	f.l.openSaveDialog()
+	f.run()
+	if html := app.HTMLString(f.l.Render()); !strings.Contains(html, `data-save-author`) ||
+		!strings.Contains(html, `value="Grace"`) {
+		t.Errorf("the Save dialog does not fill in the user name: %s", html)
 	}
 }

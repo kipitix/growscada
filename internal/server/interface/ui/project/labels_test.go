@@ -97,7 +97,7 @@ func TestSavedStateLabels_AssignAndUnassign(t *testing.T) {
 		t.Errorf("a mark of a deleted label: toast %+v, want a 404", got)
 	}
 
-	// "Manage labels" of an empty menu opens the tab's Labels window.
+	// "Manage labels" of an empty menu opens the Misc section's Labels page.
 	f.p.manageLabels(f.p.compoCtx)
 	f.run()
 }

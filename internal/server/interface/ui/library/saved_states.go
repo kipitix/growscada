@@ -55,6 +55,10 @@ func (l *Library) openSaveDialog() {
 		return
 	}
 	l.saveTitle = "Save " + uiutil.FormatTime(time.Now())
+	// The User name page may have set another name since this mode mounted.
+	if l.mounted {
+		l.compoCtx.LocalStorage().Get(uiutil.AuthorKey, &l.saveAuthor)
+	}
 	l.saveDialog = true
 	l.compoCtx.Update()
 }
@@ -117,18 +121,6 @@ func (l *Library) saveSavedState() {
 		l.loadLibraries(ctx)
 		ctx.Update()
 	})
-}
-
-// changeAuthor asks for the author name the Save dialog fills in. It is no lock:
-// it blocks nobody and only fills in the dialog (task 72_7).
-func (l *Library) changeAuthor(ctx app.Context) {
-	name, ok := prompt("Author:", l.saveAuthor, false)
-	if !ok {
-		return
-	}
-	l.saveAuthor = name
-	ctx.LocalStorage().Set(uiutil.AuthorKey, name)
-	ctx.Update()
 }
 
 // openHistory shows the saved states of the selected library, read afresh
@@ -213,33 +205,6 @@ func (l *Library) renderSavedStateBar() []app.UI {
 			"The saved states of the library", func(app.Context, app.Event) { l.openHistory() },
 			app.EventScope("history")),
 	}
-}
-
-// renderAuthorBar shows the author the Save dialog fills in, with a button to
-// change it: it is not a lock and blocks nobody (task 72_7).
-func (l *Library) renderAuthorBar() app.UI {
-	name := strings.TrimSpace(l.saveAuthor)
-	label := "Author: not set"
-	if name != "" {
-		label = "Author: " + name
-	}
-	return app.Div().
-		Attr("data-author-bar", "true").
-		Style("display", "flex").
-		Style("align-items", "center").
-		Style("gap", "4px").
-		Style("margin-top", "2px").
-		Body(
-			app.Span().
-				Attr("data-author-name", name).
-				Style("font-size", "11px").
-				Style("color", "var(--text-muted)").
-				Text(label),
-			uiutil.Button("Change", "", true, "Change the author name", uiutil.ButtonRow,
-				func(ctx app.Context, e app.Event) {
-					l.changeAuthor(ctx)
-				}).Attr("data-author-change", "true"),
-		)
 }
 
 // renderSaveDialog is the Save confirmation.

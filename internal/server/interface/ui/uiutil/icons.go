@@ -57,7 +57,7 @@ func IconClose() app.UI { return app.Raw(iconCloseSVG) }
 // IconPencil edits a field in place.
 func IconPencil() app.UI { return app.Raw(iconPencilSVG) }
 
-// IconTag opens the labels of the server (task 85_2).
+// IconTag is the mark of the Labels page (task 85_2, task 90).
 func IconTag() app.UI { return app.Raw(iconTagSVG) }
 
 // IconMenu opens the main menu (task 89).

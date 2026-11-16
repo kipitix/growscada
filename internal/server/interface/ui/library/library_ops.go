@@ -15,16 +15,6 @@ import (
 
 // ── Library operations ────────────────────────────────────────────────────────
 
-// prompt asks the user for a text in the browser's dialog; false if they
-// cancel. empty tells whether an empty answer is one.
-func prompt(message, value string, empty bool) (string, bool) {
-	answer := app.Window().Call("prompt", message, value)
-	if answer.IsNull() || answer.IsUndefined() {
-		return "", false
-	}
-	return answer.String(), empty || answer.String() != ""
-}
-
 // loadSavedState makes the saved state number the Draft (task 84), after a
 // confirmation when the Draft holds unsaved changes: the load clears the undo
 // stack, so the change is not one to take back.

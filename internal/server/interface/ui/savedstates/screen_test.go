@@ -149,7 +149,7 @@ func TestScreen_LabelsChipsAndMenu(t *testing.T) {
 }
 
 // TestScreen_LabelMenuWithNoLabels: an Organization without labels says so in
-// the menu and offers the Labels window (task 85_3).
+// the menu and offers the Labels page (task 85_3).
 func TestScreen_LabelMenuWithNoLabels(t *testing.T) {
 	s := New()
 	s.Loaded = true

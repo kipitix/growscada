@@ -379,7 +379,7 @@ func (p *Project) renderDeployLabelFilter() app.UI {
 			Style("color", "var(--text-muted)").
 			Body(
 				app.Span().Text("No labels yet"),
-				rowButton("Manage labels", "", true, "Open the Labels window",
+				rowButton("Manage labels", "", true, "Open the Labels page",
 					func(ctx app.Context) { p.manageLabels(ctx) },
 					app.EventScope("deploy-manage-labels")).
 					Attr("data-deploy-manage-labels", "true"),
@@ -603,8 +603,6 @@ func (p *Project) renderDeployBar() app.UI {
 			Style("color", "var(--text-2)").
 			Style("white-space", "nowrap").
 			Text(badge),
-		uiutil.BarDivider(),
-		p.renderAuthorBar(),
 		app.Div().Style("flex", "1"),
 		p.panelButton("project-file", uiutil.IconFile(), "Download the Draft, open a file, or deploy one",
 			!busy && !p.projectFileBusy, func(ctx app.Context) {

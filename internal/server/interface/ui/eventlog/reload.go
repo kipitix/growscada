@@ -20,7 +20,7 @@ import (
 type ReloadTargets struct {
 	Projects, Libraries, WidgetTypes, LibraryImports, Scenes, Widgets, Tags, Deploy, SavedStates bool
 	// Labels is the server's labels (task 85_2): a label change is the
-	// server's event, and the global Labels window rereads its list on it.
+	// server's event, and the Labels page rereads its list on it.
 	Labels bool
 	// Scene is the one Scene whose own state and Widgets are stale (a Widget
 	// of it changed, which bumps its version without a scene event); uuid.Nil
@@ -75,7 +75,7 @@ func ReloadTargetsFor(ev apiv0.Event) ReloadTargets {
 		return ReloadTargets{Deploy: true}
 	case apiv0.EventLabelCreated, apiv0.EventLabelUpdated, apiv0.EventLabelDeleted,
 		apiv0.EventLabelAssigned, apiv0.EventLabelUnassigned:
-		// A label or one of its assignments changed: the Labels window rereads
+		// A label or one of its assignments changed: the Labels page rereads
 		// its list and the history its chips and the label's count. No mode's
 		// content changes (task 85_2, task 85_3; ADR 0025).
 		return ReloadTargets{Labels: true, SavedStates: true}

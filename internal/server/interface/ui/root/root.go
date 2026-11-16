@@ -16,6 +16,7 @@ import (
 	"github.com/kipitix/growscada/internal/server/interface/ui/history"
 	"github.com/kipitix/growscada/internal/server/interface/ui/labels"
 	"github.com/kipitix/growscada/internal/server/interface/ui/library"
+	"github.com/kipitix/growscada/internal/server/interface/ui/misc"
 	"github.com/kipitix/growscada/internal/server/interface/ui/operation"
 	"github.com/kipitix/growscada/internal/server/interface/ui/picker"
 	"github.com/kipitix/growscada/internal/server/interface/ui/project"
@@ -31,6 +32,7 @@ const (
 	ModeProject   Mode = "project"
 	ModeOperation Mode = "operation"
 	ModeHistory   Mode = "history"
+	ModeMisc      Mode = "misc"
 )
 
 // The screens of a mode with a selection page, as LocalStorage keeps the one
@@ -44,6 +46,10 @@ const (
 // "project:screen"); absent, the screen follows the entity selected, as task 73
 // had it.
 func screenKey(mode Mode) string { return string(mode) + ":screen" }
+
+// miscPageKey is the LocalStorage key of the page of the Misc section shown
+// (task 90).
+const miscPageKey = "misc:page"
 
 type Root struct {
 	app.Compo
@@ -61,10 +67,10 @@ type Root struct {
 	// bar follows the event stream of the project of the mode shown (the
 	// last such mode while Library, which does not depend on one, is shown).
 	bar *eventlog.Bar
-	// labels is the one Labels window of the tab (task 85_2), opened from the
-	// header in every mode; labelsOpen is whether it is shown.
-	labels     *labels.Dialog
-	labelsOpen bool
+	// misc is the Misc mode (task 90): the Labels page and the User name page,
+	// one of which miscPage names.
+	misc     *misc.Section
+	miscPage misc.Page
 	// selected holds the entity each mode shows, once the main menu or the
 	// selection page announced it: the Project of Operation and History, and
 	// the Project or Library of the Project and Library modes.
@@ -125,7 +131,14 @@ func NewRoot(anAPIServerURL string) *Root {
 	r.project.BackName = func() string { return r.entityName[ModeProject] }
 	r.operation = operation.NewOperation(r.client)
 	r.bar = eventlog.NewBar(anAPIServerURL)
-	r.labels = labels.New(r.client)
+	r.misc = misc.New(r.client)
+	r.misc.OnPage = func(page misc.Page) {
+		r.miscPage = page
+		r.storeMiscPage(page)
+		if r.mounted {
+			r.compoCtx.Update()
+		}
+	}
 	r.modes = []modeView{
 		{mode: ModeLibrary, ui: r.library, picker: picker.New(
 			picker.NewLibrarySource(r.client), picker.LibraryKey,
@@ -139,6 +152,7 @@ func NewRoot(anAPIServerURL string) *Root {
 		)},
 		{mode: ModeOperation, ui: r.operation},
 		{mode: ModeHistory, ui: &history.History{}},
+		{mode: ModeMisc, ui: r.misc},
 	}
 	// The main menu reads the entities of both selection pages itself, so it
 	// does not depend on a mode having been opened (task 89).
@@ -171,6 +185,11 @@ func (r *Root) OnMount(ctx app.Context) {
 	r.showList[ModeProject] = showsList(loadScreen(ctx, ModeProject), r.selected[ModeProject])
 	r.showList[ModeLibrary] = showsList(loadScreen(ctx, ModeLibrary), r.selected[ModeLibrary])
 
+	// The page of the Misc section too: a reload returns to Labels or User
+	// name, and the section's contents when none was open (task 90).
+	r.miscPage = loadMiscPage(ctx)
+	r.misc.SetPage(r.miscPage)
+
 	// A read of the entity the editor shows found it gone: the mode leaves it
 	// at once, so the content the server removes after it is not loaded for
 	// it, and shows its selection page with its list reread (task 73,
@@ -195,10 +214,12 @@ func (r *Root) OnMount(ctx app.Context) {
 			r.projectGoneOperation(id)
 		}
 	})
-	// A mode's history screen opens the Labels window through this action: the
-	// window is the header's one, and Root owns whether it is shown (task 85_3).
+	// A mode's history screen opens the Labels page through this action: the
+	// page is the Misc section's, and Root owns the page shown (task 85_3,
+	// task 90). The User name page has no such action: it is reached from the
+	// main menu alone, the one place the name is shown and set.
 	ctx.Handle(labels.ActionOpen, func(ctx app.Context, _ app.Action) {
-		r.openLabels(ctx)
+		r.openMiscPage(ctx, misc.PageLabels)
 	})
 	// The menu follows the entities it lists and the project Operation or
 	// History shows: a list changes while it is open, a project is renamed or
@@ -289,19 +310,40 @@ func (r *Root) listenMenuKeys() {
 	app.Window().Call("addEventListener", "keydown", r.onKeyDown)
 }
 
-// openLabels shows the global Labels window, rereading its list (task 85_2).
-func (r *Root) openLabels(ctx app.Context) {
+// openMiscPage shows page of the Misc section, switching to it and keeping it
+// for the next reload (task 90). The Labels page rereads its list; a page left
+// for a while shows what the server holds now.
+func (r *Root) openMiscPage(ctx app.Context, page misc.Page) {
 	r.closeMenu()
-	r.labelsOpen = true
-	r.labels.Reload(ctx)
+	r.miscPage = page
+	r.storeMiscPage(page)
+	r.misc.Show(ctx, page)
+	r.SetMode(ModeMisc)
+	r.storeMode()
 	ctx.Update()
 }
 
-// closeLabels hides the Labels window; the dialog calls it through OnClose.
-func (r *Root) closeLabels() {
-	r.labelsOpen = false
-	if r.mounted {
-		r.compoCtx.Update()
+// storeMiscPage keeps the Misc page shown for the next reload: the contents
+// when none is open (task 90).
+func (r *Root) storeMiscPage(page misc.Page) {
+	if !r.mounted {
+		return
+	}
+	r.compoCtx.LocalStorage().Set(miscPageKey, string(page))
+}
+
+// loadMiscPage reads the Misc page a previous session left, the contents when
+// none is stored or the value is unknown (task 90).
+func loadMiscPage(ctx app.Context) misc.Page {
+	var page string
+	if err := ctx.LocalStorage().Get(miscPageKey, &page); err != nil {
+		return misc.PageContents
+	}
+	switch misc.Page(page) {
+	case misc.PageLabels, misc.PageUserName:
+		return misc.Page(page)
+	default:
+		return misc.PageContents
 	}
 }
 
@@ -451,9 +493,10 @@ func (r *Root) modeView(mode Mode) *modeView {
 }
 
 // barProject is the project the event stream follows while mode is shown:
-// none for Library, which does not depend on one.
+// none for Library, which does not depend on one, and for Misc, which leaves
+// the stream of the mode before it (task 90).
 func (r *Root) barProject(mode Mode) (uuid.UUID, bool) {
-	if mode == ModeLibrary {
+	if mode == ModeLibrary || mode == ModeMisc {
 		return uuid.Nil, false
 	}
 	id, ok := r.selected[mode]
@@ -728,7 +771,7 @@ button {
 // ── Render ────────────────────────────────────────────────────────────────────
 
 func (r *Root) Render() app.UI {
-	r.labels.Open, r.labels.OnClose = r.labelsOpen, r.closeLabels
+	r.misc.SetShown(r.currentMode == ModeMisc)
 	return app.Div().
 		Style("display", "flex").
 		Style("flex-direction", "column").
@@ -738,7 +781,6 @@ func (r *Root) Render() app.UI {
 		Style("color", "var(--text)").
 		Body(
 			&toast.Container{},
-			r.labels,
 			r.renderVersionBanner(),
 			r.renderMenuBackdrop(),
 			r.renderHeader(),
@@ -775,7 +817,6 @@ func (r *Root) renderHeader() app.UI {
 			r.renderMenuButton(),
 			r.renderNavigation(),
 			app.Div().Style("flex", "1"),
-			r.renderLabelsButton(),
 			r.renderThemeToggle(),
 			r.renderMenuPanel(),
 		)
@@ -870,15 +911,7 @@ type listPage interface {
 	Select(app.Context, uuid.UUID)
 }
 
-// renderLabelsButton opens the one Labels window of the header (task 85_2);
-// it sits beside the theme toggle and is available in every mode.
-func (r *Root) renderLabelsButton() app.UI {
-	return uiutil.IconButton(uiutil.IconTag(), "", true, "Labels", uiutil.ButtonBar,
-		func(ctx app.Context, e app.Event) { r.openLabels(ctx) }).
-		Attr("data-labels-open", "true").
-		Style("margin", "0 10px")
-}
-
+// renderThemeToggle switches the theme: auto, light, dark, then auto.
 func (r *Root) renderThemeToggle() app.UI {
 	var icon, title string
 	switch r.themeMode {

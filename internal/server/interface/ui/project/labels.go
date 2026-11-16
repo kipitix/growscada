@@ -54,7 +54,7 @@ func (p *Project) unassignLabel(ctx app.Context, number int, labelID uuid.UUID) 
 	}, nil)
 }
 
-// manageLabels opens the tab's Labels window, where the labels a menu offers
+// manageLabels opens the Misc section's Labels page, where the labels a menu offers
 // are named and colored.
 func (p *Project) manageLabels(ctx app.Context) {
 	ctx.NewAction(labels.ActionOpen)

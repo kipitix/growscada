@@ -1,13 +1,13 @@
-// Package labels is the one global window that manages the server's Labels:
-// their names and colors (task 85_2; ADR 0025). Labels are marks an Engineer
-// puts on saved states; they belong to the Organization and are metadata, so
-// the window creates, renames, recolors and deletes names, and never touches a
+// Package labels is the page that manages the server's Labels: their names
+// and colors (task 85_2, task 90; ADR 0025). Labels are marks an Engineer puts
+// on saved states; they belong to the Organization and are metadata, so the
+// page creates, renames, recolors and deletes names, and never touches a
 // Draft, a Version or the undo stack. The assignments themselves live in
 // History (task 85_3).
 //
-// The window is opened from the header of every mode (Root owns whether it is
-// open) and follows the server's event stream: a label changed in another tab
-// is reread, and so is the list on a resync.
+// The page is one of the Misc section's pages: Root switches to it and back to
+// the section's contents (task 90). It follows the server's event stream: a
+// label changed in another tab is reread, and so is the list on a resync.
 package labels
 
 import (
@@ -28,16 +28,17 @@ import (
 // #RRGGBB value or no color at all.
 var presets = []string{"#ef4444", "#f59e0b", "#22c55e", "#3b82f6", "#a855f7", "#64748b"}
 
-// Dialog is the global Labels window. Root owns Open (and renders the window
-// on every screen); the dialog keeps its list and the field being edited.
-type Dialog struct {
+// Page is the Misc section's Labels page. The section owns which page it shows
+// and wires OnBack; the page keeps its list and the field being edited.
+type Page struct {
 	app.Compo
 
 	client *apiclient.Client
-	// Open is whether the window is shown; Root sets it before rendering.
-	Open bool
-	// OnClose asks Root to close the window.
-	OnClose func()
+	// Shown is whether the page is the one the Misc section shows; the section
+	// sets it before rendering. Only a shown page takes the keyboard (task 90).
+	Shown bool
+	// OnBack asks the section to show its contents.
+	OnBack func()
 
 	compoCtx app.Context
 	mounted  bool
@@ -68,193 +69,194 @@ type Dialog struct {
 	onKeyDown app.Func
 }
 
-// ActionOpen asks Root to show the Labels window. A mode fires it from the
-// history screen's "Manage labels", where a labels menu is empty (task 85_3).
+// ActionOpen asks Root to show the Labels page. A mode fires it from the
+// history screen's "Manage labels", where a labels menu is empty (task 85_3,
+// task 90).
 const ActionOpen = "labels.open"
 
-// New creates the window; Root holds it for the tab's lifetime.
-func New(client *apiclient.Client) *Dialog {
-	return &Dialog{client: client}
+// New creates the page; Root holds it for the tab's lifetime.
+func New(client *apiclient.Client) *Page {
+	return &Page{client: client}
 }
 
-func (d *Dialog) OnMount(ctx app.Context) {
-	d.compoCtx, d.mounted = ctx, true
-	d.load(ctx)
-	d.listenKeys()
+func (p *Page) OnMount(ctx app.Context) {
+	p.compoCtx, p.mounted = ctx, true
+	p.load(ctx)
+	p.listenKeys()
 	ctx.Handle(eventlog.ActionServerEvent, func(ctx app.Context, a app.Action) {
 		ev, ok := a.Value.(apiv0.Event)
 		if !ok || !eventlog.IsLabelEvent(ev.Type) {
 			return
 		}
-		d.load(ctx)
+		p.load(ctx)
 	})
 	ctx.Handle(eventlog.EventResync, func(ctx app.Context, _ app.Action) {
-		d.load(ctx)
+		p.load(ctx)
 	})
 }
 
-func (d *Dialog) OnDismount() {
-	d.mounted = false
-	d.noKeys()
+func (p *Page) OnDismount() {
+	p.mounted = false
+	p.noKeys()
 }
 
-// Reload rereads the labels: Root calls it when it opens the window, so a
-// window left closed for a while shows what the server holds now.
-func (d *Dialog) Reload(ctx app.Context) {
-	if d.mounted {
-		d.load(ctx)
+// Reload rereads the labels: Root calls it when it opens the page, so a
+// page left closed for a while shows what the server holds now.
+func (p *Page) Reload(ctx app.Context) {
+	if p.mounted {
+		p.load(ctx)
 	}
 }
 
 // load rereads the labels. A failure is a toast, as every error of the UI is.
-func (d *Dialog) load(ctx app.Context) {
-	uiutil.Load(ctx, &d.loader, d.client.Labels, func(ctx app.Context, list []apiv0.LabelResponse) {
-		d.labels, d.loaded = list, true
+func (p *Page) load(ctx app.Context) {
+	uiutil.Load(ctx, &p.loader, p.client.Labels, func(ctx app.Context, list []apiv0.LabelResponse) {
+		p.labels, p.loaded = list, true
 		ctx.Update()
-	}, d.load)
+	}, p.load)
 }
 
 // ── Commands ──────────────────────────────────────────────────────────────────
 
 // create adds the label of the footer row. An empty name is not sent: the
 // server is the only validator, but a row of nothing is not a request.
-func (d *Dialog) create(ctx app.Context) {
-	if d.creating || d.busy() {
+func (p *Page) create(ctx app.Context) {
+	if p.creating || p.busy() {
 		return
 	}
-	name := strings.TrimSpace(d.newName)
+	name := strings.TrimSpace(p.newName)
 	if name == "" {
 		return
 	}
-	d.creating, d.newError = true, ""
-	uiutil.Do(d.compoCtx, func(c context.Context) (apiv0.LabelResponse, error) {
-		return d.client.CreateLabel(c, name, strings.TrimSpace(d.newColor))
+	p.creating, p.newError = true, ""
+	uiutil.Do(p.compoCtx, func(c context.Context) (apiv0.LabelResponse, error) {
+		return p.client.CreateLabel(c, name, strings.TrimSpace(p.newColor))
 	}, func(ctx app.Context, created apiv0.LabelResponse, err error) {
-		d.creating = false
+		p.creating = false
 		if err != nil {
-			d.newError = uiutil.ProblemText(err)
+			p.newError = uiutil.ProblemText(err)
 			ctx.Update()
 			return
 		}
-		d.newName, d.newColor = "", ""
-		d.load(ctx)
+		p.newName, p.newColor = "", ""
+		p.load(ctx)
 	})
 }
 
 // startRename opens the name field of the label; commitRename writes it.
-func (d *Dialog) startRename(label apiv0.LabelResponse) {
-	d.editingID, d.editText, d.editError = label.ID, label.Name, ""
-	d.paletteID, d.deletingID = uuid.Nil, uuid.Nil
+func (p *Page) startRename(label apiv0.LabelResponse) {
+	p.editingID, p.editText, p.editError = label.ID, label.Name, ""
+	p.paletteID, p.deletingID = uuid.Nil, uuid.Nil
 }
 
-func (d *Dialog) cancelRename(ctx app.Context) {
-	d.editingID, d.editText, d.editError = uuid.Nil, "", ""
+func (p *Page) cancelRename(ctx app.Context) {
+	p.editingID, p.editText, p.editError = uuid.Nil, "", ""
 	ctx.Update()
 }
 
-func (d *Dialog) commitRename(ctx app.Context) {
-	if d.editBusy || d.editingID == uuid.Nil {
+func (p *Page) commitRename(ctx app.Context) {
+	if p.editBusy || p.editingID == uuid.Nil {
 		return
 	}
-	name := strings.TrimSpace(d.editText)
+	name := strings.TrimSpace(p.editText)
 	if name == "" {
 		return
 	}
-	labelID := d.editingID
-	d.editBusy, d.editError = true, ""
-	uiutil.Do(d.compoCtx, func(c context.Context) (apiv0.LabelResponse, error) {
-		return d.client.UpdateLabel(c, labelID, &name, nil)
+	labelID := p.editingID
+	p.editBusy, p.editError = true, ""
+	uiutil.Do(p.compoCtx, func(c context.Context) (apiv0.LabelResponse, error) {
+		return p.client.UpdateLabel(c, labelID, &name, nil)
 	}, func(ctx app.Context, _ apiv0.LabelResponse, err error) {
-		d.editBusy = false
+		p.editBusy = false
 		if err != nil {
-			d.editError = uiutil.ProblemText(err)
+			p.editError = uiutil.ProblemText(err)
 			ctx.Update()
 			return
 		}
-		d.editingID, d.editText = uuid.Nil, ""
-		d.load(ctx)
+		p.editingID, p.editText = uuid.Nil, ""
+		p.load(ctx)
 	})
 }
 
 // openPalette opens the colors of the label; applyColor writes one and closes
 // it.
-func (d *Dialog) openPalette(label apiv0.LabelResponse) {
-	d.paletteID, d.paletteText, d.paletteErr = label.ID, label.Color, ""
-	d.editingID, d.deletingID = uuid.Nil, uuid.Nil
+func (p *Page) openPalette(label apiv0.LabelResponse) {
+	p.paletteID, p.paletteText, p.paletteErr = label.ID, label.Color, ""
+	p.editingID, p.deletingID = uuid.Nil, uuid.Nil
 }
 
-func (d *Dialog) closePalette(ctx app.Context) {
-	d.paletteID, d.paletteText, d.paletteErr = uuid.Nil, "", ""
+func (p *Page) closePalette(ctx app.Context) {
+	p.paletteID, p.paletteText, p.paletteErr = uuid.Nil, "", ""
 	ctx.Update()
 }
 
-func (d *Dialog) applyColor(ctx app.Context, color string) {
-	if d.paletteBusy || d.paletteID == uuid.Nil {
+func (p *Page) applyColor(ctx app.Context, color string) {
+	if p.paletteBusy || p.paletteID == uuid.Nil {
 		return
 	}
-	labelID := d.paletteID
-	d.paletteBusy, d.paletteErr = true, ""
-	uiutil.Do(d.compoCtx, func(c context.Context) (apiv0.LabelResponse, error) {
-		return d.client.UpdateLabel(c, labelID, nil, &color)
+	labelID := p.paletteID
+	p.paletteBusy, p.paletteErr = true, ""
+	uiutil.Do(p.compoCtx, func(c context.Context) (apiv0.LabelResponse, error) {
+		return p.client.UpdateLabel(c, labelID, nil, &color)
 	}, func(ctx app.Context, _ apiv0.LabelResponse, err error) {
-		d.paletteBusy = false
+		p.paletteBusy = false
 		if err != nil {
-			d.paletteErr = uiutil.ProblemText(err)
+			p.paletteErr = uiutil.ProblemText(err)
 			ctx.Update()
 			return
 		}
-		d.paletteID, d.paletteText = uuid.Nil, ""
-		d.load(ctx)
+		p.paletteID, p.paletteText = uuid.Nil, ""
+		p.load(ctx)
 	})
 }
 
 // startDelete asks for the confirmation of the label's removal.
-func (d *Dialog) startDelete(label apiv0.LabelResponse) {
-	d.deletingID, d.deleteError = label.ID, ""
-	d.editingID, d.paletteID = uuid.Nil, uuid.Nil
+func (p *Page) startDelete(label apiv0.LabelResponse) {
+	p.deletingID, p.deleteError = label.ID, ""
+	p.editingID, p.paletteID = uuid.Nil, uuid.Nil
 }
 
-func (d *Dialog) cancelDelete(ctx app.Context) {
-	d.deletingID, d.deleteError = uuid.Nil, ""
+func (p *Page) cancelDelete(ctx app.Context) {
+	p.deletingID, p.deleteError = uuid.Nil, ""
 	ctx.Update()
 }
 
-func (d *Dialog) commitDelete(ctx app.Context) {
-	if d.deleting || d.deletingID == uuid.Nil {
+func (p *Page) commitDelete(ctx app.Context) {
+	if p.deleting || p.deletingID == uuid.Nil {
 		return
 	}
-	labelID := d.deletingID
-	d.deleting, d.deleteError = true, ""
-	uiutil.Call(d.compoCtx, func(c context.Context) (struct{}, error) {
-		return struct{}{}, d.client.DeleteLabel(c, labelID)
+	labelID := p.deletingID
+	p.deleting, p.deleteError = true, ""
+	uiutil.Call(p.compoCtx, func(c context.Context) (struct{}, error) {
+		return struct{}{}, p.client.DeleteLabel(c, labelID)
 	}, func(ctx app.Context, _ struct{}) {
-		d.deleting = false
-		d.deletingID = uuid.Nil
-		d.load(ctx)
+		p.deleting = false
+		p.deletingID = uuid.Nil
+		p.load(ctx)
 	}, func(ctx app.Context, err error) {
-		d.deleting = false
-		d.deleteError = uiutil.ProblemText(err)
+		p.deleting = false
+		p.deleteError = uiutil.ProblemText(err)
 		ctx.Update()
 	})
 }
 
-// busy reports whether a write of the window is in flight.
-func (d *Dialog) busy() bool {
-	return d.creating || d.editBusy || d.paletteBusy || d.deleting
+// busy reports whether a write of the page is in flight.
+func (p *Page) busy() bool {
+	return p.creating || p.editBusy || p.paletteBusy || p.deleting
 }
 
 // ── Keyboard ──────────────────────────────────────────────────────────────────
 
-// listenKeys manages the keys of the window: Ctrl/Cmd+Enter adds the label of
-// the footer row, and Esc closes a field being edited first and then the
-// window. A field of the window stops the propagation of its own keys, so Esc
-// and Enter inside one never reach these two.
-func (d *Dialog) listenKeys() {
-	if d.onKeyDown != nil {
+// listenKeys manages the keys of the page while it is shown: Ctrl/Cmd+Enter
+// adds the label of the footer row, and Esc drops a field being edited. A field
+// of the page stops the propagation of its own keys, so Esc and Enter inside
+// one never reach these two.
+func (p *Page) listenKeys() {
+	if p.onKeyDown != nil {
 		return
 	}
-	d.onKeyDown = app.FuncOf(func(this app.Value, args []app.Value) any {
-		if len(args) == 0 || !d.Open {
+	p.onKeyDown = app.FuncOf(func(this app.Value, args []app.Value) any {
+		if len(args) == 0 || !p.Shown {
 			return nil
 		}
 		ev := args[0]
@@ -267,131 +269,100 @@ func (d *Dialog) listenKeys() {
 				return nil
 			}
 			ev.Call("preventDefault")
-			d.compoCtx.Dispatch(func(ctx app.Context) { d.create(ctx) })
+			p.compoCtx.Dispatch(func(ctx app.Context) { p.create(ctx) })
 			return nil
 		}
 		if key != "Escape" {
 			return nil
 		}
-		ev.Call("preventDefault")
-		if d.editingID != uuid.Nil || d.paletteID != uuid.Nil || d.deletingID != uuid.Nil || d.newError != "" {
-			d.compoCtx.Dispatch(func(ctx app.Context) {
-				d.editingID, d.paletteID, d.deletingID = uuid.Nil, uuid.Nil, uuid.Nil
-				d.editError, d.paletteErr, d.deleteError, d.newError = "", "", "", ""
-				ctx.Update()
-			})
+		if p.editingID == uuid.Nil && p.paletteID == uuid.Nil && p.deletingID == uuid.Nil && p.newError == "" {
 			return nil
 		}
-		d.compoCtx.Dispatch(func(ctx app.Context) { d.close(ctx) })
+		ev.Call("preventDefault")
+		p.compoCtx.Dispatch(func(ctx app.Context) {
+			p.editingID, p.paletteID, p.deletingID = uuid.Nil, uuid.Nil, uuid.Nil
+			p.editError, p.paletteErr, p.deleteError, p.newError = "", "", "", ""
+			ctx.Update()
+		})
 		return nil
 	})
-	app.Window().Call("addEventListener", "keydown", d.onKeyDown)
+	app.Window().Call("addEventListener", "keydown", p.onKeyDown)
 }
 
-func (d *Dialog) noKeys() {
-	if d.onKeyDown == nil {
+func (p *Page) noKeys() {
+	if p.onKeyDown == nil {
 		return
 	}
-	app.Window().Call("removeEventListener", "keydown", d.onKeyDown)
-	d.onKeyDown.Release()
-	d.onKeyDown = nil
-}
-
-// close asks Root to close the window.
-func (d *Dialog) close(ctx app.Context) {
-	if d.OnClose != nil {
-		d.OnClose()
-	}
-	ctx.Update()
+	app.Window().Call("removeEventListener", "keydown", p.onKeyDown)
+	p.onKeyDown.Release()
+	p.onKeyDown = nil
 }
 
 // ── Render ────────────────────────────────────────────────────────────────────
 
-func (d *Dialog) Render() app.UI {
-	if !d.Open {
-		return app.Div()
-	}
+// Render draws the page: the way back to the Misc section and the title, then
+// the labels in a list that scrolls in its own pane, and the new-label row.
+func (p *Page) Render() app.UI {
 	rows := []app.UI{}
 	switch {
-	case !d.loaded:
+	case !p.loaded:
 		rows = append(rows, app.Div().
 			Style("padding", "8px").
 			Style("color", "var(--text-muted)").
 			Text("Loading labels…"))
-	case len(d.labels) == 0:
+	case len(p.labels) == 0:
 		rows = append(rows, app.Div().
 			Style("padding", "8px").
 			Style("color", "var(--text-muted)").
 			Text("No labels yet."))
 	default:
-		for _, l := range d.labels {
-			rows = append(rows, d.renderRow(l))
+		for _, l := range p.labels {
+			rows = append(rows, p.renderRow(l))
 		}
 	}
 	return app.Div().
-		Attr("data-labels-dialog", "true").
-		Style("position", "fixed").
-		Style("inset", "0").
-		Style("z-index", "40").
+		Attr("data-labels-page", "true").
 		Style("display", "flex").
-		Style("align-items", "center").
-		Style("justify-content", "center").
-		Style("background", "rgba(0,0,0,0.35)").
+		Style("flex-direction", "column").
+		Style("flex", "1").
+		Style("min-height", "0").
+		Style("font-size", "13px").
 		Body(
 			app.Div().
-				Attr("role", "dialog").
-				Attr("aria-modal", "true").
-				Attr("aria-label", "Labels").
-				Style("width", "560px").
-				Style("max-width", "calc(100vw - 32px)").
-				Style("max-height", "calc(100vh - 64px)").
 				Style("display", "flex").
-				Style("flex-direction", "column").
-				Style("border", "1px solid var(--border)").
-				Style("border-radius", "6px").
-				Style("background", "var(--bg)").
-				Style("box-shadow", "var(--toast-shadow)").
-				Style("font-size", "13px").
+				Style("align-items", "center").
+				Style("gap", "8px").
+				Style("padding", "6px 10px").
+				Style("border-bottom", "1px solid var(--border)").
 				Body(
-					app.Div().
-						Style("display", "flex").
-						Style("align-items", "center").
-						Style("gap", "8px").
-						Style("padding", "10px 14px").
-						Style("border-bottom", "1px solid var(--border)").
-						Body(
-							uiutil.IconTag(),
-							app.Span().
-								Style("font-size", "14px").
-								Style("font-weight", "600").
-								Text("Labels"),
-							app.Div().Style("flex", "1"),
-							uiutil.IconButton(uiutil.IconClose(), "ghost", true, "Close the Labels window",
-								uiutil.ButtonBar, func(ctx app.Context, e app.Event) { d.close(ctx) }).
-								Attr("data-labels-close", "true"),
-						),
-					app.Div().
-						Attr("data-labels-list", "true").
-						Style("flex", "1").
-						Style("min-height", "0").
-						Style("overflow-y", "auto").
-						Style("padding", "6px 14px").
-						Body(rows...),
-					d.renderFooter(),
+					uiutil.PanelBack("Back to the Misc section", "Labels",
+						func(ctx app.Context, e app.Event) {
+							if p.OnBack != nil {
+								p.OnBack()
+							}
+						}),
 				),
+			app.Div().
+				Attr("data-labels-list", "true").
+				Style("flex", "1").
+				Style("min-height", "0").
+				Style("overflow-y", "auto").
+				Style("padding", "4px 10px").
+				Body(rows...),
+			p.renderFooter(),
 		)
 }
 
 // renderRow is one label: its colored marker, its name — edited in place —,
 // the number of saved states it marks, and its color and delete actions.
-func (d *Dialog) renderRow(l apiv0.LabelResponse) app.UI {
+func (p *Page) renderRow(l apiv0.LabelResponse) app.UI {
 	name := []app.UI{}
-	if d.editingID == l.ID {
+	if p.editingID == l.ID {
 		name = append(name,
 			app.Input().
 				Attr("data-label-rename-input", "true").
 				Type("text").
-				Value(d.editText).
+				Value(p.editText).
 				Placeholder("Name").
 				AutoFocus(true).
 				Style("flex", "1").
@@ -401,34 +372,34 @@ func (d *Dialog) renderRow(l apiv0.LabelResponse) app.UI {
 				Style("background", "var(--input-bg)").
 				Style("color", "var(--text)").
 				OnInput(func(ctx app.Context, _ app.Event) {
-					d.editText = ctx.JSSrc().Get("value").String()
+					p.editText = ctx.JSSrc().Get("value").String()
 				}).
 				OnKeyDown(func(ctx app.Context, e app.Event) {
 					switch e.Get("key").String() {
 					case "Enter":
-						// The window adds a label on Ctrl/Cmd+Enter: the
+						// The page adds a label on Ctrl/Cmd+Enter: the
 						// field commits alone.
 						e.StopImmediatePropagation()
-						d.commitRename(ctx)
+						p.commitRename(ctx)
 					case "Escape":
-						// The window closes on Esc: the field drops the change
-						// alone.
+						// The page takes Esc as a drop of the change: the
+						// field drops it alone.
 						e.StopImmediatePropagation()
-						d.cancelRename(ctx)
+						p.cancelRename(ctx)
 					}
 				}),
-			uiutil.IconButton(uiutil.IconCheck(), "ghost", !d.editBusy, "Save the name", uiutil.ButtonBar,
-				func(ctx app.Context, e app.Event) { d.commitRename(ctx) }).
+			uiutil.IconButton(uiutil.IconCheck(), "ghost", !p.editBusy, "Save the name", uiutil.ButtonBar,
+				func(ctx app.Context, e app.Event) { p.commitRename(ctx) }).
 				Attr("data-label-rename-save", "true"),
-			uiutil.IconButton(uiutil.IconClose(), "ghost", !d.editBusy, "Drop the change", uiutil.ButtonBar,
-				func(ctx app.Context, e app.Event) { d.cancelRename(ctx) }).
+			uiutil.IconButton(uiutil.IconClose(), "ghost", !p.editBusy, "Drop the change", uiutil.ButtonBar,
+				func(ctx app.Context, e app.Event) { p.cancelRename(ctx) }).
 				Attr("data-label-rename-cancel", "true"),
 		)
 	} else {
 		name = append(name,
 			renderChip(l.Name, l.Color),
-			uiutil.IconButton(uiutil.IconPencil(), "ghost", !d.busy(), "Rename the label", uiutil.ButtonBar,
-				func(ctx app.Context, e app.Event) { d.startRename(l); ctx.Update() },
+			uiutil.IconButton(uiutil.IconPencil(), "ghost", !p.busy(), "Rename the label", uiutil.ButtonBar,
+				func(ctx app.Context, e app.Event) { p.startRename(l); ctx.Update() },
 				app.EventScope("rename/"+l.ID.String())).
 				Attr("data-label-rename", "true"),
 		)
@@ -447,12 +418,12 @@ func (d *Dialog) renderRow(l apiv0.LabelResponse) app.UI {
 			Title("Saved states this label marks").
 			Style("color", "var(--text-muted)").
 			Text(fmt.Sprintf("%d", l.AssignedCount)),
-		uiutil.Button("Color", "", !d.busy(), "Change the color", uiutil.ButtonRow,
-			func(ctx app.Context, e app.Event) { d.openPalette(l); ctx.Update() },
+		uiutil.Button("Color", "", !p.busy(), "Change the color", uiutil.ButtonRow,
+			func(ctx app.Context, e app.Event) { p.openPalette(l); ctx.Update() },
 			app.EventScope("color/"+l.ID.String())).
 			Attr("data-label-color", "true"),
-		uiutil.Button("Delete", "error", !d.busy(), "Delete the label", uiutil.ButtonRow,
-			func(ctx app.Context, e app.Event) { d.startDelete(l); ctx.Update() },
+		uiutil.Button("Delete", "error", !p.busy(), "Delete the label", uiutil.ButtonRow,
+			func(ctx app.Context, e app.Event) { p.startDelete(l); ctx.Update() },
 			app.EventScope("delete/"+l.ID.String())).
 			Attr("data-label-delete", "true"),
 	}
@@ -467,24 +438,24 @@ func (d *Dialog) renderRow(l apiv0.LabelResponse) app.UI {
 			Style("border-bottom", "1px solid var(--border-subtle)").
 			Body(details...),
 	}
-	if d.editError != "" && d.editingID == l.ID {
-		body = append(body, errorLine(d.editError))
+	if p.editError != "" && p.editingID == l.ID {
+		body = append(body, errorLine(p.editError))
 	}
-	if d.paletteID == l.ID {
-		body = append(body, d.renderPalette())
+	if p.paletteID == l.ID {
+		body = append(body, p.renderPalette())
 	}
-	if d.deletingID == l.ID {
-		body = append(body, d.renderDelete(l))
+	if p.deletingID == l.ID {
+		body = append(body, p.renderDelete(l))
 	}
 	return app.Div().Body(body...)
 }
 
 // renderPalette is the colors of a label: the presets, a hex field and no
 // color.
-func (d *Dialog) renderPalette() app.UI {
+func (p *Page) renderPalette() app.UI {
 	swatches := []app.UI{}
 	for _, c := range presets {
-		swatches = append(swatches, presetSwatch(c, func(ctx app.Context, e app.Event) { d.applyColor(ctx, c) }))
+		swatches = append(swatches, presetSwatch(c, func(ctx app.Context, e app.Event) { p.applyColor(ctx, c) }))
 	}
 	return app.Div().
 		Attr("data-label-palette", "true").
@@ -497,7 +468,7 @@ func (d *Dialog) renderPalette() app.UI {
 			app.Input().
 				Attr("data-label-color-input", "true").
 				Type("text").
-				Value(d.paletteText).
+				Value(p.paletteText).
 				Placeholder("#RRGGBB").
 				Style("width", "100px").
 				Style("padding", "2px 6px").
@@ -506,24 +477,24 @@ func (d *Dialog) renderPalette() app.UI {
 				Style("background", "var(--input-bg)").
 				Style("color", "var(--text)").
 				OnInput(func(ctx app.Context, _ app.Event) {
-					d.paletteText = ctx.JSSrc().Get("value").String()
+					p.paletteText = ctx.JSSrc().Get("value").String()
 				}).
 				OnKeyDown(func(ctx app.Context, e app.Event) {
 					if e.Get("key").String() == "Enter" {
-						d.applyColor(ctx, d.paletteText)
+						p.applyColor(ctx, p.paletteText)
 					}
 				}),
-			uiutil.Button("Apply", "", !d.paletteBusy, "Apply this color", uiutil.ButtonRow,
-				func(ctx app.Context, e app.Event) { d.applyColor(ctx, d.paletteText) }).
+			uiutil.Button("Apply", "", !p.paletteBusy, "Apply this color", uiutil.ButtonRow,
+				func(ctx app.Context, e app.Event) { p.applyColor(ctx, p.paletteText) }).
 				Attr("data-label-color-apply", "true"),
-			uiutil.Button("No color", "", !d.paletteBusy, "Clear the color", uiutil.ButtonRow,
-				func(ctx app.Context, e app.Event) { d.applyColor(ctx, "") }).
+			uiutil.Button("No color", "", !p.paletteBusy, "Clear the color", uiutil.ButtonRow,
+				func(ctx app.Context, e app.Event) { p.applyColor(ctx, "") }).
 				Attr("data-label-color-none", "true"),
-			uiutil.Button("Close", "", !d.paletteBusy, "Close the colors", uiutil.ButtonRow,
-				func(ctx app.Context, e app.Event) { d.closePalette(ctx) }),
+			uiutil.Button("Close", "", !p.paletteBusy, "Close the colors", uiutil.ButtonRow,
+				func(ctx app.Context, e app.Event) { p.closePalette(ctx) }),
 			func() app.UI {
-				if d.paletteErr != "" {
-					return errorLine(d.paletteErr)
+				if p.paletteErr != "" {
+					return errorLine(p.paletteErr)
 				}
 				return app.Div()
 			}(),
@@ -532,7 +503,7 @@ func (d *Dialog) renderPalette() app.UI {
 
 // renderDelete is the confirmation of a delete, naming the label and warning
 // how many saved states lose the mark.
-func (d *Dialog) renderDelete(l apiv0.LabelResponse) app.UI {
+func (p *Page) renderDelete(l apiv0.LabelResponse) app.UI {
 	return app.Div().
 		Attr("data-label-delete-confirm-panel", "true").
 		Style("padding", "4px 0 10px 20px").
@@ -545,15 +516,15 @@ func (d *Dialog) renderDelete(l apiv0.LabelResponse) app.UI {
 				Style("gap", "6px").
 				Style("margin-top", "8px").
 				Body(
-					uiutil.Button("Delete", "error", !d.deleting, "Delete the label", uiutil.ButtonPage,
-						func(ctx app.Context, e app.Event) { d.commitDelete(ctx) }).
+					uiutil.Button("Delete", "error", !p.deleting, "Delete the label", uiutil.ButtonPage,
+						func(ctx app.Context, e app.Event) { p.commitDelete(ctx) }).
 						Attr("data-label-delete-confirm", "true"),
-					uiutil.Button("Cancel", "", !d.deleting, "Keep the label", uiutil.ButtonPage,
-						func(ctx app.Context, e app.Event) { d.cancelDelete(ctx) }),
+					uiutil.Button("Cancel", "", !p.deleting, "Keep the label", uiutil.ButtonPage,
+						func(ctx app.Context, e app.Event) { p.cancelDelete(ctx) }),
 				),
 			func() app.UI {
-				if d.deleteError != "" {
-					return errorLine(d.deleteError)
+				if p.deleteError != "" {
+					return errorLine(p.deleteError)
 				}
 				return app.Div()
 			}(),
@@ -561,16 +532,16 @@ func (d *Dialog) renderDelete(l apiv0.LabelResponse) app.UI {
 }
 
 // renderFooter is the new-label row: its name, an optional color and Add.
-func (d *Dialog) renderFooter() app.UI {
+func (p *Page) renderFooter() app.UI {
 	swatches := []app.UI{}
 	for _, c := range presets {
 		swatches = append(swatches, presetSwatch(c, func(ctx app.Context, e app.Event) {
-			d.newColor = c
+			p.newColor = c
 			ctx.Update()
 		}))
 	}
 	return app.Div().
-		Style("padding", "10px 14px").
+		Style("padding", "8px 10px").
 		Style("border-top", "1px solid var(--border)").
 		Body(
 			app.Div().
@@ -581,7 +552,7 @@ func (d *Dialog) renderFooter() app.UI {
 					app.Input().
 						Attr("data-label-new-name", "true").
 						Type("text").
-						Value(d.newName).
+						Value(p.newName).
 						Placeholder("New label").
 						Style("flex", "1").
 						Style("padding", "4px 6px").
@@ -590,17 +561,17 @@ func (d *Dialog) renderFooter() app.UI {
 						Style("background", "var(--input-bg)").
 						Style("color", "var(--text)").
 						OnInput(func(ctx app.Context, _ app.Event) {
-							d.newName = ctx.JSSrc().Get("value").String()
+							p.newName = ctx.JSSrc().Get("value").String()
 						}).
 						OnKeyDown(func(ctx app.Context, e app.Event) {
 							if e.Get("key").String() == "Enter" {
-								d.create(ctx)
+								p.create(ctx)
 							}
 						}),
 					app.Input().
 						Attr("data-label-new-color", "true").
 						Type("text").
-						Value(d.newColor).
+						Value(p.newColor).
 						Placeholder("#RRGGBB").
 						Style("width", "90px").
 						Style("padding", "4px 6px").
@@ -609,10 +580,10 @@ func (d *Dialog) renderFooter() app.UI {
 						Style("background", "var(--input-bg)").
 						Style("color", "var(--text)").
 						OnInput(func(ctx app.Context, _ app.Event) {
-							d.newColor = ctx.JSSrc().Get("value").String()
+							p.newColor = ctx.JSSrc().Get("value").String()
 						}),
-					uiutil.Button("Add", "accent", !d.creating, "Add the label", uiutil.ButtonPage,
-						func(ctx app.Context, e app.Event) { d.create(ctx) }).
+					uiutil.Button("Add", "accent", !p.creating, "Add the label", uiutil.ButtonPage,
+						func(ctx app.Context, e app.Event) { p.create(ctx) }).
 						Attr("data-label-add", "true"),
 				),
 			app.Div().
@@ -624,11 +595,11 @@ func (d *Dialog) renderFooter() app.UI {
 					app.Span().
 						Style("color", "var(--text-muted)").
 						Style("font-size", "12px").
-						Text("Ctrl/Cmd+Enter adds; Esc closes."),
+						Text("Ctrl/Cmd+Enter adds; Esc drops the change."),
 				)...),
 			func() app.UI {
-				if d.newError != "" {
-					return errorLine(d.newError)
+				if p.newError != "" {
+					return errorLine(p.newError)
 				}
 				return app.Div()
 			}(),

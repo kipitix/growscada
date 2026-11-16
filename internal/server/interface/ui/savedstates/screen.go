@@ -52,7 +52,7 @@ type Screen struct {
 
 	// OnBack shows the Draft again; OnLoad and OnRename act on the row they
 	// name. OnAssign places a label on the row's saved state and OnUnassign
-	// takes it off; OnManageLabels opens the Labels window, where new labels
+	// takes it off; OnManageLabels opens the Labels page, where new labels
 	// are named and colored. A mode confirms a load on its own: the screen only
 	// says which row was asked for.
 	OnBack         func(ctx app.Context)
@@ -235,7 +235,7 @@ func (s *Screen) renderName(row Row) app.UI {
 // renderLabels is the saved state's marks: one colored chip per label and the
 // "+ label" control. The control opens the menu of the Organization's labels,
 // each marked when the saved state carries it; clicking one places it or takes
-// it off. A menu with no label says so and offers the Labels window instead.
+// it off. A menu with no label says so and offers the Labels page instead.
 func (s *Screen) renderLabels(row Row) app.UI {
 	number := strconv.Itoa(row.Number)
 	body := []app.UI{}
@@ -270,7 +270,7 @@ func (s *Screen) renderLabels(row Row) app.UI {
 
 // renderLabelMenu is the labels of the Organization as a menu: a tick marks the
 // one the saved state carries, and a click places or takes it off. An empty
-// list sends the person to the Labels window.
+// list sends the person to the Labels page.
 func (s *Screen) renderLabelMenu(row Row, assigned map[uuid.UUID]bool) app.UI {
 	number := strconv.Itoa(row.Number)
 	if len(s.AllLabels) == 0 {
@@ -283,7 +283,7 @@ func (s *Screen) renderLabelMenu(row Row, assigned map[uuid.UUID]bool) app.UI {
 			Style("color", "var(--text-muted)").
 			Body(
 				app.Span().Text("No labels yet"),
-				uiutil.Button("Manage labels", "", true, "Open the Labels window", uiutil.ButtonRow,
+				uiutil.Button("Manage labels", "", true, "Open the Labels page", uiutil.ButtonRow,
 					func(ctx app.Context, e app.Event) {
 						if s.OnManageLabels != nil {
 							s.OnManageLabels(ctx)

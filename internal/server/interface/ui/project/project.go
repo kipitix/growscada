@@ -12,6 +12,7 @@ import (
 	"github.com/kipitix/growscada/internal/server/interface/ui/savedstates"
 	"github.com/kipitix/growscada/internal/server/interface/ui/tagstate"
 	"github.com/kipitix/growscada/internal/server/interface/ui/uiutil"
+	"github.com/kipitix/growscada/internal/server/interface/ui/username"
 )
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -350,6 +351,14 @@ func (p *Project) OnMount(ctx app.Context) {
 	ctx.LocalStorage().Get("project:propertiesWidth", &p.propertiesWidth)
 
 	ctx.LocalStorage().Get(uiutil.AuthorKey, &p.saveAuthor)
+	// The User name page writes another name: the bar and the next Save dialog
+	// follow it (task 90).
+	ctx.Handle(username.ActionChanged, func(ctx app.Context, a app.Action) {
+		if name, ok := a.Value.(string); ok {
+			p.saveAuthor = name
+		}
+		ctx.Update()
+	})
 	var savedTab string
 	ctx.LocalStorage().Get("project:subTab", &savedTab)
 	if savedTab != "" {
