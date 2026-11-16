@@ -215,6 +215,8 @@ The title and the message are short and in Russian. The topic is public: anyone 
 
 12. **Keep `AGENTS.md` small.** This file is loaded into every session, so every line is a cost paid by every agent that works here. It holds what changes how an agent works: rules, commands, dependency constraints, invariants and pointers. Everything else lives in the document that owns it — a layer's architecture in `docs/architecture/<layer>.md`, a decision in `docs/adr/`, a term in `GLOSSARY.md`, a task's reasoning in its `todo/` note — and this file gets at most a one-line pointer to it. Never record history here — what was removed, which task changed what — and keep task numbers out of the layer documents too: a decision names its ADR, work that is not built is said plainly, and `todo/` and `git log` carry the rest. Stay under 25 KB; a change that would push it past that moves an existing section out in the same commit.
 
+13. **Leave the server running when a task ends.** After the final `make bruno_test` (rule 9, which needs the ports), start the server from `bin/growscada_combined_server/` with the dev database up (rule 6) and leave it running on `http://localhost:8080`, opening the PWA in the browser when the environment allows. The person must be able to look at the result without asking to start it. Say where it runs and what is open; stop it only when the next step needs the ports (another `make bruno_test` or `make run`) or the user asks.
+
 ## Agent skills
 
 ### Issue tracker
