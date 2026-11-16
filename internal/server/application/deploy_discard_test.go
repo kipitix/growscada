@@ -516,3 +516,68 @@ func TestRevert_RestoresTheDeployment(t *testing.T) {
 		t.Errorf("the tags after the Revert: %+v, %v, want %s back", allTags, err, tag.ID)
 	}
 }
+
+// TestLoad_AnOlderSavedStateIsClean: loading a saved state that is not the last
+// one leaves the Draft clean, as loading the last one does: its content is a
+// saved state's, so there is nothing a Save would fix (ADR 0016, amendment
+// 2026-11-16).
+func TestLoad_AnOlderSavedStateIsClean(t *testing.T) {
+	cleanDevices(t)
+	cleanScenes(t)
+	ctx := context.Background()
+
+	mustCreateTag(t, "speed", "integer")
+	first := mustSaveState(t, mainProject, "First")
+	mustCreateTag(t, "pressure", "integer")
+	second := mustSaveState(t, mainProject, "Second")
+	if second.Number <= first.Number {
+		t.Fatalf("the second saved state %d, the first %d", second.Number, first.Number)
+	}
+
+	loaded, err := newDiscardService().Load(ctx, mainProject, first.Number)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if loaded.HasUnsavedChanges {
+		t.Errorf("loading saved state %d, not the last, leaves the Draft unsaved: %+v", first.Number, loaded)
+	}
+	tags, err := newService().FindAllTags(ctx, mainProject)
+	if err != nil || len(tags) != 1 || tags[0].Name != "speed" {
+		t.Errorf("the Draft after the load: %+v, %v, want the one Tag of saved state %d", tags, err, first.Number)
+	}
+}
+
+// TestRevert_ToAFileDeploymentStaysUnsaved: a Deployment made from a file is no
+// saved state's content, so a Revert to it leaves the Draft with unsaved
+// changes — unlike a Revert to a Deployment made from a saved state (ADR 0016,
+// amendment 2026-11-16).
+func TestRevert_ToAFileDeploymentStaysUnsaved(t *testing.T) {
+	cleanDevices(t)
+	cleanScenes(t)
+	ctx := context.Background()
+
+	mustCreateTag(t, "speed", "integer")
+	file, err := application.NewProjectFileBuilder(contentOver(newScopes())).Build(ctx, mainProject)
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	document, err := json.Marshal(file)
+	if err != nil {
+		t.Fatalf("encode: %v", err)
+	}
+	if _, err := newProjectFileService().Deploy(ctx, mainProject, document); err != nil {
+		t.Fatalf("Deploy from a file: %v", err)
+	}
+
+	mustCreateTag(t, "pressure", "integer")
+	if _, err := newDiscardService().Revert(ctx, mainProject); err != nil {
+		t.Fatalf("Revert: %v", err)
+	}
+	state, err := application.NewDraftService(contentOver(newScopes())).State(ctx, mainProject)
+	if err != nil {
+		t.Fatalf("Draft state: %v", err)
+	}
+	if !state.HasUnsavedChanges {
+		t.Errorf("the Draft reverted to a file Deployment reports no unsaved changes: %+v", state)
+	}
+}

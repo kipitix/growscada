@@ -10,9 +10,9 @@ import (
 )
 
 // TestLoadSavedState_Project: a saved state becomes what is edited (task 84).
-// The Draft is replaced by the saved state's content in one transaction, and
-// it is clean exactly when the loaded saved state is the last one. A number
-// the Project does not have is 404 and changes nothing.
+// The Draft is replaced by the saved state's content in one transaction and is
+// clean afterwards, whichever saved state it loaded (ADR 0016, amendment
+// 2026-11-16). A number the Project does not have is 404 and changes nothing.
 func TestLoadSavedState_Project(t *testing.T) {
 	cleanProjectsRest(t)
 	services := newServices()
@@ -64,6 +64,27 @@ func TestLoadSavedState_Project(t *testing.T) {
 		t.Fatalf("GET draft-changes: %d %s", rec.Code, rec.Body)
 	} else if state := decodeBody[apiv0.DraftChangesResponse](t, rec); state.CanUndo {
 		t.Errorf("the load left the DraftChange stack: %+v", state)
+	}
+
+	// A second saved state makes 1 an older one: loading it leaves the Draft
+	// clean too, which the rule of 2026-11-10 did not (ADR 0016, amendment
+	// 2026-11-16).
+	version = services.draftVersion(t)
+	if rec := serve(router, http.MethodPost, mainPath+"/tags",
+		apiv0.CreateTagRequest{Version: version, Name: "flow", Type: "integer"}); rec.Code != http.StatusCreated {
+		t.Fatalf("POST third tag: %d %s", rec.Code, rec.Body)
+	}
+	version = services.draftVersion(t)
+	if rec := serve(router, http.MethodPost, mainPath+"/saved-states",
+		apiv0.CreateSavedStateRequest{Version: version, Title: "The second", Author: "Ada"}); rec.Code != http.StatusCreated {
+		t.Fatalf("POST second saved state: %d %s", rec.Code, rec.Body)
+	}
+	rec = serve(router, http.MethodPost, mainPath+"/saved-states/1/load", nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("load the older saved state: %d %s", rec.Code, rec.Body)
+	}
+	if older := decodeBody[apiv0.LoadSavedStateResponse](t, rec); older.HasUnsavedChanges {
+		t.Errorf("an older saved state loaded leaves the Draft dirty: %+v", older)
 	}
 
 	rec = serve(router, http.MethodPost, mainPath+"/saved-states/99/load", nil)

@@ -1,0 +1,39 @@
+info:
+  name: save the cleanup draft after the revert
+  type: http
+  seq: 2002
+http:
+  method: POST
+  url: http://{{API_SERVER}}/api/v0/projects/{{CLEANUP_PROJECT_ID}}/saved-states
+  body:
+    type: json
+    data: |-
+      {
+        "version": {{CLEANUP_DRAFT_VERSION}},
+        "title": "After the revert",
+        "author": "Ada"
+      }
+  auth: inherit
+
+docs: |
+  The Draft the Revert restored becomes saved state 3, so that saved state 2 is
+  an older one when the load below names it: loading any saved state leaves the
+  Draft clean (ADR 0016, amendment 2026-11-16), which the rule of 2026-11-10
+  refused for an older one (task 91).
+
+runtime:
+  assertions:
+    - expression: 'res.status'
+      operator: eq
+      value: '201'
+    - expression: 'res.headers["growscada-schema-version"]'
+      operator: isDefined
+    - expression: 'res.body.number'
+      operator: eq
+      value: '3'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

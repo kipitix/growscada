@@ -1,7 +1,7 @@
 info:
   name: write to the Draft after a Revert that dropped a saved state
   type: http
-  seq: 2002
+  seq: 2003
 http:
   method: POST
   url: http://{{API_SERVER}}/api/v0/projects/{{CLEANUP_PROJECT_ID}}/tags

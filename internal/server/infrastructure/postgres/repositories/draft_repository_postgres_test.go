@@ -155,8 +155,10 @@ func TestDraftCleanVersion_SaveDiscardAndNothingToSave(t *testing.T) {
 		t.Errorf("a replacement that is not the SavedState's is clean")
 	}
 
-	// A replacement of an older saved state's content is clean too: loading one
-	// leaves nothing to save (ADR 0016, amendment 2026-11-16).
+	// A second saved state does not change the rule: the repository takes the
+	// caller's word, so a replacement it says is a saved state's content is
+	// clean after one exists too — the number comparison of 2026-11-10 would
+	// have kept the marker (ADR 0016, amendment 2026-11-16).
 	if _, err := testDrafts().SaveSavedState(ctx, scope, draftVersionOf(t, mainProject),
 		savedStateTitle(t, "Second"), savedStateAuthor(t), projectSavedStateContent()); err != nil && !errors.Is(err, draft.ErrNothingToSave) {
 		t.Fatalf("SaveSavedState: %v", err)
