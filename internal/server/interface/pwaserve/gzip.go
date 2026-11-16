@@ -12,19 +12,25 @@ import (
 // PWA's app.wasm is far above it, the page and its small resources are not.
 const minCompressSize = 1024
 
-// UncompressedLengthHeader names the length of the answer before gzip. go-app's
-// wasm loader counts the bytes its reader yields — the browser hands it the
-// decompressed body — so it must read this length, not the compressed
+// UncompressedLengthHeader names the length of the wasm answer before gzip.
+// go-app's wasm loader counts the bytes its reader yields — the browser hands it
+// the decompressed body — so it must read this length, not the compressed
 // Content-Length, or its progress passes 100%. main.go gives the handler this
-// name as app.Handler.WasmContentLengthHeader.
+// name as app.Handler.WasmContentLengthHeader; only the wasm answer carries it,
+// since only the loader reads it.
 const UncompressedLengthHeader = "GrowSCADA-Wasm-Length"
 
-// gzipHandler compresses the PWA's textual answers — app.wasm above all — when
-// the browser accepts gzip. It buffers an answer, so Content-Length stays exact:
-// go-app's wasm loader reads it for its progress bar. The API server is not
-// behind it, so no event stream is delayed.
+// Gzip compresses the PWA's textual answers — app.wasm above all — when the
+// browser accepts gzip, and states every answer's Vary so that a shared cache
+// keeps the two forms apart. It buffers an answer to know its exact
+// Content-Length, which costs one copy of the body in memory per answer in
+// flight: the PWA is a development server for one person, not a CDN. A HEAD and
+// a refusal are passed through uncompressed — a HEAD has no body to compress —
+// so the wasm is fetched with a GET. The API server is not behind it, so no
+// event stream is delayed.
 func Gzip(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Add("Vary", "Accept-Encoding")
 		if r.Method != http.MethodGet || !acceptsGzip(r) {
 			next.ServeHTTP(w, r)
 			return
@@ -38,14 +44,17 @@ func Gzip(next http.Handler) http.Handler {
 		for key, values := range buffered.header {
 			w.Header()[key] = values
 		}
-		w.Header().Add("Vary", "Accept-Encoding")
 		body := buffered.body.Bytes()
-		// The loader's progress counts the bytes it reads: the browser
-		// decompresses them, so the length it has to compare with is this one,
-		// never the compressed Content-Length (task 91).
-		w.Header().Set(UncompressedLengthHeader, strconv.Itoa(len(body)))
-		if status != http.StatusOK || len(body) < minCompressSize ||
-			w.Header().Get("Content-Encoding") != "" ||
+		// An answer gzip already produced is left alone: its bytes are not the
+		// body the loader counts either.
+		plain := w.Header().Get("Content-Encoding") == ""
+		if status == http.StatusOK && plain && isWasm(w.Header().Get("Content-Type")) {
+			// The loader's progress counts the bytes it reads: the browser
+			// decompresses them, so the length it has to compare with is this
+			// one, never the compressed Content-Length (task 91).
+			w.Header().Set(UncompressedLengthHeader, strconv.Itoa(len(body)))
+		}
+		if status != http.StatusOK || len(body) < minCompressSize || !plain ||
 			!compressible(w.Header().Get("Content-Type")) {
 			writeUncompressed(w, status, body)
 			return
@@ -95,25 +104,46 @@ func compressible(contentType string) bool {
 	}
 }
 
-// acceptsGzip reports whether the client accepts a gzip answer: “gzip” with a
-// zero quality is a refusal.
-func acceptsGzip(r *http.Request) bool {
-	for _, part := range strings.Split(r.Header.Get("Accept-Encoding"), ",") {
-		fields := strings.Split(strings.TrimSpace(part), ";")
-		if !strings.EqualFold(strings.TrimSpace(fields[0]), "gzip") {
-			continue
-		}
-		for _, param := range fields[1:] {
-			if strings.TrimSpace(param) == "q=0" || strings.TrimSpace(param) == "q=0.0" {
-				return false
-			}
-		}
-		return true
-	}
-	return false
+// isWasm reports whether an answer is the WebAssembly module the loader fetches.
+func isWasm(contentType string) bool {
+	return strings.HasPrefix(strings.ToLower(strings.TrimSpace(contentType)), "application/wasm")
 }
 
-// bufferedWriter collects an answer so gzipHandler can give it its final
+// acceptsGzip reports whether the client accepts a gzip answer: “gzip” with a
+// zero quality is a refusal, “*” covers a coding nothing names, and a client
+// that names neither gets the answer uncompressed.
+func acceptsGzip(r *http.Request) bool {
+	wildcard := false
+	for _, part := range strings.Split(r.Header.Get("Accept-Encoding"), ",") {
+		fields := strings.Split(strings.TrimSpace(part), ";")
+		switch strings.ToLower(strings.TrimSpace(fields[0])) {
+		case "gzip":
+			return quality(fields[1:]) > 0
+		case "*":
+			wildcard = quality(fields[1:]) > 0
+		}
+	}
+	return wildcard
+}
+
+// quality is the q parameter of one Accept-Encoding entry: 1 when it states
+// none, and 0 for a value that is not a number, which refuses the coding.
+func quality(params []string) float64 {
+	for _, param := range params {
+		name, value, ok := strings.Cut(strings.TrimSpace(param), "=")
+		if !ok || !strings.EqualFold(strings.TrimSpace(name), "q") {
+			continue
+		}
+		q, err := strconv.ParseFloat(strings.TrimSpace(value), 64)
+		if err != nil {
+			return 0
+		}
+		return q
+	}
+	return 1
+}
+
+// bufferedWriter collects an answer so Gzip can give it its final
 // Content-Length. It implements only http.ResponseWriter: the PWA handler
 // streams nothing.
 type bufferedWriter struct {
