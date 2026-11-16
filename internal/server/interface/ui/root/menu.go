@@ -414,26 +414,39 @@ type navStep struct {
 	onClick func(ctx app.Context, e app.Event)
 }
 
-// historyShown reports whether the mode shown is on its saved states screen.
-func (r *Root) historyShown() bool {
+// historyHost is the mode shown while it has a saved-states screen, nil for a
+// mode without one: both commands over that screen read the same mode (task 91).
+type historyHost interface {
+	HistoryShown() bool
+	CloseHistory()
+}
+
+// historyHostOf is the mode shown, or nil when it has no saved-states screen.
+func (r *Root) historyHostOf() historyHost {
 	switch r.currentMode {
 	case ModeLibrary:
-		return r.library.HistoryShown()
+		if r.library != nil {
+			return r.library
+		}
 	case ModeProject:
-		return r.project.HistoryShown()
-	default:
-		return false
+		if r.project != nil {
+			return r.project
+		}
 	}
+	return nil
+}
+
+// historyShown reports whether the mode shown is on its saved states screen.
+func (r *Root) historyShown() bool {
+	host := r.historyHostOf()
+	return host != nil && host.HistoryShown()
 }
 
 // closeHistory returns the mode shown from its saved states to the editor, as
 // the navigation step above them does (task 91).
 func (r *Root) closeHistory() {
-	switch r.currentMode {
-	case ModeLibrary:
-		r.library.CloseHistory()
-	case ModeProject:
-		r.project.CloseHistory()
+	if host := r.historyHostOf(); host != nil {
+		host.CloseHistory()
 	}
 	if r.mounted {
 		r.compoCtx.Update()
@@ -443,8 +456,9 @@ func (r *Root) closeHistory() {
 // navigationSteps is the chain the line beside the burger draws: the mode, the
 // entity it shows and the saved states when they are open (task 91). Every
 // step above the last goes one level up: the entity closes the saved states,
-// the mode shows the selection page.
-func (r *Root) navigationSteps() []navStep {
+// the mode shows the selection page. historyShown says whether the mode shown
+// is on its saved states screen, which only that mode knows.
+func (r *Root) navigationSteps(historyShown bool) []navStep {
 	label := modeLabel(r.currentMode)
 	if label == "" {
 		return nil
@@ -467,18 +481,21 @@ func (r *Root) navigationSteps() []navStep {
 			{text: page},
 		}
 	}
-	modeStep := navStep{text: label, title: "Back to the selection page"}
+	// The title says where the step goes, so only a step that goes somewhere
+	// states one: Operation and History have no selection page to show.
+	modeStep := navStep{text: label}
 	if hasPage(r.currentMode) {
 		if r.showList[r.currentMode] {
 			// The selection page names no entity: the mode is what is shown.
 			return []navStep{{text: label}}
 		}
+		modeStep.title = "Back to the selection page"
 		modeStep.onClick = func(ctx app.Context, e app.Event) { r.showListPage(r.currentMode) }
 	}
 	steps := []navStep{modeStep}
 	name := r.entityName[r.currentMode]
 	switch {
-	case r.historyShown():
+	case historyShown:
 		if name != "" {
 			steps = append(steps, navStep{text: name, title: "Back to the Draft", onClick: func(ctx app.Context, e app.Event) {
 				r.closeHistory()
@@ -494,7 +511,7 @@ func (r *Root) navigationSteps() []navStep {
 // navigationText is what the line beside the burger says: the steps of the
 // chain, separated by the middle dot (task 89, task 91).
 func (r *Root) navigationText() string {
-	steps := r.navigationSteps()
+	steps := r.navigationSteps(r.historyShown())
 	parts := make([]string, len(steps))
 	for i, step := range steps {
 		parts[i] = step.text
@@ -505,7 +522,7 @@ func (r *Root) navigationText() string {
 // renderNavigation is the line beside the burger: one button per step of the
 // chain, each going one level up (task 91).
 func (r *Root) renderNavigation() app.UI {
-	steps := r.navigationSteps()
+	steps := r.navigationSteps(r.historyShown())
 	text := r.navigationText()
 	body := make([]app.UI, 0, len(steps)*2)
 	for i, step := range steps {
@@ -517,6 +534,7 @@ func (r *Root) renderNavigation() app.UI {
 	return app.Div().
 		Attr("id", navigationID).
 		Attr("data-navigation", "true").
+		Attr("role", "navigation").
 		Attr("aria-label", "Navigation: "+text).
 		Title(text).
 		Style("display", "flex").
@@ -540,7 +558,8 @@ func (r *Root) renderNavigationStep(step navStep) app.UI {
 		Style("font-weight", "600").
 		Style("user-select", "none")
 	if step.onClick == nil {
-		b = b.Disabled(true).Style("cursor", "default").Style("opacity", "1")
+		b = b.Disabled(true).Attr("aria-current", "page").
+			Style("cursor", "default").Style("opacity", "1")
 	} else {
 		b = b.Style("cursor", "pointer").OnClick(step.onClick)
 	}

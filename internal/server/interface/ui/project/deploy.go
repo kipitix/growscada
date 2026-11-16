@@ -570,6 +570,21 @@ func (p *Project) showLoadWarnings(ctx app.Context, warnings []apiv0.DiscardWarn
 	}})
 }
 
+// renderDeployUnknown is the panel's word on a Deployment it could not read: a
+// failed read is not "not deployed", and without it the panel says nothing
+// while the Deploy window refuses to name the running saved state (task 72_4;
+// task 91). It is a warning, not the neutral state the panel no longer names.
+func (p *Project) renderDeployUnknown() app.UI {
+	if !p.deploymentFailed {
+		return app.Span().Style("display", "none")
+	}
+	return app.Span().
+		Attr("data-deploy-unknown", "true").
+		Style("font-size", "12px").
+		Style("color", "var(--toast-warn-title)").
+		Text("Deployment unknown")
+}
+
 // renderDeployBar is the project's panel: the way back, the floppy that opens
 // the saved states, Undo and Redo with the unsaved-changes mark after them, and
 // the Deploy, Deployments and project file actions (task 91).
@@ -583,6 +598,7 @@ func (p *Project) renderDeployBar() app.UI {
 		uiutil.BarDivider(),
 		p.renderDraftChangesBar(),
 		p.renderUnsavedIndicator(),
+		p.renderDeployUnknown(),
 		app.Div().Style("flex", "1"),
 		p.panelButton("project-file", uiutil.IconFile(), "Download the Draft, open a file, or deploy one",
 			!busy && !p.projectFileBusy, func(ctx app.Context) {

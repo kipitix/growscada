@@ -314,11 +314,13 @@ func TestMenu_ChecksOnlyTheShownMode(t *testing.T) {
 	r.selected[ModeLibrary] = item.ID
 	r.showList[ModeLibrary] = false
 	r.currentMode = ModeProject
-	if html := app.HTMLString(r.renderEntityRow(ModeLibrary, item)); checked(html) {
+	if html := app.HTMLString(r.renderEntityRow(ModeLibrary, item)); checked(html) ||
+		strings.Contains(html, `data-icon="check"`) {
 		t.Errorf("another mode's entity is checked: %s", html)
 	}
 	r.currentMode = ModeLibrary
-	if html := app.HTMLString(r.renderEntityRow(ModeLibrary, item)); !checked(html) {
+	if html := app.HTMLString(r.renderEntityRow(ModeLibrary, item)); !checked(html) ||
+		!strings.Contains(html, `data-icon="check"`) {
 		t.Errorf("the shown entity is not checked: %s", html)
 	}
 }
@@ -671,5 +673,62 @@ func TestNavigation_NamesTheMiscPage(t *testing.T) {
 	r.miscPage = misc.PageUserName
 	if got := r.navigationText(); got != "Misc \u00b7 User name" {
 		t.Errorf("on the User name page: %q", got)
+	}
+}
+
+// TestNavigation_EveryStepGoesOneLevelUp: the chain beside the burger is the
+// mode, the entity it shows and the saved states while they are open. Each
+// step above the last goes one level up — the entity closes the saved states,
+// the mode shows the selection page —, and the place shown leads nowhere
+// (task 91).
+func TestNavigation_EveryStepGoesOneLevelUp(t *testing.T) {
+	r := NewRoot("http://127.0.0.1:0")
+	r.currentMode = ModeLibrary
+	r.entityName[ModeLibrary] = "Extras"
+
+	steps := r.navigationSteps(true)
+	if len(steps) != 3 {
+		t.Fatalf("the chain with the saved states open: %+v", steps)
+	}
+	for i, want := range []string{"Library", "Extras", "Saved states"} {
+		if steps[i].text != want {
+			t.Errorf("step %d is %q, want %q", i, steps[i].text, want)
+		}
+	}
+	if steps[0].onClick == nil || steps[0].title == "" {
+		t.Errorf("the mode step goes nowhere: %+v", steps[0])
+	}
+	if steps[1].onClick == nil {
+		t.Errorf("the entity step does not close the saved states: %+v", steps[1])
+	}
+	if steps[2].onClick != nil || steps[2].title != "" {
+		t.Errorf("the step shown goes somewhere or promises to: %+v", steps[2])
+	}
+	html := app.HTMLString(r.renderNavigationStep(steps[2]))
+	if !strings.Contains(html, "disabled") || !strings.Contains(html, `aria-current="page"`) {
+		t.Errorf("the step shown is not the current page: %s", html)
+	}
+
+	// The mode step shows the selection page, which leaves the mode alone.
+	r.showListPage(ModeLibrary)
+	if steps := r.navigationSteps(false); len(steps) != 1 || steps[0].text != "Library" ||
+		steps[0].onClick != nil {
+		t.Errorf("the selection page: %+v", steps)
+	}
+}
+
+// TestNavigation_IsALandmark: the chain is one navigation landmark with its
+// own name, so a screen reader announces it as such (task 91).
+func TestNavigation_IsALandmark(t *testing.T) {
+	r := NewRoot("http://127.0.0.1:0")
+	r.currentMode = ModeProject
+	r.entityName[ModeProject] = "Main"
+
+	html := app.HTMLString(r.renderNavigation())
+	if !strings.Contains(html, `role="navigation"`) {
+		t.Errorf("the chain is no navigation landmark: %s", html)
+	}
+	if !strings.Contains(html, `aria-label="Navigation: Project · Main"`) {
+		t.Errorf("the chain names no destination: %s", html)
 	}
 }

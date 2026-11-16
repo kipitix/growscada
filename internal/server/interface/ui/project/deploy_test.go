@@ -337,8 +337,9 @@ func TestDeployWindow_UnknownDeployment(t *testing.T) {
 	if !f.p.deploymentFailed || f.p.deploymentLoaded {
 		t.Fatalf("the failed read: failed %v, loaded %v", f.p.deploymentFailed, f.p.deploymentLoaded)
 	}
-	if html := app.HTMLString(f.p.Render()); strings.Contains(html, "Deployment unknown") {
-		t.Errorf("the bar still names the unknown Deployment: %s", html)
+	if html := app.HTMLString(f.p.Render()); !strings.Contains(html, "data-deploy-unknown") ||
+		!strings.Contains(html, "Deployment unknown") {
+		t.Errorf("the bar does not say the running Deployment is unknown: %s", html)
 	}
 
 	f.p.openDeployDialog(f.p.compoCtx)
