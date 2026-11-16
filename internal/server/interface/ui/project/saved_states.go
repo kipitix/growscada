@@ -14,6 +14,7 @@ import (
 	"github.com/kipitix/growscada/internal/server/interface/ui/savedstates"
 	"github.com/kipitix/growscada/internal/server/interface/ui/toast"
 	"github.com/kipitix/growscada/internal/server/interface/ui/uiutil"
+	"github.com/kipitix/growscada/internal/server/interface/ui/username"
 )
 
 // The Project mode's Save and its history (task 72_2; ADR 0021): Save fixes
@@ -47,12 +48,12 @@ func (p *Project) hasUnsavedChanges() bool {
 }
 
 // openSaveDialog opens the Save dialog with a default title and the stored
-// author. A first Save with no author yet shows the field empty: the dialog is
-// where the name is asked for (task 72_6).
+// user name. A first Save with no name yet shows the field empty: the dialog
+// still takes an author for that one save, while the User name page sets the
+// name every dialog starts from (task 72_6, task 90).
 func (p *Project) openSaveDialog(ctx app.Context) {
 	p.saveTitle = "Save " + uiutil.FormatTime(time.Now())
-	// The User name page may have set another name since this mode mounted.
-	ctx.LocalStorage().Get(uiutil.AuthorKey, &p.saveAuthor)
+	p.saveAuthor = username.Stored(ctx)
 	p.saveDialog = true
 	ctx.Update()
 }

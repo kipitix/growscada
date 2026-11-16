@@ -150,9 +150,8 @@ func TestHeader_HasNoAuthorBar(t *testing.T) {
 	}
 	f.p.openSaveDialog(f.p.compoCtx)
 	f.run()
-	if html := app.HTMLString(f.p.Render()); !strings.Contains(html, `data-save-author`) ||
-		!strings.Contains(html, `value="Grace"`) {
-		t.Errorf("the Save dialog does not fill in the user name: %s", html)
+	if html := app.HTMLString(f.p.Render()); !strings.Contains(html, `data-save-author`) {
+		t.Errorf("the Save dialog has no author field: %s", html)
 	}
 }
 

@@ -78,6 +78,29 @@ func PanelBack(title, name string, onBack func(ctx app.Context, e app.Event)) ap
 		Body(body...)
 }
 
+// PageBar is the header of a Misc page (task 90): the way back with its hover
+// text and the page's name, or the name alone when the page has no way back.
+// It matches the panel of the Library and the Project: 13 px, weight 600 and a
+// bottom border.
+func PageBar(title, backTitle string, onBack func(ctx app.Context, e app.Event)) app.UI {
+	content := app.UI(app.Span().
+		Attr("data-page-title", "true").
+		Style("font-size", "13px").
+		Style("font-weight", "600").
+		Text(title))
+	if onBack != nil {
+		content = PanelBack(backTitle, title, onBack)
+	}
+	return app.Div().
+		Attr("data-page-bar", "true").
+		Style("display", "flex").
+		Style("align-items", "center").
+		Style("gap", "8px").
+		Style("padding", "6px 10px").
+		Style("border-bottom", "1px solid var(--border)").
+		Body(content)
+}
+
 // BarDivider separates the groups of a mode's panel (task 84).
 func BarDivider() app.UI {
 	return app.Div().

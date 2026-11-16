@@ -15,6 +15,7 @@ import (
 	"github.com/kipitix/growscada/internal/server/interface/ui/savedstates"
 	"github.com/kipitix/growscada/internal/server/interface/ui/toast"
 	"github.com/kipitix/growscada/internal/server/interface/ui/uiutil"
+	"github.com/kipitix/growscada/internal/server/interface/ui/username"
 )
 
 // The Library mode's Save and its history (task 72_2; ADR 0021): Save fixes
@@ -49,15 +50,15 @@ func (l *Library) hasUnsavedChanges() bool {
 }
 
 // openSaveDialog opens the Save dialog with a default title and the stored
-// author.
+// user name. The dialog takes an author for that one save; the User name page
+// sets the name every dialog starts from (task 90).
 func (l *Library) openSaveDialog() {
 	if l.draft() == nil {
 		return
 	}
 	l.saveTitle = "Save " + uiutil.FormatTime(time.Now())
-	// The User name page may have set another name since this mode mounted.
 	if l.mounted {
-		l.compoCtx.LocalStorage().Get(uiutil.AuthorKey, &l.saveAuthor)
+		l.saveAuthor = username.Stored(l.compoCtx)
 	}
 	l.saveDialog = true
 	l.compoCtx.Update()

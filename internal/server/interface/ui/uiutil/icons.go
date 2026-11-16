@@ -20,7 +20,6 @@ const (
 	iconCheckSVG   = `<svg data-icon="check" aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>`
 	iconCloseSVG   = `<svg data-icon="close" aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>`
 	iconPencilSVG  = `<svg data-icon="pencil" aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9l-4-4L4 16v4z"/><path d="M14 6l4 4"/></svg>`
-	iconTagSVG     = `<svg data-icon="tag" aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13l-7 7-9-9V4h7l9 9z"/><circle cx="8" cy="8" r="1.5"/></svg>`
 	iconMenuSVG    = `<svg data-icon="menu" aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M3 12h18"/><path d="M3 18h18"/></svg>`
 )
 
@@ -56,9 +55,6 @@ func IconClose() app.UI { return app.Raw(iconCloseSVG) }
 
 // IconPencil edits a field in place.
 func IconPencil() app.UI { return app.Raw(iconPencilSVG) }
-
-// IconTag is the mark of the Labels page (task 85_2, task 90).
-func IconTag() app.UI { return app.Raw(iconTagSVG) }
 
 // IconMenu opens the main menu (task 89).
 func IconMenu() app.UI { return app.Raw(iconMenuSVG) }

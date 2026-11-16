@@ -351,14 +351,9 @@ func (p *Project) OnMount(ctx app.Context) {
 	ctx.LocalStorage().Get("project:propertiesWidth", &p.propertiesWidth)
 
 	ctx.LocalStorage().Get(uiutil.AuthorKey, &p.saveAuthor)
-	// The User name page writes another name: the bar and the next Save dialog
-	// follow it (task 90).
-	ctx.Handle(username.ActionChanged, func(ctx app.Context, a app.Action) {
-		if name, ok := a.Value.(string); ok {
-			p.saveAuthor = name
-		}
-		ctx.Update()
-	})
+	// The User name page writes another name: the next Save dialog follows it
+	// (task 90).
+	username.Watch(ctx, &p.saveAuthor)
 	var savedTab string
 	ctx.LocalStorage().Get("project:subTab", &savedTab)
 	if savedTab != "" {

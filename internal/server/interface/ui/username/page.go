@@ -1,9 +1,9 @@
 // Package username is the Misc section's User name page (task 90): the name
 // the Save dialogs fill in as the author of a saved state. Until Users and
 // authentication exist (tasks 49/50) it is a declaration kept in the browser's
-// LocalStorage, not an account: it blocks nobody and proves nothing. The page
-// only writes that key; the Library and the Project modes follow it through
-// ActionChanged.
+// LocalStorage, not an account: it blocks nobody and proves nothing. The page is
+// the one place the UI shows the name; a Save dialog prefills it and may
+// override the author for that one save.
 package username
 
 import (
@@ -16,9 +16,8 @@ import (
 	"github.com/kipitix/growscada/internal/server/interface/ui/uiutil"
 )
 
-// ActionChanged tells the modes that the name the Save dialogs prefill moved:
-// the User name page is the one place it is set, and an open Save dialog
-// follows the change like the next one (task 90).
+// ActionChanged tells the modes that the stored name moved: an open Save dialog
+// follows it like the next one (task 90).
 const ActionChanged = "username.changed"
 
 // Page is the full-page editor of the user name. The Misc section owns whether
@@ -29,8 +28,9 @@ type Page struct {
 	// OnBack asks the section to show its contents.
 	OnBack func()
 
-	mounted bool
-	loaded  bool
+	compoCtx app.Context
+	mounted  bool
+	loaded   bool
 
 	name  string
 	error string
@@ -39,30 +39,48 @@ type Page struct {
 // New creates the page; Root holds it for the tab's lifetime.
 func New() *Page { return &Page{} }
 
+// Watch makes target follow the stored name: a mode registers it in OnMount, so
+// an open Save dialog of the mode does not keep the previous one.
+func Watch(ctx app.Context, target *string) {
+	ctx.Handle(ActionChanged, func(ctx app.Context, a app.Action) {
+		if name, ok := a.Value.(string); ok {
+			*target = name
+		}
+		ctx.Update()
+	})
+}
+
+// Stored is the name the Save dialogs prefill, "" when none is set.
+func Stored(ctx app.Context) string {
+	var name string
+	if err := ctx.LocalStorage().Get(uiutil.AuthorKey, &name); err != nil {
+		return ""
+	}
+	return name
+}
+
 func (p *Page) OnMount(ctx app.Context) {
-	p.mounted = true
+	p.compoCtx, p.mounted = ctx, true
 	p.read(ctx)
 }
 
 func (p *Page) OnDismount() { p.mounted = false }
 
-// Reload reads the stored name afresh: Root calls it when it opens the page, so
-// a page left closed for a while shows the name as it is now.
-func (p *Page) Reload(ctx app.Context) {
+// Reload reads the stored name afresh: the section calls it when it opens the
+// page, so a page left closed for a while shows the name as it is now. The page
+// reads through its own context, never through the caller's: the caller may be
+// a menu row that is gone when an answer arrives.
+func (p *Page) Reload() {
 	if !p.mounted {
 		return
 	}
-	p.read(ctx)
-	ctx.Update()
+	p.read(p.compoCtx)
+	p.compoCtx.Update()
 }
 
 // read fills the field from LocalStorage.
 func (p *Page) read(ctx app.Context) {
-	var name string
-	if err := ctx.LocalStorage().Get(uiutil.AuthorKey, &name); err != nil {
-		name = ""
-	}
-	p.name, p.loaded = name, true
+	p.name, p.loaded = Stored(ctx), true
 }
 
 // save writes the trimmed name and tells the modes. An empty name is refused
@@ -99,20 +117,12 @@ func (p *Page) Render() app.UI {
 		Style("min-height", "0").
 		Style("font-size", "13px").
 		Body(
-			app.Div().
-				Style("display", "flex").
-				Style("align-items", "center").
-				Style("gap", "8px").
-				Style("padding", "6px 10px").
-				Style("border-bottom", "1px solid var(--border)").
-				Body(
-					uiutil.PanelBack("Back to the Misc section", "User name",
-						func(ctx app.Context, e app.Event) {
-							if p.OnBack != nil {
-								p.OnBack()
-							}
-						}),
-				),
+			uiutil.PageBar("User name", "Back to the Misc section",
+				func(ctx app.Context, e app.Event) {
+					if p.OnBack != nil {
+						p.OnBack()
+					}
+				}),
 			app.Div().
 				Style("max-width", "560px").
 				Style("padding", "12px 10px").

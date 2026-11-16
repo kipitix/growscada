@@ -6,51 +6,37 @@ import (
 
 	"github.com/maxence-charriere/go-app/v11/pkg/app"
 
+	"github.com/kipitix/growscada/internal/server/interface/ui/uitest"
 	"github.com/kipitix/growscada/internal/server/interface/ui/uiutil"
 )
 
-// storageProbe holds the engine's LocalStorage: mounted before the page, it
-// lets a test set the name a previous session left and read the one this one
-// writes.
-type storageProbe struct {
-	app.Compo
-	ctx app.Context
+// mountWithName seeds the LocalStorage a previous session left and mounts the
+// page (see uitest).
+type mountWithName struct {
+	*Page
+	stored string
 }
 
-func (p *storageProbe) OnPreRender(ctx app.Context) { p.ctx = ctx }
-func (p *storageProbe) Render() app.UI              { return app.Div() }
-
-// mountOnHost lets go-app mount the page on the host (see uitest).
-type mountOnHost struct{ *Page }
-
-func (m mountOnHost) OnPreRender(ctx app.Context) { m.OnMount(ctx) }
+func (m mountWithName) OnPreRender(ctx app.Context) {
+	if m.stored != "" {
+		if err := ctx.LocalStorage().Set(uiutil.AuthorKey, m.stored); err != nil {
+			panic(err)
+		}
+	}
+	m.OnMount(ctx)
+}
 
 type fixture struct {
-	t      *testing.T
-	p      *Page
-	engine app.TestEngine
-	probe  *storageProbe
+	t *testing.T
+	p *Page
+	e *uitest.Engine
 }
 
 func start(t *testing.T, stored string) *fixture {
 	t.Helper()
-	engine := app.NewTestEngine()
-	probe := &storageProbe{}
-	if err := engine.Load(probe); err != nil {
-		t.Fatalf("load the storage probe: %v", err)
-	}
-	engine.ConsumeAll()
-	if stored != "" {
-		if err := probe.ctx.LocalStorage().Set(uiutil.AuthorKey, stored); err != nil {
-			t.Fatalf("store the name: %v", err)
-		}
-	}
 	p := New()
-	if err := engine.Load(mountOnHost{p}); err != nil {
-		t.Fatalf("load the page: %v", err)
-	}
-	engine.ConsumeAll()
-	return &fixture{t: t, p: p, engine: engine, probe: probe}
+	e := uitest.LoadWatching(t, mountWithName{Page: p, stored: stored}, ActionChanged)
+	return &fixture{t: t, p: p, e: e}
 }
 
 func (f *fixture) html() string { return app.HTMLString(f.p.Render()) }
@@ -58,7 +44,7 @@ func (f *fixture) html() string { return app.HTMLString(f.p.Render()) }
 func (f *fixture) stored() string {
 	f.t.Helper()
 	var name string
-	if err := f.probe.ctx.LocalStorage().Get(uiutil.AuthorKey, &name); err != nil {
+	if err := f.p.compoCtx.LocalStorage().Get(uiutil.AuthorKey, &name); err != nil {
 		f.t.Fatalf("read the stored name: %v", err)
 	}
 	return name
@@ -82,14 +68,22 @@ func TestPage_ReadsTheStoredName(t *testing.T) {
 func TestPage_SavesTheTrimmedName(t *testing.T) {
 	f := start(t, "Ada")
 	f.p.name = "  Grace  "
-	f.p.save(f.probe.ctx)
-	f.engine.ConsumeAll()
+	f.p.save(f.p.compoCtx)
+	f.e.ConsumeAll()
 
 	if got := f.stored(); got != "Grace" {
 		t.Errorf("the stored name is %q, want the trimmed one", got)
 	}
 	if f.p.name != "Grace" || f.p.error != "" {
 		t.Errorf("the field after Save: %q %q", f.p.name, f.p.error)
+	}
+	toasts := f.e.TakeToasts()
+	if len(toasts) != 1 || toasts[0].Title != "User name saved" || toasts[0].Detail != "Grace" {
+		t.Errorf("the toasts: %+v", toasts)
+	}
+	actions := f.e.TakeActions()
+	if len(actions) != 1 || actions[0].Name != ActionChanged || actions[0].Value != "Grace" {
+		t.Errorf("the actions: %+v", actions)
 	}
 }
 
@@ -98,8 +92,8 @@ func TestPage_SavesTheTrimmedName(t *testing.T) {
 func TestPage_RefusesAnEmptyName(t *testing.T) {
 	f := start(t, "Ada")
 	f.p.name = "   "
-	f.p.save(f.probe.ctx)
-	f.engine.ConsumeAll()
+	f.p.save(f.p.compoCtx)
+	f.e.ConsumeAll()
 
 	if f.p.error == "" || !strings.Contains(f.p.error, "required") {
 		t.Errorf("the refusal is %q", f.p.error)

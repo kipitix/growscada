@@ -219,7 +219,7 @@ func (r *Root) OnMount(ctx app.Context) {
 	// task 90). The User name page has no such action: it is reached from the
 	// main menu alone, the one place the name is shown and set.
 	ctx.Handle(labels.ActionOpen, func(ctx app.Context, _ app.Action) {
-		r.openMiscPage(ctx, misc.PageLabels)
+		r.openMiscPage(misc.PageLabels)
 	})
 	// The menu follows the entities it lists and the project Operation or
 	// History shows: a list changes while it is open, a project is renamed or
@@ -311,16 +311,17 @@ func (r *Root) listenMenuKeys() {
 }
 
 // openMiscPage shows page of the Misc section, switching to it and keeping it
-// for the next reload (task 90). The Labels page rereads its list; a page left
-// for a while shows what the server holds now.
-func (r *Root) openMiscPage(ctx app.Context, page misc.Page) {
+// for the next reload (task 90). The section reports the page through OnPage,
+// which stores it and updates the navigation line; here only the mode and the
+// menu follow.
+func (r *Root) openMiscPage(page misc.Page) {
 	r.closeMenu()
-	r.miscPage = page
-	r.storeMiscPage(page)
-	r.misc.Show(ctx, page)
+	r.misc.Show(page)
 	r.SetMode(ModeMisc)
 	r.storeMode()
-	ctx.Update()
+	if r.mounted {
+		r.compoCtx.Update()
+	}
 }
 
 // storeMiscPage keeps the Misc page shown for the next reload: the contents

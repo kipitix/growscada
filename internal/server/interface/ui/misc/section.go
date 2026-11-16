@@ -10,6 +10,7 @@ import (
 
 	"github.com/kipitix/growscada/internal/apiclient"
 	"github.com/kipitix/growscada/internal/server/interface/ui/labels"
+	"github.com/kipitix/growscada/internal/server/interface/ui/uiutil"
 	"github.com/kipitix/growscada/internal/server/interface/ui/username"
 )
 
@@ -23,7 +24,7 @@ const (
 	PageUserName Page = "user"
 )
 
-// Section is the Misc mode. Root owns which page is shown and wire OnPage;
+// Section is the Misc mode. Root owns which page is shown and wires OnPage;
 // the section keeps the two pages for the tab's lifetime.
 type Section struct {
 	app.Compo
@@ -45,8 +46,8 @@ type Section struct {
 // New creates the section and its pages.
 func New(client *apiclient.Client) *Section {
 	s := &Section{labels: labels.New(client), username: username.New()}
-	s.labels.OnBack = s.showContents
-	s.username.OnBack = s.showContents
+	s.labels.OnBack = func() { s.Show(PageContents) }
+	s.username.OnBack = func() { s.Show(PageContents) }
 	return s
 }
 
@@ -57,44 +58,24 @@ func (s *Section) OnMount(ctx app.Context) {
 func (s *Section) OnDismount() { s.mounted = false }
 
 // SetShown tells the section whether it is the mode shown; Root sets it before
-// rendering. A page shown alone takes the keyboard; a hidden section does not.
+// rendering. Only the Labels page takes the keyboard, and only while the
+// section is shown.
 func (s *Section) SetShown(shown bool) { s.shown = shown }
 
 // SetPage restores the page a previous session left, before the section mounts.
 func (s *Section) SetPage(page Page) { s.page = page }
 
-// Show shows page, reloading what it reads: Root calls it when the menu chooses
-// a page or a mode asks for one.
-func (s *Section) Show(ctx app.Context, page Page) {
+// Show shows page, reloading what it reads, and tells Root through OnPage so
+// the navigation line and the stored page follow. The pages load through their
+// own contexts, never through the caller's: the caller may be a menu row that
+// is gone when an answer arrives.
+func (s *Section) Show(page Page) {
 	s.page = page
 	switch page {
 	case PageLabels:
-		s.labels.Reload(ctx)
+		s.labels.Reload()
 	case PageUserName:
-		s.username.Reload(ctx)
-	}
-	ctx.Update()
-}
-
-// showContents returns to the section's contents.
-func (s *Section) showContents() {
-	s.page = PageContents
-	if s.OnPage != nil {
-		s.OnPage(PageContents)
-	}
-	if s.mounted {
-		s.compoCtx.Update()
-	}
-}
-
-// show opens page from the section's contents.
-func (s *Section) show(page Page) {
-	s.page = page
-	switch page {
-	case PageLabels:
-		s.labels.Reload(s.compoCtx)
-	case PageUserName:
-		s.username.Reload(s.compoCtx)
+		s.username.Reload()
 	}
 	if s.OnPage != nil {
 		s.OnPage(page)
@@ -129,14 +110,7 @@ func (s *Section) renderContents() app.UI {
 		Style("min-height", "0").
 		Style("font-size", "13px").
 		Body(
-			app.Div().
-				Style("padding", "6px 10px").
-				Style("border-bottom", "1px solid var(--border)").
-				Body(app.Span().
-					Attr("data-misc-title", "true").
-					Style("font-size", "13px").
-					Style("font-weight", "600").
-					Text("Misc")),
+			uiutil.PageBar("Misc", "", nil),
 			app.Div().
 				Style("padding", "4px 10px").
 				Body(
@@ -176,5 +150,5 @@ func (s *Section) renderEntry(page Page, name, description string) app.UI {
 				Style("color", "var(--text-muted)").
 				Text(description),
 		).
-		OnClick(func(ctx app.Context, e app.Event) { s.show(page) })
+		OnClick(func(ctx app.Context, e app.Event) { s.Show(page) })
 }

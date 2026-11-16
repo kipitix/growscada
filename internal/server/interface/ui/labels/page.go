@@ -81,17 +81,22 @@ func New(client *apiclient.Client) *Page {
 
 func (p *Page) OnMount(ctx app.Context) {
 	p.compoCtx, p.mounted = ctx, true
-	p.load(ctx)
+	// A load that was in flight when the page left dispatches into a
+	// dismounted element; go-app drops it, leaving the reloader loading for
+	// good. Start this mount with a clean one, since the old answer is lost
+	// anyway.
+	p.loader = uiutil.Reloader{}
+	p.load()
 	p.listenKeys()
 	ctx.Handle(eventlog.ActionServerEvent, func(ctx app.Context, a app.Action) {
 		ev, ok := a.Value.(apiv0.Event)
 		if !ok || !eventlog.IsLabelEvent(ev.Type) {
 			return
 		}
-		p.load(ctx)
+		p.load()
 	})
 	ctx.Handle(eventlog.EventResync, func(ctx app.Context, _ app.Action) {
-		p.load(ctx)
+		p.load()
 	})
 }
 
@@ -100,20 +105,22 @@ func (p *Page) OnDismount() {
 	p.noKeys()
 }
 
-// Reload rereads the labels: Root calls it when it opens the page, so a
-// page left closed for a while shows what the server holds now.
-func (p *Page) Reload(ctx app.Context) {
+// Reload rereads the labels: the section calls it when it opens the page, so a
+// page left closed for a while shows what the server holds now. The page loads
+// through its own context, never through the caller's: the caller may be a
+// menu row that is already gone when the answer arrives.
+func (p *Page) Reload() {
 	if p.mounted {
-		p.load(ctx)
+		p.load()
 	}
 }
 
 // load rereads the labels. A failure is a toast, as every error of the UI is.
-func (p *Page) load(ctx app.Context) {
-	uiutil.Load(ctx, &p.loader, p.client.Labels, func(ctx app.Context, list []apiv0.LabelResponse) {
+func (p *Page) load() {
+	uiutil.Load(p.compoCtx, &p.loader, p.client.Labels, func(ctx app.Context, list []apiv0.LabelResponse) {
 		p.labels, p.loaded = list, true
 		ctx.Update()
-	}, p.load)
+	}, func(app.Context) { p.load() })
 }
 
 // ── Commands ──────────────────────────────────────────────────────────────────
@@ -139,7 +146,7 @@ func (p *Page) create(ctx app.Context) {
 			return
 		}
 		p.newName, p.newColor = "", ""
-		p.load(ctx)
+		p.load()
 	})
 }
 
@@ -174,7 +181,7 @@ func (p *Page) commitRename(ctx app.Context) {
 			return
 		}
 		p.editingID, p.editText = uuid.Nil, ""
-		p.load(ctx)
+		p.load()
 	})
 }
 
@@ -206,7 +213,7 @@ func (p *Page) applyColor(ctx app.Context, color string) {
 			return
 		}
 		p.paletteID, p.paletteText = uuid.Nil, ""
-		p.load(ctx)
+		p.load()
 	})
 }
 
@@ -232,7 +239,7 @@ func (p *Page) commitDelete(ctx app.Context) {
 	}, func(ctx app.Context, _ struct{}) {
 		p.deleting = false
 		p.deletingID = uuid.Nil
-		p.load(ctx)
+		p.load()
 	}, func(ctx app.Context, err error) {
 		p.deleting = false
 		p.deleteError = uiutil.ProblemText(err)
@@ -247,43 +254,61 @@ func (p *Page) busy() bool {
 
 // ── Keyboard ──────────────────────────────────────────────────────────────────
 
-// listenKeys manages the keys of the page while it is shown: Ctrl/Cmd+Enter
-// adds the label of the footer row, and Esc drops a field being edited. A field
-// of the page stops the propagation of its own keys, so Esc and Enter inside
-// one never reach these two.
+// pageKey is what a keyboard event does on the page.
+type pageKey int
+
+const (
+	pageKeyNone pageKey = iota
+	pageKeyCreate
+	pageKeyCancel
+)
+
+// keyAction is the action of a key while the page is shown: Ctrl/Cmd+Enter
+// adds the label of the footer row, and Esc drops a field being edited. A page
+// not shown (the Misc section on another page) takes no keys.
+func (p *Page) keyAction(key string, ctrl, meta bool) pageKey {
+	if !p.Shown {
+		return pageKeyNone
+	}
+	if ctrl || meta {
+		if key == "Enter" {
+			return pageKeyCreate
+		}
+		return pageKeyNone
+	}
+	if key != "Escape" {
+		return pageKeyNone
+	}
+	if p.editingID == uuid.Nil && p.paletteID == uuid.Nil && p.deletingID == uuid.Nil && p.newError == "" {
+		return pageKeyNone
+	}
+	return pageKeyCancel
+}
+
+// listenKeys manages the keys of the page while it is shown. A field of the
+// page stops the propagation of its own keys, so Esc and Enter inside one never
+// reach these two.
 func (p *Page) listenKeys() {
 	if p.onKeyDown != nil {
 		return
 	}
 	p.onKeyDown = app.FuncOf(func(this app.Value, args []app.Value) any {
-		if len(args) == 0 || !p.Shown {
+		if len(args) == 0 {
 			return nil
 		}
 		ev := args[0]
-		key := ev.Get("key").String()
-		if key != "Escape" && key != "Enter" {
-			return nil
-		}
-		if ev.Get("ctrlKey").Bool() || ev.Get("metaKey").Bool() {
-			if key != "Enter" {
-				return nil
-			}
+		switch p.keyAction(ev.Get("key").String(), ev.Get("ctrlKey").Bool(), ev.Get("metaKey").Bool()) {
+		case pageKeyCreate:
 			ev.Call("preventDefault")
 			p.compoCtx.Dispatch(func(ctx app.Context) { p.create(ctx) })
-			return nil
+		case pageKeyCancel:
+			ev.Call("preventDefault")
+			p.compoCtx.Dispatch(func(ctx app.Context) {
+				p.editingID, p.paletteID, p.deletingID = uuid.Nil, uuid.Nil, uuid.Nil
+				p.editError, p.paletteErr, p.deleteError, p.newError = "", "", "", ""
+				ctx.Update()
+			})
 		}
-		if key != "Escape" {
-			return nil
-		}
-		if p.editingID == uuid.Nil && p.paletteID == uuid.Nil && p.deletingID == uuid.Nil && p.newError == "" {
-			return nil
-		}
-		ev.Call("preventDefault")
-		p.compoCtx.Dispatch(func(ctx app.Context) {
-			p.editingID, p.paletteID, p.deletingID = uuid.Nil, uuid.Nil, uuid.Nil
-			p.editError, p.paletteErr, p.deleteError, p.newError = "", "", "", ""
-			ctx.Update()
-		})
 		return nil
 	})
 	app.Window().Call("addEventListener", "keydown", p.onKeyDown)
@@ -328,20 +353,12 @@ func (p *Page) Render() app.UI {
 		Style("min-height", "0").
 		Style("font-size", "13px").
 		Body(
-			app.Div().
-				Style("display", "flex").
-				Style("align-items", "center").
-				Style("gap", "8px").
-				Style("padding", "6px 10px").
-				Style("border-bottom", "1px solid var(--border)").
-				Body(
-					uiutil.PanelBack("Back to the Misc section", "Labels",
-						func(ctx app.Context, e app.Event) {
-							if p.OnBack != nil {
-								p.OnBack()
-							}
-						}),
-				),
+			uiutil.PageBar("Labels", "Back to the Misc section",
+				func(ctx app.Context, e app.Event) {
+					if p.OnBack != nil {
+						p.OnBack()
+					}
+				}),
 			app.Div().
 				Attr("data-labels-list", "true").
 				Style("flex", "1").

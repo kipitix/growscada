@@ -569,7 +569,7 @@ func TestMenu_ChooseMiscPage(t *testing.T) {
 
 	s.compoCtx.Dispatch(func(ctx app.Context) {
 		s.openMenu(ctx)
-		s.chooseMiscPage(ctx, misc.PageUserName)
+		s.openMiscPage(misc.PageUserName)
 	})
 	s.settle()
 

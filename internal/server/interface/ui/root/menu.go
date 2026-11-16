@@ -271,12 +271,6 @@ func (r *Root) choosePage(ctx app.Context, mode Mode) {
 	r.storeMode()
 }
 
-// chooseMiscPage switches to the Misc section and shows the page chosen in its
-// menu, keeping both the mode and the page for the next reload (task 90).
-func (r *Root) chooseMiscPage(ctx app.Context, page misc.Page) {
-	r.openMiscPage(ctx, page)
-}
-
 // chooseProject shows item in mode, one of those without a selection page
 // (Operation, History): the mode keeps it and the next reload restores it
 // (task 89).
@@ -641,7 +635,7 @@ func (r *Root) renderMiscRow(page misc.Page, label, title string) app.UI {
 		Style("text-align", "left").
 		Style("cursor", "pointer").
 		Body(body...).
-		OnClick(func(ctx app.Context, e app.Event) { r.chooseMiscPage(ctx, page) })
+		OnClick(func(ctx app.Context, e app.Event) { r.openMiscPage(page) })
 }
 
 // renderChooseRow is the way to the selection page of a mode, where the

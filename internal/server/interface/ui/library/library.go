@@ -150,14 +150,9 @@ func (l *Library) OnMount(ctx app.Context) {
 	l.loadDraftState(ctx)
 	l.loadDraftChanges(ctx)
 	ctx.LocalStorage().Get(uiutil.AuthorKey, &l.saveAuthor)
-	// The User name page writes another name: the bar and the next Save dialog
-	// follow it (task 90).
-	ctx.Handle(username.ActionChanged, func(ctx app.Context, a app.Action) {
-		if name, ok := a.Value.(string); ok {
-			l.saveAuthor = name
-		}
-		ctx.Update()
-	})
+	// The User name page writes another name: the next Save dialog follows it
+	// (task 90).
+	username.Watch(ctx, &l.saveAuthor)
 	l.loadSavedStates(ctx)
 	l.listenShortcuts()
 	l.handleServerEvents(ctx)

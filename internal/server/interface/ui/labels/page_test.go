@@ -84,7 +84,7 @@ func TestPage_ListsTheLabels(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateLabel: %v", err)
 	}
-	f.d.load(f.d.compoCtx)
+	f.d.load()
 	f.e.ConsumeAll()
 
 	html := f.html()
@@ -186,7 +186,7 @@ func TestPage_DeleteAsksFirst(t *testing.T) {
 	if _, err := f.api.CreateLabel(context.Background(), "Ready", ""); err != nil {
 		t.Fatalf("CreateLabel: %v", err)
 	}
-	f.d.load(f.d.compoCtx)
+	f.d.load()
 	f.e.ConsumeAll()
 	row := findLabel(t, f.d.labels, "Ready")
 
@@ -228,5 +228,26 @@ func TestPage_RereadsOnAnotherClientsEvent(t *testing.T) {
 
 	if html := f.html(); !strings.Contains(html, "From another tab") {
 		t.Errorf("the page did not reread the label: %s", html)
+	}
+}
+
+// TestPage_KeyboardOnlyWhileShown: the page takes Ctrl/Cmd+Enter and Esc only
+// while it is the page the Misc section shows; a hidden page leaves the keys
+// to the mode in front of it (task 90).
+func TestPage_KeyboardOnlyWhileShown(t *testing.T) {
+	p := &Page{newError: "x"}
+	if got := p.keyAction("Enter", true, false); got != pageKeyNone {
+		t.Errorf("a hidden page takes Ctrl+Enter: %v", got)
+	}
+	p.Shown = true
+	if got := p.keyAction("Enter", true, false); got != pageKeyCreate {
+		t.Errorf("Ctrl+Enter on the shown page: %v, want create", got)
+	}
+	if got := p.keyAction("Escape", false, false); got != pageKeyCancel {
+		t.Errorf("Esc with something to drop: %v, want cancel", got)
+	}
+	p.newError = ""
+	if got := p.keyAction("Escape", false, false); got != pageKeyNone {
+		t.Errorf("Esc with nothing to drop: %v", got)
 	}
 }
