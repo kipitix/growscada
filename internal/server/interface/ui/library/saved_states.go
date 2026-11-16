@@ -15,7 +15,6 @@ import (
 	"github.com/kipitix/growscada/internal/server/interface/ui/savedstates"
 	"github.com/kipitix/growscada/internal/server/interface/ui/toast"
 	"github.com/kipitix/growscada/internal/server/interface/ui/uiutil"
-	"github.com/kipitix/growscada/internal/server/interface/ui/username"
 )
 
 // The Library mode's Save and its history (task 72_2; ADR 0021): Save fixes
@@ -49,32 +48,27 @@ func (l *Library) hasUnsavedChanges() bool {
 	return l.draftUnsaved
 }
 
-// openSaveDialog opens the Save dialog with a default title and the stored
-// user name. The dialog takes an author for that one save; the User name page
-// sets the name every dialog starts from (task 90).
-func (l *Library) openSaveDialog() {
-	if l.draft() == nil {
-		return
-	}
-	l.saveTitle = "Save " + uiutil.FormatTime(time.Now())
-	if l.mounted {
-		l.saveAuthor = username.Stored(l.compoCtx)
-	}
-	l.saveDialog = true
-	l.compoCtx.Update()
-}
-
-// saveFromShortcut is Ctrl+S: the Save dialog when the Draft has unsaved
-// changes, nothing otherwise (task 72_7; ADR 0021).
+// saveFromShortcut is Ctrl+S: the history screen with its Save form when the
+// Draft has unsaved changes, nothing otherwise (task 72_7; task 91; ADR 0021).
 func (l *Library) saveFromShortcut(ctx app.Context) {
 	if !l.hasUnsavedChanges() || l.savingSavedState {
 		return
 	}
-	l.openSaveDialog()
+	l.openSaveForm()
 }
 
-// saveSavedState confirms the Save dialog: the Draft as it is becomes a saved
-// state.
+// openSaveForm shows the history with a fresh name in its Save form: the Save
+// button and Ctrl+S land here, ready to fix a new saved state (task 91).
+func (l *Library) openSaveForm() {
+	if l.draft() == nil {
+		return
+	}
+	l.saveTitle = "Save " + uiutil.FormatTime(time.Now())
+	l.openHistory()
+}
+
+// saveSavedState confirms the Save form: the Draft as it is becomes a saved
+// state with the title the form holds.
 func (l *Library) saveSavedState() {
 	draft := l.draft()
 	if draft == nil || l.savingSavedState {
@@ -96,7 +90,8 @@ func (l *Library) saveSavedState() {
 			return
 		}
 		l.savingSavedState = false
-		l.saveDialog = false
+		l.saveTitle = "Save " + uiutil.FormatTime(time.Now())
+		l.history.StartNew(l.saveTitle)
 		ctx.NewActionWithValue(toast.ActionAdd, toast.Problem{Problem: apiv0.Problem{
 			Title:  fmt.Sprintf("Saved state %d saved", saved.Number),
 			Detail: saved.Title,
@@ -125,16 +120,41 @@ func (l *Library) saveSavedState() {
 }
 
 // openHistory shows the saved states of the selected library, read afresh
-// (task 84): a screen of its own, in place of the editor.
+// (task 84): a screen of its own, in place of the editor. The form at its top
+// starts with a fresh name, so the Save button and Ctrl+S land on the form
+// ready to fix a new saved state (task 91).
 func (l *Library) openHistory() {
 	if l.libraryID == uuid.Nil {
 		return
 	}
+	if l.saveTitle == "" {
+		l.saveTitle = "Save " + uiutil.FormatTime(time.Now())
+	}
 	l.historyScreen = true
+	l.history.StartNew(l.saveTitle)
 	l.loadSavedStates(l.compoCtx)
 	l.loadHistoryLabels(l.compoCtx)
+	l.onHistory()
 	l.compoCtx.Update()
 }
+
+// toggleHistory opens the saved states or, when they are shown, closes them and
+// returns to the editor: the panel's one button is both ways (task 91).
+func (l *Library) toggleHistory() {
+	if l.historyScreen {
+		l.closeHistory()
+		return
+	}
+	l.openHistory()
+}
+
+// HistoryShown reports whether the saved states screen is shown: Root's
+// navigation line draws the step above it (task 91).
+func (l *Library) HistoryShown() bool { return l.historyScreen }
+
+// CloseHistory returns from the saved states to the editor, as the panel's
+// way back does (task 91).
+func (l *Library) CloseHistory() { l.closeHistory() }
 
 // closeHistory returns from the saved states to the editor, dropping the name
 // being edited.
@@ -143,8 +163,17 @@ func (l *Library) closeHistory() {
 	if l.history != nil {
 		l.history.Reset()
 	}
+	l.onHistory()
 	if l.mounted {
 		l.compoCtx.Update()
+	}
+}
+
+// onHistory tells Root the saved states opened or closed, so the navigation
+// line above adds or drops their step (task 91).
+func (l *Library) onHistory() {
+	if l.OnHistory != nil {
+		l.OnHistory()
 	}
 }
 
@@ -166,103 +195,49 @@ func (l *Library) renameSavedState(ctx app.Context, number int, title string) {
 	}, nil)
 }
 
-// renderSavedStateBar is the panel's Save, its unsaved-changes indicator and
-// the History button (task 72_7; task 84; ADR 0021).
-func (l *Library) renderSavedStateBar() []app.UI {
-	editable := l.libraryID != uuid.Nil
-	saveTitle := "Save the Draft as a saved state"
-	switch {
-	case l.savingSavedState:
-		saveTitle = "The Draft is being saved"
-	case !l.hasUnsavedChanges():
-		saveTitle = "Nothing to save since the last save"
+// renderSaveButton is the panel's list: it opens the saved states of the
+// library, where the Draft sits as the newest state and the form names the next
+// one, and pressing it again returns to the editor (task 91). It stays enabled
+// without changes, since it is also the way to browse them. The floppy belongs
+// to that form's Save.
+func (l *Library) renderSaveButton() app.UI {
+	title := "The saved states of the library"
+	if l.historyScreen {
+		title = "Back to the Draft"
 	}
-	// The indicator is always a child, hidden when there is nothing to show:
-	// a conditional one would shift History by a position, and
-	// go-app keeps the handler of a reused element whose handler is the same
-	// func literal (task 79).
-	indicator := app.Span().Style("font-size", "12px")
-	switch {
-	case l.hasUnsavedChanges():
-		indicator = indicator.
-			Attr("data-saved-state-unsaved", "true").
-			Style("color", "var(--toast-warn-title)").
-			Text("Unsaved changes")
-	case l.draftStateLoaded && len(l.savedStates) > 0:
-		indicator = indicator.
-			Attr("data-saved-state-saved", "true").
-			Style("color", "var(--text-muted)").
-			Text("Saved")
-	default:
-		indicator = indicator.Style("display", "none")
-	}
-	// Each action also names its own app.EventScope, so a reused element can
-	// never keep another action's handler.
-	return []app.UI{
-		uiutil.PanelButton(uiutil.IconSave(), editable && l.hasUnsavedChanges() && !l.savingSavedState,
-			saveTitle, func(app.Context, app.Event) { l.openSaveDialog() }, app.EventScope("save")),
-		indicator,
-		uiutil.PanelButton(uiutil.IconHistory(), l.libraryID != uuid.Nil,
-			"The saved states of the library", func(app.Context, app.Event) { l.openHistory() },
-			app.EventScope("history")),
-	}
+	return uiutil.PanelButton(uiutil.IconSavedStates(), l.libraryID != uuid.Nil,
+		title, func(app.Context, app.Event) { l.toggleHistory() },
+		app.EventScope("save"))
 }
 
-// renderSaveDialog is the Save confirmation.
-func (l *Library) renderSaveDialog() app.UI {
-	return app.Div().
-		Attr("data-save-dialog", "true").
-		Style("padding", "8px").
-		Style("margin-bottom", "6px").
-		Style("border", "1px solid var(--border)").
-		Style("border-radius", "4px").
-		Style("background", "var(--bg)").
+// renderUnsavedIndicator is the yellow mark after Undo and Redo: a Draft with
+// nothing to save shows nothing (task 91).
+func (l *Library) renderUnsavedIndicator() app.UI {
+	if !l.hasUnsavedChanges() {
+		return app.Span().Style("display", "none")
+	}
+	return app.Span().
+		Attr("data-saved-state-unsaved", "true").
 		Style("font-size", "12px").
-		Body(
-			app.Div().Style("margin-bottom", "4px").Text("Save the library"),
-			app.Input().
-				Attr("data-save-title", "true").
-				Type("text").
-				Value(l.saveTitle).
-				Placeholder("Title").
-				Style("width", "100%").
-				Style("box-sizing", "border-box").
-				Style("margin-bottom", "4px").
-				Style("font-size", "12px").
-				OnInput(func(ctx app.Context, e app.Event) {
-					l.saveTitle = ctx.JSSrc().Get("value").String()
-				}),
-			app.Input().
-				Attr("data-save-author", "true").
-				Type("text").
-				Value(l.saveAuthor).
-				Placeholder("Author").
-				Style("width", "100%").
-				Style("box-sizing", "border-box").
-				Style("margin-bottom", "6px").
-				Style("font-size", "12px").
-				OnInput(func(ctx app.Context, e app.Event) {
-					l.saveAuthor = ctx.JSSrc().Get("value").String()
-				}),
-			app.Div().Style("display", "flex").Style("gap", "4px").Body(
-				smallButton("Save", !l.savingSavedState, "accent", "Save the Draft as a saved state", l.saveSavedState),
-				smallButton("Cancel", true, "", "Close without saving", func() {
-					l.saveDialog = false
-					l.compoCtx.Update()
-				}),
-			),
-		)
+		Style("color", "var(--toast-warn-title)").
+		Text("Unsaved changes")
 }
 
 // renderHistoryScreen is the history of the selected library's saved states
-// (task 84): the screen both modes share, fed with this library's history.
+// (task 84): the screen both modes share, fed with this library's history and
+// its Save form (task 91).
 func (l *Library) renderHistoryScreen() app.UI {
 	screen := l.history
 	screen.Rows = l.historyRows()
 	screen.Loaded = l.savedStatesLoaded
 	screen.Loading = l.loadingSavedState != 0
 	screen.AllLabels = l.historyLabels
-	screen.OnBack = func(ctx app.Context) { l.closeHistory() }
+	screen.CanSave = l.hasUnsavedChanges()
+	screen.Saving = l.savingSavedState
+	screen.OnSave = func(ctx app.Context, title string) {
+		l.saveTitle = title
+		l.saveSavedState()
+	}
 	screen.OnLoad = func(ctx app.Context, number int) { l.loadSavedState(number) }
 	screen.OnRename = func(ctx app.Context, number int, title string) {
 		l.renameSavedState(ctx, number, title)

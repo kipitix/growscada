@@ -378,9 +378,10 @@ func TestDiscard_OfAnImportedLibraryRestoresTheImport(t *testing.T) {
 
 // TestUnsavedChanges_FollowTheDraftsCleanVersion: the unsaved-changes flag of a
 // Project comes from the Draft's own Clean Version marker: a never written
-// Draft is clean, a write is unsaved, and a Save, a Discard and a Revert to the
-// last saved state's content clean it; a write above the marker, or a Revert to
-// another content, is unsaved again (task 74; ADR 0016, amendment 2026-11-10).
+// Draft is clean, a write is unsaved, and a Save, a Discard and a Revert to a
+// Deployment made from a saved state clean it, whichever saved state that is; a
+// write above the marker is unsaved again (task 74; ADR 0016, amendment
+// 2026-11-10 and 2026-11-16).
 func TestUnsavedChanges_FollowTheDraftsCleanVersion(t *testing.T) {
 	cleanProjects(t)
 	ctx := context.Background()
@@ -444,15 +445,15 @@ func TestUnsavedChanges_FollowTheDraftsCleanVersion(t *testing.T) {
 	}
 	check("reverted to the last savedState's content", false)
 
-	// A later saved state is not the running Deployment: a Revert to that
-	// Deployment is another content, so the Draft stays unsaved.
+	// Reverting to a Deployment made from a saved state restores that saved
+	// state's content, even when a later saved state exists: the Draft is clean.
 	write("level")
 	mustSaveState(t, created.ID, "Second")
 	check("saved after the revert", false)
 	if _, err := newDiscardService().Revert(ctx, created.ID); err != nil {
 		t.Fatalf("Revert to the running deployment: %v", err)
 	}
-	check("reverted to another content", true)
+	check("reverted to the saved state the deployment came from", false)
 }
 
 // TestDiscard_WithAWarningStaysUnsaved: a Discard that could not restore a

@@ -134,12 +134,10 @@ func (r draftRepositoryPostgres) CheckVersion(ctx context.Context, scope draft.S
 }
 
 // Replace replaces the whole content of the Draft (see draft.Repository). A
-// clean replacement — one whose content is the last saved state's — makes the
-// new Version the Clean Version; otherwise the marker stays, so the raised
-// Version keeps the Draft unsaved. The comparison is made here, under the row's
-// lock: the saved state the caller read may have been overtaken by a Save
-// meanwhile, and then its content is no longer the Draft's clean state.
-func (r draftRepositoryPostgres) Replace(ctx context.Context, scope draft.Scope, cleanSavedState int, change func(*draft.Session) error) (draft.Draft, error) {
+// clean replacement — one whose content is a saved state's, whichever it is —
+// makes the new Version the Clean Version; otherwise the marker stays, so the
+// raised Version keeps the Draft unsaved.
+func (r draftRepositoryPostgres) Replace(ctx context.Context, scope draft.Scope, clean bool, change func(*draft.Session) error) (draft.Draft, error) {
 	var result draft.Draft
 	err := r.inTx(ctx, func(tx *sql.Tx) ([]event.Event, error) {
 		row, err := lockDraftRow(ctx, tx, scope, true, true)
@@ -173,7 +171,6 @@ func (r draftRepositoryPostgres) Replace(ctx context.Context, scope draft.Scope,
 		if err := updateDraftProgress(ctx, tx, row.id, next, 0); err != nil {
 			return nil, err
 		}
-		clean := cleanSavedState != 0 && row.lastSavedStateNumber == cleanSavedState
 		cleanVersion := versionOfDraft(row.cleanVersion)
 		if clean {
 			if err := updateDraftCleanVersion(ctx, tx, row.id, next); err != nil {

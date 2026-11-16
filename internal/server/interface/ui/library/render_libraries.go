@@ -6,7 +6,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/maxence-charriere/go-app/v11/pkg/app"
 
-	apiv0 "github.com/kipitix/growscada/contract/api/v0"
 	"github.com/kipitix/growscada/internal/server/interface/ui/uiutil"
 )
 
@@ -14,11 +13,11 @@ func itoa(n int) string { return strconv.Itoa(n) }
 
 // ── Header ────────────────────────────────────────────────────────────────────
 
-// renderHeader is the panel above the editor (task 84): the way back to the
-// libraries with the name of the one shown, Save with its unsaved-changes
-// indicator, Undo, Redo and History — icons, each with its hover text —, and
-// the library's state. The dialogs the panel opens follow it. The user name is
-// set in the Misc section and is not repeated here (task 90).
+// renderHeader is the panel above the editor (task 84, task 91): the way back,
+// the floppy that opens the saved states, Undo and Redo, and the unsaved-changes
+// marker after them. The entity's name lives in the navigation line above, and
+// the panel names no saved state. The user name is set in the Misc section and
+// is not repeated here (task 90).
 func (l *Library) renderHeader() app.UI {
 	if l.libraryID == uuid.Nil {
 		return app.Div()
@@ -26,15 +25,12 @@ func (l *Library) renderHeader() app.UI {
 	body := []app.UI{
 		l.renderBackButton(),
 		uiutil.BarDivider(),
-	}
-	body = append(body, l.renderSavedStateBar()...)
-	body = append(body,
+		l.renderSaveButton(),
 		uiutil.BarDivider(),
 		l.renderDraftChangesBar(),
-		uiutil.BarDivider(),
-		l.renderLibraryStatus(),
+		l.renderUnsavedIndicator(),
 		app.Div().Style("flex", "1"),
-	)
+	}
 	return app.Div().
 		Attr("data-library-header", "true").
 		Style("flex-shrink", "0").
@@ -48,73 +44,24 @@ func (l *Library) renderHeader() app.UI {
 				Style("border-bottom", "1px solid var(--border)").
 				Style("background", "var(--bg-elevated)").
 				Body(body...),
-			app.If(l.saveDialog, l.renderSaveDialog).Else(func() app.UI { return app.Div() }),
 		)
 }
 
-// renderBackButton is the way back to the selection page (task 84), with the
-// name of the library shown. Root wires both — it owns the page and the name
-// the selection announced —, so a mode nothing wired shows the name alone.
+// renderBackButton is the panel's single way back (task 84, task 91): from the
+// saved states to the editor, from the editor to the selection page. Root owns
+// the page; a mode nothing wired shows no arrow. The entity's name is not
+// repeated beside it.
 func (l *Library) renderBackButton() app.UI {
-	name := ""
-	if l.BackName != nil {
-		name = l.BackName()
-	}
-	if name == "" {
-		if lib, ok := l.selectedLibrary(); ok {
-			name = lib.Name
-		}
+	if l.historyScreen {
+		return uiutil.PanelBackArrow("Back to the Draft", func(ctx app.Context, e app.Event) {
+			l.closeHistory()
+		})
 	}
 	var back func(ctx app.Context, e app.Event)
 	if l.OnBack != nil {
 		back = func(ctx app.Context, e app.Event) { l.OnBack() }
 	}
-	return uiutil.PanelBack("Back to the libraries", name, back)
-}
-
-// draftStateOf is one library's Draft state (task 74, task 85_7): the Draft
-// changed since its last saved state (the server's own flag, which the selected
-// one follows too) or it holds a saved state. The state is a short word for the
-// panel and its kind says which.
-func (l *Library) draftStateOf(lib apiv0.LibraryResponse) (kind, text string) {
-	switch {
-	case lib.HasUnsavedChanges:
-		return "unsaved", "unsaved changes"
-	case lib.LatestSavedState > 0:
-		return "saved", "saved"
-	default:
-		return "new", "never saved"
-	}
-}
-
-// renderLibraryStatus is the state of the library in words: what its last saved
-// state is.
-func (l *Library) renderLibraryStatus() app.UI {
-	lib, ok := l.selectedLibrary()
-	if !ok {
-		return app.Div()
-	}
-	kind, _ := l.draftStateOf(lib)
-	var status string
-	switch {
-	case lib.LatestSavedState == 0:
-		status = "Never saved."
-	case kind == "unsaved":
-		status = "Saved state #" + itoa(lib.LatestSavedState) + " · unsaved changes"
-	default:
-		status = "Saved state #" + itoa(lib.LatestSavedState)
-	}
-	return app.Div().
-		Attr("data-library-status", "true").
-		Style("display", "flex").
-		Style("align-items", "center").
-		Body(
-			app.Span().
-				Class("library-status").
-				Style("font-size", "12px").
-				Style("color", "var(--text-muted)").
-				Text(status),
-		)
+	return uiutil.PanelBackArrow("Back to the libraries", back)
 }
 
 // ── Buttons ───────────────────────────────────────────────────────────────────

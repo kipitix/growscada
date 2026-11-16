@@ -208,10 +208,10 @@ func (l *Library) listenShortcuts() {
 }
 
 // keyActionAllowed reports whether a shortcut may act now: no dialog of the
-// mode is open. An undo behind the Save dialog would change the Draft the Save
-// is about to fix as a saved state.
+// mode is open. An undo behind the history screen would change the Draft the
+// Save form is about to fix as a saved state.
 func (l *Library) keyActionAllowed() bool {
-	return !l.saveDialog && !l.historyScreen
+	return !l.historyScreen
 }
 
 // noKeyDown releases the listener (OnDismount).

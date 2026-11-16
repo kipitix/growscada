@@ -330,11 +330,11 @@ func (p *Project) applyKeyAction(ctx app.Context, action uiutil.KeyAction) {
 
 // keyActionAllowed reports whether a shortcut may act now: no dialog of the
 // mode is open. An undo behind the Deploy confirmation would change the Draft
-// the dialog shows, and one behind the Save dialog would change the Draft the
-// Save is about to fix as a saved state.
+// the dialog shows, and one behind the history screen would change the Draft
+// the Save form is about to fix as a saved state.
 func (p *Project) keyActionAllowed() bool {
 	return !p.deploymentsDialog && !p.projectFileDialog &&
-		!p.saveDialog && !p.historyScreen && !p.deployDialog
+		!p.historyScreen && !p.deployDialog
 }
 
 // shown reports whether the Project mode is the one displayed. Root keeps every

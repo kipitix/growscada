@@ -21,6 +21,7 @@ import (
 	runtimepg "github.com/kipitix/growscada/internal/server/infrastructure/postgres/runtime"
 	"github.com/kipitix/growscada/internal/server/inprocess"
 	"github.com/kipitix/growscada/internal/server/interface/eventbus"
+	"github.com/kipitix/growscada/internal/server/interface/pwaserve"
 	"github.com/kipitix/growscada/internal/server/interface/restapi"
 	"github.com/kipitix/growscada/internal/server/interface/ui/root"
 	"github.com/maxence-charriere/go-app/v11/pkg/app"
@@ -316,7 +317,7 @@ func main() {
 	// Server for serving the PWA client
 	pwaServer := &http.Server{
 		Addr: ":8080",
-		Handler: &app.Handler{
+		Handler: pwaserve.Gzip(&app.Handler{
 			Name:        "GrowSCADA",
 			Description: "SCADA to Go",
 			Icon: app.Icon{
@@ -325,7 +326,11 @@ func main() {
 				Maskable: iconLarge,
 			},
 			Env: pwaEnv(cliArgs.PublicAPIURL),
-		},
+			// gzip makes the transferred app.wasm smaller than the bytes the
+			// browser's reader yields: the loader counts those, so it must read
+			// the length pwaserve.Gzip states rather than Content-Length.
+			WasmContentLengthHeader: pwaserve.UncompressedLengthHeader,
+		}),
 	}
 	// Register the PWA server shutdown handler
 	gracedownManager.RegisterInterface("PWA HTTP Server", 15*time.Second, func(ctx context.Context) error {

@@ -217,8 +217,9 @@ func TestNavigation_NamesTheModeAndTheEntity(t *testing.T) {
 		t.Errorf("operation: %q", got)
 	}
 	if html := app.HTMLString(r.renderNavigation()); !strings.Contains(html, "data-navigation") ||
-		!strings.Contains(html, "Operation \u00b7 Greenhouse") {
-		t.Errorf("the navigation line lacks its text: %s", html)
+		!strings.Contains(html, `data-nav-step="Operation"`) ||
+		!strings.Contains(html, `data-nav-step="Greenhouse"`) {
+		t.Errorf("the navigation line lacks its steps: %s", html)
 	}
 }
 
@@ -283,6 +284,42 @@ func TestMenu_ListsEntitiesOfTheExpandedModeOnly(t *testing.T) {
 	r.menuProjects.loaded = false
 	if html := app.HTMLString(r.renderMenuPanel()); !strings.Contains(html, "Loading projects…") {
 		t.Errorf("a list being read does not say so: %s", html)
+	}
+}
+
+// TestMenu_ChecksOnlyTheShownMode: "Choose a …" and an entity row are checked
+// only while that mode is the one shown; another mode's remembered page or
+// entity is not marked (task 91). The test engine writes a "true" attribute
+// without its value, as HTML does for a boolean one.
+func TestMenu_ChecksOnlyTheShownMode(t *testing.T) {
+	r := NewRoot("http://127.0.0.1:0")
+	r.showList[ModeLibrary] = true
+	checked := func(html string) bool {
+		return strings.Contains(html, "aria-checked") && !strings.Contains(html, `aria-checked="false"`)
+	}
+
+	r.currentMode = ModeProject
+	html := app.HTMLString(r.renderChooseRow(ModeLibrary))
+	if checked(html) || strings.Contains(html, `data-icon="check"`) {
+		t.Errorf("another mode's page is checked: %s", html)
+	}
+
+	r.currentMode = ModeLibrary
+	html = app.HTMLString(r.renderChooseRow(ModeLibrary))
+	if !checked(html) || !strings.Contains(html, `data-icon="check"`) {
+		t.Errorf("the shown page is not checked: %s", html)
+	}
+
+	item := picker.Item{ID: uuid.New(), Name: "Greenhouse"}
+	r.selected[ModeLibrary] = item.ID
+	r.showList[ModeLibrary] = false
+	r.currentMode = ModeProject
+	if html := app.HTMLString(r.renderEntityRow(ModeLibrary, item)); checked(html) {
+		t.Errorf("another mode's entity is checked: %s", html)
+	}
+	r.currentMode = ModeLibrary
+	if html := app.HTMLString(r.renderEntityRow(ModeLibrary, item)); !checked(html) {
+		t.Errorf("the shown entity is not checked: %s", html)
 	}
 }
 
@@ -403,7 +440,8 @@ func TestHeader_CarriesTheMenuAndNoTabs(t *testing.T) {
 
 	html := app.HTMLString(r.renderHeader())
 	for _, want := range []string{"data-header", "gs-main-menu-button", `aria-expanded="false"`,
-		"aria-haspopup", "gs-main-navigation", "Project \u00b7 Greenhouse"} {
+		"aria-haspopup", "gs-main-navigation", `data-nav-step="Project"`,
+		`data-nav-step="Greenhouse"`} {
 		if !strings.Contains(html, want) {
 			t.Errorf("the header lacks %s: %s", want, html)
 		}

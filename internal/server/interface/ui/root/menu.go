@@ -3,6 +3,7 @@ package root
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -18,8 +19,9 @@ import (
 // The main menu (task 89): the mode shown and the entity it shows are chosen
 // in the menu behind the burger instead of the tabs the header used to carry.
 // A row of a mode expands the entities of that mode; choosing one switches the
-// mode and closes the menu. The navigation line beside the burger says what is
-// shown — the mode and the entity, separated by a middle dot.
+// mode and closes the menu. The navigation line beside the burger is a chain of
+// buttons — the mode, the entity and the saved states when they are shown —
+// each going one step up (task 91).
 const (
 	// menuButtonID and menuPanelID tie the burger to the panel it shows, for
 	// aria-controls and for the focus the menu gives back.
@@ -27,8 +29,8 @@ const (
 	menuPanelID  = "gs-main-menu"
 	// navigationID is the navigation line beside the burger.
 	navigationID = "gs-main-navigation"
-	// middleDot separates the mode from the entity named beside it: the dot
-	// sits at the middle of the line's height.
+	// middleDot separates the steps of the navigation line: the dot sits at the
+	// middle of the line's height.
 	middleDot = " · "
 	// menuPanelWidth is the width of the open menu on a screen with room for
 	// it; on a phone it takes the whole width.
@@ -403,64 +405,150 @@ func (r *Root) renderMenuBackdrop() app.UI {
 		})
 }
 
-// navigationText is what the line beside the burger says: the mode and the
-// entity it shows, separated by the middle dot, the mode alone when no entity
-// is known yet or the mode shows its selection page (task 89). The Misc
-// section names the page it shows instead of an entity (task 90).
-func (r *Root) navigationText() string {
-	label := modeLabel(r.currentMode)
-	if label == "" {
-		return ""
-	}
-	if r.currentMode == ModeMisc {
-		switch r.miscPage {
-		case misc.PageLabels:
-			return label + middleDot + "Labels"
-		case misc.PageUserName:
-			return label + middleDot + "User name"
-		default:
-			return label
-		}
-	}
-	if hasPage(r.currentMode) && r.showList[r.currentMode] {
-		// The selection page names no entity: the mode is what is shown.
-		return label
-	}
-	if name := r.entityName[r.currentMode]; name != "" {
-		return label + middleDot + name
-	}
-	return label
+// navStep is one button of the navigation line: what it says and where it goes
+// (task 91). A nil onClick is the step shown: it names the place but goes
+// nowhere above itself.
+type navStep struct {
+	text    string
+	title   string
+	onClick func(ctx app.Context, e app.Event)
 }
 
-// renderNavigation is the line beside the burger; it opens the menu as the
-// burger does (task 89).
+// historyShown reports whether the mode shown is on its saved states screen.
+func (r *Root) historyShown() bool {
+	switch r.currentMode {
+	case ModeLibrary:
+		return r.library.HistoryShown()
+	case ModeProject:
+		return r.project.HistoryShown()
+	default:
+		return false
+	}
+}
+
+// closeHistory returns the mode shown from its saved states to the editor, as
+// the navigation step above them does (task 91).
+func (r *Root) closeHistory() {
+	switch r.currentMode {
+	case ModeLibrary:
+		r.library.CloseHistory()
+	case ModeProject:
+		r.project.CloseHistory()
+	}
+	if r.mounted {
+		r.compoCtx.Update()
+	}
+}
+
+// navigationSteps is the chain the line beside the burger draws: the mode, the
+// entity it shows and the saved states when they are open (task 91). Every
+// step above the last goes one level up: the entity closes the saved states,
+// the mode shows the selection page.
+func (r *Root) navigationSteps() []navStep {
+	label := modeLabel(r.currentMode)
+	if label == "" {
+		return nil
+	}
+	if r.currentMode == ModeMisc {
+		page := ""
+		switch r.miscPage {
+		case misc.PageLabels:
+			page = "Labels"
+		case misc.PageUserName:
+			page = "User name"
+		}
+		if page == "" {
+			return []navStep{{text: label}}
+		}
+		return []navStep{
+			{text: label, title: "Back to the Misc section", onClick: func(ctx app.Context, e app.Event) {
+				r.misc.Show(misc.PageContents)
+			}},
+			{text: page},
+		}
+	}
+	modeStep := navStep{text: label, title: "Back to the selection page"}
+	if hasPage(r.currentMode) {
+		if r.showList[r.currentMode] {
+			// The selection page names no entity: the mode is what is shown.
+			return []navStep{{text: label}}
+		}
+		modeStep.onClick = func(ctx app.Context, e app.Event) { r.showListPage(r.currentMode) }
+	}
+	steps := []navStep{modeStep}
+	name := r.entityName[r.currentMode]
+	switch {
+	case r.historyShown():
+		if name != "" {
+			steps = append(steps, navStep{text: name, title: "Back to the Draft", onClick: func(ctx app.Context, e app.Event) {
+				r.closeHistory()
+			}})
+		}
+		steps = append(steps, navStep{text: "Saved states"})
+	case name != "":
+		steps = append(steps, navStep{text: name})
+	}
+	return steps
+}
+
+// navigationText is what the line beside the burger says: the steps of the
+// chain, separated by the middle dot (task 89, task 91).
+func (r *Root) navigationText() string {
+	steps := r.navigationSteps()
+	parts := make([]string, len(steps))
+	for i, step := range steps {
+		parts[i] = step.text
+	}
+	return strings.Join(parts, middleDot)
+}
+
+// renderNavigation is the line beside the burger: one button per step of the
+// chain, each going one level up (task 91).
 func (r *Root) renderNavigation() app.UI {
+	steps := r.navigationSteps()
 	text := r.navigationText()
-	return app.Button().
+	body := make([]app.UI, 0, len(steps)*2)
+	for i, step := range steps {
+		if i > 0 {
+			body = append(body, app.Span().Style("color", "var(--text-muted)").Text(middleDot))
+		}
+		body = append(body, r.renderNavigationStep(step))
+	}
+	return app.Div().
 		Attr("id", navigationID).
 		Attr("data-navigation", "true").
-		Attr("aria-label", "Main menu: "+text).
-		Attr("aria-haspopup", "true").
-		Attr("aria-expanded", boolText(r.menuOpen)).
-		Attr("aria-controls", menuPanelID).
+		Attr("aria-label", "Navigation: "+text).
 		Title(text).
 		Style("display", "flex").
 		Style("align-items", "center").
 		Style("min-width", "0").
-		Style("padding", "4px 8px").
+		Style("padding", "4px 4px").
+		Body(body...)
+}
+
+// renderNavigationStep draws one step: a button going one level up, or the
+// place shown, which has nothing above it (task 91).
+func (r *Root) renderNavigationStep(step navStep) app.UI {
+	b := app.Button().
+		Attr("data-nav-step", step.text).
+		Title(step.title).
+		Style("padding", "4px 6px").
 		Style("border", "none").
 		Style("background", "transparent").
 		Style("color", "var(--text)").
 		Style("font-size", "13px").
 		Style("font-weight", "600").
-		Style("cursor", "pointer").
-		Style("user-select", "none").
-		Body(app.Span().
-			Style("overflow", "hidden").
-			Style("text-overflow", "ellipsis").
-			Style("white-space", "nowrap").
-			Text(text)).
-		OnClick(func(ctx app.Context, e app.Event) { r.toggleMenu(ctx) })
+		Style("user-select", "none")
+	if step.onClick == nil {
+		b = b.Disabled(true).Style("cursor", "default").Style("opacity", "1")
+	} else {
+		b = b.Style("cursor", "pointer").OnClick(step.onClick)
+	}
+	return b.Body(app.Span().
+		Style("overflow", "hidden").
+		Style("text-overflow", "ellipsis").
+		Style("white-space", "nowrap").
+		Text(step.text))
 }
 
 // renderMenuButton is the burger of the header (task 89).
@@ -645,7 +733,7 @@ func (r *Root) renderChooseRow(mode Mode) app.UI {
 	if mode == ModeProject {
 		label, title = "Choose a project…", "Show the page that lists the projects"
 	}
-	shown := r.showList[mode]
+	shown := r.currentMode == mode && r.showList[mode]
 	body := []app.UI{app.Span().Text(label)}
 	if shown {
 		body = append(body, app.Span().Style("margin-left", "auto").Body(uiutil.IconCheck()))
@@ -675,7 +763,7 @@ func (r *Root) renderChooseRow(mode Mode) app.UI {
 // renderEntityRow is one entity of the menu, with the badge of its state: the
 // entity the mode shows is marked and checked (task 89).
 func (r *Root) renderEntityRow(mode Mode, item picker.Item) app.UI {
-	chosen := r.selected[mode] == item.ID && !(hasPage(mode) && r.showList[mode])
+	chosen := r.currentMode == mode && r.selected[mode] == item.ID && !(hasPage(mode) && r.showList[mode])
 	background, color := "transparent", "var(--text)"
 	if chosen {
 		background, color = "var(--accent-bg)", "var(--accent)"

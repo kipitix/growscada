@@ -47,28 +47,29 @@ func (p *Project) hasUnsavedChanges() bool {
 	return p.draftUnsaved
 }
 
-// openSaveDialog opens the Save dialog with a default title and the stored
-// user name. A first Save with no name yet shows the field empty: the dialog
-// still takes an author for that one save, while the User name page sets the
-// name every dialog starts from (task 72_6, task 90).
-func (p *Project) openSaveDialog(ctx app.Context) {
+// openSaveForm shows the history with a fresh name in its Save form: the Save
+// button and Ctrl+S land here, ready to fix a new saved state. The form takes
+// the stored user name as the author; the User name page sets the name it
+// starts from (task 90, task 91).
+func (p *Project) openSaveForm(ctx app.Context) {
 	p.saveTitle = "Save " + uiutil.FormatTime(time.Now())
-	p.saveAuthor = username.Stored(ctx)
-	p.saveDialog = true
-	ctx.Update()
+	if p.mounted {
+		p.saveAuthor = username.Stored(ctx)
+	}
+	p.openHistory(ctx)
 }
 
-// saveFromShortcut is Ctrl+S: the Save dialog when the Draft has unsaved
-// changes, nothing otherwise (task 72_6).
+// saveFromShortcut is Ctrl+S: the history screen with its Save form when the
+// Draft has unsaved changes, nothing otherwise (task 72_6; task 91).
 func (p *Project) saveFromShortcut(ctx app.Context) {
 	if !p.hasUnsavedChanges() || p.savingSavedState {
 		return
 	}
-	p.openSaveDialog(ctx)
+	p.openSaveForm(ctx)
 }
 
-// saveSavedState confirms the Save dialog: the Draft as it is becomes a saved
-// state.
+// saveSavedState confirms the Save form: the Draft as it is becomes a saved
+// state with the title the form holds.
 func (p *Project) saveSavedState(ctx app.Context) {
 	if p.content == nil || p.savingSavedState || p.deploying || p.loadingSavedState != 0 {
 		return
@@ -89,7 +90,8 @@ func (p *Project) saveSavedState(ctx app.Context) {
 		})
 	}, func(ctx app.Context, saved apiv0.SavedStateResponse) {
 		p.savingSavedState = false
-		p.saveDialog = false
+		p.saveTitle = "Save " + uiutil.FormatTime(time.Now())
+		p.history.StartNew(p.saveTitle)
 		ctx.NewActionWithValue(toast.ActionAdd, toast.Problem{Problem: apiv0.Problem{
 			Title:  fmt.Sprintf("Saved state %d saved", saved.Number),
 			Detail: saved.Title,
@@ -111,13 +113,37 @@ func (p *Project) saveSavedState(ctx app.Context) {
 
 // openHistory shows the saved states of the project, read afresh (task 84): a
 // screen of its own, in place of the content. The rows carry the saved states
-// and their labels alone (task 85_5, task 85_7).
+// and their labels alone, and the form at the top names a new one (task 85_5,
+// task 85_7, task 91).
 func (p *Project) openHistory(ctx app.Context) {
+	if p.saveTitle == "" {
+		p.saveTitle = "Save " + uiutil.FormatTime(time.Now())
+	}
 	p.historyScreen = true
+	p.history.StartNew(p.saveTitle)
 	p.loadSavedStates(ctx)
 	p.loadHistoryLabels(ctx)
+	p.onHistory()
 	ctx.Update()
 }
+
+// toggleHistory opens the saved states or, when they are shown, closes them and
+// returns to the content: the panel's one button is both ways (task 91).
+func (p *Project) toggleHistory(ctx app.Context) {
+	if p.historyScreen {
+		p.closeHistory()
+		return
+	}
+	p.openHistory(ctx)
+}
+
+// HistoryShown reports whether the saved states screen is shown: Root's
+// navigation line draws the step above it (task 91).
+func (p *Project) HistoryShown() bool { return p.historyScreen }
+
+// CloseHistory returns from the saved states to the content, as the panel's
+// way back does (task 91).
+func (p *Project) CloseHistory() { p.closeHistory() }
 
 // closeHistory returns from the saved states to the content, dropping the name
 // being edited.
@@ -126,8 +152,17 @@ func (p *Project) closeHistory() {
 	if p.history != nil {
 		p.history.Reset()
 	}
+	p.onHistory()
 	if p.mounted {
 		p.compoCtx.Update()
+	}
+}
+
+// onHistory tells Root the saved states opened or closed, so the navigation
+// line above adds or drops their step (task 91).
+func (p *Project) onHistory() {
+	if p.OnHistory != nil {
+		p.OnHistory()
 	}
 }
 
@@ -145,145 +180,49 @@ func (p *Project) renameSavedState(ctx app.Context, number int, title string) {
 	}, nil)
 }
 
-// renderSavedStateBar is the panel's Save, its unsaved-changes indicator and
-// History (task 72_2, task 72_6; task 84).
-func (p *Project) renderSavedStateBar() []app.UI {
-	saveTitle := "Save the Draft as a saved state"
-	switch {
-	case p.savingSavedState:
-		saveTitle = "The Draft is being saved"
-	case !p.hasUnsavedChanges():
-		saveTitle = "Nothing to save since the last save"
+// renderSaveButton is the panel's list: it opens the saved states of the
+// project, where the Draft sits as the newest state and the form names the next
+// one, and pressing it again returns to the content (task 91). It stays enabled
+// without changes, since it is also the way to browse them. The floppy belongs
+// to that form's Save.
+func (p *Project) renderSaveButton() app.UI {
+	title := "The saved states of the project"
+	if p.historyScreen {
+		title = "Back to the Draft"
 	}
-	body := []app.UI{
-		p.panelButton("save", uiutil.IconSave(), saveTitle, p.hasUnsavedChanges() && !p.savingSavedState,
-			func(ctx app.Context) { p.openSaveDialog(ctx) }),
-	}
-	indicator := app.Span().Style("font-size", "12px")
-	switch {
-	case p.hasUnsavedChanges():
-		indicator = indicator.
-			Attr("data-saved-state-unsaved", "true").
-			Style("color", "var(--toast-warn-title)").
-			Text("Unsaved changes")
-	case p.draftStateLoaded && len(p.savedStates) > 0:
-		indicator = indicator.
-			Attr("data-saved-state-saved", "true").
-			Style("color", "var(--text-muted)").
-			Text("Saved")
-	default:
-		indicator = indicator.Style("display", "none")
-	}
-	body = append(body, indicator)
-	body = append(body,
-		p.panelButton("history", uiutil.IconHistory(), "The saved states of the project", !p.savingSavedState,
-			func(ctx app.Context) { p.openHistory(ctx) }),
-	)
-	return body
+	return p.panelButton("saved-states", uiutil.IconSavedStates(), title,
+		true, func(ctx app.Context) { p.toggleHistory(ctx) })
 }
 
-// renderSaveDialog is the Save confirmation: a title, the author, and the
-// Save itself.
-func (p *Project) renderSaveDialog() app.UI {
-	return app.Div().
-		Attr("data-save-dialog", "true").
-		Style("position", "absolute").
-		Style("top", "48px").
-		Style("left", "16px").
-		Style("z-index", "20").
-		Style("width", "380px").
-		Style("padding", "14px").
-		Style("border", "1px solid var(--border)").
-		Style("border-radius", "6px").
-		Style("background", "var(--bg)").
-		Style("box-shadow", "var(--toast-shadow)").
-		Style("font-size", "13px").
-		Body(
-			app.H3().Style("margin", "0 0 8px").Text("Save the project"),
-			app.P().Style("margin", "0 0 6px").Style("color", "var(--text-muted)").
-				Text("The whole Draft is fixed as an immutable saved state. Editing continues; Save only marks a point of history."),
-			app.Input().
-				Attr("data-save-title", "true").
-				Type("text").
-				Value(p.saveTitle).
-				Placeholder("Title").
-				Style("width", "100%").
-				Style("box-sizing", "border-box").
-				Style("margin-bottom", "6px").
-				Style("padding", "4px 6px").
-				Style("border", "1px solid var(--border-input)").
-				Style("border-radius", "4px").
-				Style("background", "var(--input-bg)").
-				Style("color", "var(--text)").
-				OnInput(func(ctx app.Context, e app.Event) {
-					p.saveTitle = ctx.JSSrc().Get("value").String()
-				}),
-			app.Input().
-				Attr("data-save-author", "true").
-				Type("text").
-				Value(p.saveAuthor).
-				Placeholder("Author").
-				Style("width", "100%").
-				Style("box-sizing", "border-box").
-				Style("margin-bottom", "10px").
-				Style("padding", "4px 6px").
-				Style("border", "1px solid var(--border-input)").
-				Style("border-radius", "4px").
-				Style("background", "var(--input-bg)").
-				Style("color", "var(--text)").
-				OnInput(func(ctx app.Context, e app.Event) {
-					p.saveAuthor = ctx.JSSrc().Get("value").String()
-				}),
-			app.Div().
-				Style("display", "flex").
-				Style("justify-content", "flex-end").
-				Style("gap", "8px").
-				Body(
-					app.Button().
-						Style("padding", "4px 12px").
-						Style("font-size", "13px").
-						Style("cursor", "pointer").
-						Text("Cancel").
-						OnClick(func(ctx app.Context, e app.Event) {
-							p.saveDialog = false
-							ctx.Update()
-						}),
-					app.Button().
-						Attr("data-save-confirm", "true").
-						Disabled(p.savingSavedState).
-						Style("padding", "4px 12px").
-						Style("font-size", "13px").
-						Style("cursor", "pointer").
-						Style("background", "var(--accent)").
-						Style("color", "var(--accent-text)").
-						Text(saveConfirmLabel(p.savingSavedState)).
-						OnClick(func(ctx app.Context, e app.Event) {
-							p.saveSavedState(ctx)
-						}),
-				),
-		)
-}
-
-// saveConfirmLabel is the Save dialog's button: Save, or that the request is in
-// flight (a second click sends nothing).
-func saveConfirmLabel(saving bool) string {
-	if saving {
-		return "Saving…"
+// renderUnsavedIndicator is the yellow mark after Undo and Redo: a Draft with
+// nothing to save shows nothing (task 91).
+func (p *Project) renderUnsavedIndicator() app.UI {
+	if !p.hasUnsavedChanges() {
+		return app.Span().Style("display", "none")
 	}
-	return "Save"
+	return app.Span().
+		Attr("data-saved-state-unsaved", "true").
+		Style("font-size", "12px").
+		Style("color", "var(--toast-warn-title)").
+		Text("Unsaved changes")
 }
 
 // renderHistoryScreen is the history of the project's saved states (task 84):
-// the screen both modes share, fed with this project's history and its labels.
-// The screen draws saved states alone: every row is one of them, and a Deploy
-// takes the row's saved state (task 85_5, task 85_7).
+// the screen both modes share, fed with this project's history, its labels and
+// its Save form (task 91). The screen draws saved states alone: every row is
+// one of them, and a Deploy takes the row's saved state (task 85_5, task 85_7).
 func (p *Project) renderHistoryScreen() app.UI {
 	screen := p.history
 	screen.Rows = p.historyRows()
 	screen.Loaded = p.savedStatesLoaded
 	screen.Loading = p.loadingSavedState != 0 || p.deploying
 	screen.AllLabels = p.historyLabels
-	screen.OnBack = func(ctx app.Context) { p.closeHistory() }
+	screen.CanSave = p.hasUnsavedChanges()
+	screen.Saving = p.savingSavedState
+	screen.OnSave = func(ctx app.Context, title string) {
+		p.saveTitle = title
+		p.saveSavedState(p.compoCtx)
+	}
 	screen.OnLoad = func(ctx app.Context, number int) { p.loadSavedState(ctx, number) }
 	screen.OnRename = func(ctx app.Context, number int, title string) {
 		p.renameSavedState(ctx, number, title)

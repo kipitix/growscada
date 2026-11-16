@@ -117,7 +117,7 @@ The name an Engineer declares when saving a Draft; it is recorded with the save 
 _Avoid_: user, owner, editor
 
 **User name**:
-The UI's name for the Author until Users and authentication exist: the name the Save dialogs prefill, set on the Misc section's `User name` page. A declaration kept in the browser, not an account; a Save dialog may override the author for that one save.
+The UI's name for the Author until Users and authentication exist: the name the Save form prefills, set on the Misc section's `User name` page. A declaration kept in the browser, not an account; the form at the top of the saved states takes it as the author and has no author field of its own.
 _Avoid_: username, login
 
 ### Nodes
@@ -137,7 +137,7 @@ The working state of a Project or of a Library as it is being edited, and the un
 _Avoid_: working copy, unsaved changes
 
 **Clean Version**:
-The Version of a Draft at which its content last equalled its last saved state: a Save puts the Draft there, and so does a reset whose target is that saved state's content. A Draft has unsaved changes exactly while its Version is above its Clean Version; one nothing was ever written to is clean, and one written but never saved has none. It is a fact of the Draft, not a flag a tab keeps.
+The Version of a Draft at which its content last equalled a saved state's content — the one it was saved as, loaded from, discarded to or reverted to (ADR 0016, amendments 2026-11-10 and 2026-11-16). A Draft has unsaved changes exactly while its Version is above its Clean Version; one nothing was ever written to is clean, and one written but never saved has none. It is a fact of the Draft, not a flag a tab keeps.
 _Avoid_: saved version, base version, dirty flag
 
 **DraftChange**:

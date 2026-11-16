@@ -11,11 +11,11 @@ http:
 docs: |
   A saved state becomes what is edited (task 84): the Draft is replaced by the
   content of the saved state, its stack is cleared and its Version raised, in one
-  transaction. Loading the last saved state leaves the Draft clean — there is
-  nothing a Save would fix — and no Version is stated: the command is a reset,
-  not a write of content. The Library saved states the content names but this
-  server lacks are answered as warnings, with the Widgets of their
-  WidgetTypes dropped (task 71).
+  transaction. Loading any saved state leaves the Draft clean — there is nothing a
+  Save would fix, whichever state it is (ADR 0016, amendment 2026-11-16) — and no
+  Version is stated: the command is a reset, not a write of content. The Library
+  saved states the content names but this server lacks are answered as warnings,
+  with the Widgets of their WidgetTypes dropped (task 71).
 
 runtime:
   assertions:

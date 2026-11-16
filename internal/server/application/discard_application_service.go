@@ -79,7 +79,7 @@ func (s discardServiceImpl) Discard(ctx context.Context, rawProjectID uuid.UUID)
 	if !found {
 		return appdto.DiscardedDraft{}, fmt.Errorf("%w: %s", ErrNothingToDiscard, projectID)
 	}
-	result, warnings, err := s.resetTo(ctx, projectID, last, last.Number())
+	result, warnings, err := s.resetTo(ctx, projectID, last, true)
 	if err != nil {
 		return appdto.DiscardedDraft{}, err
 	}
@@ -99,10 +99,9 @@ func (s discardServiceImpl) Load(ctx context.Context, rawProjectID uuid.UUID, nu
 	if err != nil {
 		return appdto.LoadedDraft{}, fmt.Errorf("cannot read saved state %d of project %s: %w", number, projectID, err)
 	}
-	// The loaded content is the Draft's clean state only when it is the last
-	// saved state: an older one leaves the Draft with unsaved changes (task 74).
-	// The comparison is the repository's, under the Draft's lock.
-	result, warnings, err := s.resetTo(ctx, projectID, savedState, savedState.Number())
+	// The loaded content is a saved state's, the one named here: the Draft is
+	// clean whichever state it is (ADR 0016, amendment 2026-11-16).
+	result, warnings, err := s.resetTo(ctx, projectID, savedState, true)
 	if err != nil {
 		return appdto.LoadedDraft{}, err
 	}
@@ -116,13 +115,12 @@ func (s discardServiceImpl) Load(ctx context.Context, rawProjectID uuid.UUID, nu
 // resetTo replaces the whole Draft of projectID with the content of a saved
 // state in one transaction: the imports the content keeps are locked FOR SHARE
 // in it, the DraftChange stack is cleared and the Version raised, and no
-// DraftChange is written. cleanSavedState is the number of the saved state
-// whose content is written: the Draft is clean exactly when that is its last
-// saved state, compared under the Draft's lock (task 74). The Library Imports
-// the content names but this server lacks are dropped with the Widgets of their
-// WidgetTypes and returned as warnings, and they make the content no saved
-// state's (task 71).
-func (s discardServiceImpl) resetTo(ctx context.Context, projectID id.ID[project.Project], savedState draft.SavedState, cleanSavedState int) (draft.Draft, []appdto.DiscardWarning, error) {
+// DraftChange is written. clean says the written content is the saved state's
+// exactly — the Draft then becomes clean, whichever saved state it is (ADR
+// 0016, amendment 2026-11-16). The Library Imports the content names but this
+// server lacks are dropped with the Widgets of their WidgetTypes and returned
+// as warnings, and they make the content no saved state's (task 71).
+func (s discardServiceImpl) resetTo(ctx context.Context, projectID id.ID[project.Project], savedState draft.SavedState, clean bool) (draft.Draft, []appdto.DiscardWarning, error) {
 	file, ok := savedState.Content().ProjectFile()
 	if !ok {
 		return nil, nil, fmt.Errorf("saved state %d of project %s holds no project file", savedState.Number(), projectID)
@@ -139,9 +137,9 @@ func (s discardServiceImpl) resetTo(ctx context.Context, projectID id.ID[project
 	if len(warnings) > 0 {
 		// What is written is no longer the saved state's content: the Draft keeps
 		// its unsaved mark (task 71).
-		cleanSavedState = 0
+		clean = false
 	}
-	result, err := s.content.Drafts().Replace(ctx, s.content.ScopeOf(projectID), cleanSavedState, func(session *draft.Session) error {
+	result, err := s.content.Drafts().Replace(ctx, s.content.ScopeOf(projectID), clean, func(session *draft.Session) error {
 		if err := s.lockDiscardedImports(ctx, content, session); err != nil {
 			return err
 		}
@@ -179,18 +177,12 @@ func (s discardServiceImpl) Revert(ctx context.Context, rawProjectID uuid.UUID) 
 		return appdto.DiscardedDraft{}, fmt.Errorf("cannot check the library imports of project %s: %w", projectID, err)
 	}
 	content, warnings := dropMissingLibraryImports(content, deployment.Content, missing)
-	// The Draft the Revert writes is its last saved state's content only when the
-	// Deployment is exactly that and nothing of it was dropped: then it is clean,
-	// as after a Discard. A Deployment of another saved state, of a file or of an
-	// older state is a different content (task 74).
-	cleanSavedState, err := s.revertIsTheLastSavedState(ctx, projectID, deployment.Content)
-	if err != nil {
-		return appdto.DiscardedDraft{}, err
-	}
-	if len(warnings) > 0 {
-		cleanSavedState = 0
-	}
-	result, err := s.content.Drafts().Replace(ctx, s.content.ScopeOf(projectID), cleanSavedState, func(session *draft.Session) error {
+	// The Deployment the Revert writes is a saved state's content when it was
+	// deployed from one and nothing of it was dropped: then the Draft is clean,
+	// as after a Load. A Deployment from a file is no saved state's content
+	// (ADR 0016, amendment 2026-11-16).
+	clean := deployment.SavedStateNumber != nil && len(warnings) == 0
+	result, err := s.content.Drafts().Replace(ctx, s.content.ScopeOf(projectID), clean, func(session *draft.Session) error {
 		if err := s.lockDiscardedImports(ctx, content, session); err != nil {
 			return err
 		}
@@ -200,35 +192,6 @@ func (s discardServiceImpl) Revert(ctx context.Context, rawProjectID uuid.UUID) 
 		return appdto.DiscardedDraft{}, fmt.Errorf("cannot revert project %s: %w", projectID, err)
 	}
 	return appdto.DiscardedDraft{Version: result.Version().Number(), Warnings: warnings}, nil
-}
-
-// revertIsTheLastSavedState returns the number of the Project's last saved
-// state when the document of the Deployment it runs is that saved state's
-// content, and 0 otherwise: the Draft a Revert writes is then that saved state
-// again and clean, as after a Discard (task 74). A Project with no saved state,
-// or a Deployment of another content, is 0. The repository compares the number
-// with the one it holds under the Draft's lock, so a Save committed meanwhile
-// keeps the Draft unsaved.
-func (s discardServiceImpl) revertIsTheLastSavedState(ctx context.Context, projectID id.ID[project.Project], document projectv0.ProjectFile) (int, error) {
-	last, found, err := s.content.Drafts().FindLastSavedState(ctx, s.content.ScopeOf(projectID))
-	if err != nil {
-		return 0, fmt.Errorf("cannot read the last saved state of project %s: %w", projectID, err)
-	}
-	if !found {
-		return 0, nil
-	}
-	file, ok := last.Content().ProjectFile()
-	if !ok {
-		return 0, nil
-	}
-	same, err := sameProjectFile(document, file)
-	if err != nil {
-		return 0, fmt.Errorf("cannot compare the deployment and the last saved state of project %s: %w", projectID, err)
-	}
-	if !same {
-		return 0, nil
-	}
-	return last.Number(), nil
 }
 
 // lockDiscardedImports locks every Library the kept imports name FOR SHARE in

@@ -76,7 +76,8 @@ type Root struct {
 	// the Project or Library of the Project and Library modes.
 	selected map[Mode]uuid.UUID
 	// entityName is the name of the entity selected, as last read by the
-	// selection page: the slim "← List · <name>" row of the editor.
+	// selection page: the navigation line above the modes names it, one step
+	// above the saved states when they are shown (task 89, task 91).
 	entityName map[Mode]string
 	// showList is true while a mode shows its selection page (task 73)
 	// instead of the editor of the entity selected. It is decided when a mode
@@ -122,13 +123,14 @@ func NewRoot(anAPIServerURL string) *Root {
 	r.client = apiclient.New(anAPIServerURL, http.DefaultClient, apiclient.OnServerVersion(r.observeServerVersion))
 	r.project = project.NewProject(r.client)
 	r.library = library.NewLibrary(r.client)
-	// The panel of each editor carries the way back to its selection page
-	// (task 84): Root owns the page and the name the selection announced, so
-	// the mode asks for both instead of knowing them.
+	// The panel of each editor carries the single way back to its selection
+	// page (task 84, task 91): Root owns the page, so the mode asks for it
+	// instead of knowing it. The entity's name is in the navigation line, whose
+	// steps follow the saved states opening and closing.
 	r.library.OnBack = func() { r.showListPage(ModeLibrary) }
-	r.library.BackName = func() string { return r.entityName[ModeLibrary] }
+	r.library.OnHistory = r.onHistoryChanged
 	r.project.OnBack = func() { r.showListPage(ModeProject) }
-	r.project.BackName = func() string { return r.entityName[ModeProject] }
+	r.project.OnHistory = r.onHistoryChanged
 	r.operation = operation.NewOperation(r.client)
 	r.bar = eventlog.NewBar(anAPIServerURL)
 	r.misc = misc.New(r.client)
@@ -420,6 +422,14 @@ func (r *Root) openEntityAs(mode Mode, id uuid.UUID, name string) {
 	}
 	r.entityName[mode] = name
 	r.openEntity(mode, id)
+}
+
+// onHistoryChanged redraws the navigation line when a mode opens or closes its
+// saved states (task 91).
+func (r *Root) onHistoryChanged() {
+	if r.mounted {
+		r.compoCtx.Update()
+	}
 }
 
 // showListPage shows the selection page of mode, rereading its list, and

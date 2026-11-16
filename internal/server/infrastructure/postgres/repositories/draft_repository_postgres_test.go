@@ -128,10 +128,9 @@ func TestDraftCleanVersion_SaveDiscardAndNothingToSave(t *testing.T) {
 		t.Fatalf("a Save at the Clean Version: %v, want ErrNothingToSave", err)
 	}
 
-	// A replacement whose content is the SavedState's — a Discard — is clean, and
-	// a Save of it is refused too. The clean marker follows the SavedState number
-	// the content is, compared with the Draft's last one under the row's lock.
-	result, err := testDrafts().Replace(ctx, scope, 1, func(session *draft.Session) error {
+	// A replacement whose content is a saved state's — a Discard or a Load — is
+	// clean whichever saved state it is, and a Save of it is refused too.
+	result, err := testDrafts().Replace(ctx, scope, true, func(session *draft.Session) error {
 		return session.Replace(ctx, draft.Content{})
 	})
 	if err != nil {
@@ -145,9 +144,9 @@ func TestDraftCleanVersion_SaveDiscardAndNothingToSave(t *testing.T) {
 		t.Fatalf("a Save after a Discard: %v, want ErrNothingToSave", err)
 	}
 
-	// A replacement whose content is another one keeps the marker: the raised
-	// Version makes the Draft unsaved again.
-	if _, err := testDrafts().Replace(ctx, scope, 0, func(session *draft.Session) error {
+	// A replacement whose content is no saved state's keeps the marker: the
+	// raised Version makes the Draft unsaved again.
+	if _, err := testDrafts().Replace(ctx, scope, false, func(session *draft.Session) error {
 		return session.Replace(ctx, draft.Content{})
 	}); err != nil {
 		t.Fatalf("Replace: %v", err)
@@ -156,19 +155,20 @@ func TestDraftCleanVersion_SaveDiscardAndNothingToSave(t *testing.T) {
 		t.Errorf("a replacement that is not the SavedState's is clean")
 	}
 
-	// A replacement that names a SavedState the Draft no longer has as its last
-	// one is not clean either: a Save committed meanwhile overtook it (task 84).
+	// A replacement of an older saved state's content is clean too: loading one
+	// leaves nothing to save (ADR 0016, amendment 2026-11-16).
 	if _, err := testDrafts().SaveSavedState(ctx, scope, draftVersionOf(t, mainProject),
 		savedStateTitle(t, "Second"), savedStateAuthor(t), projectSavedStateContent()); err != nil && !errors.Is(err, draft.ErrNothingToSave) {
 		t.Fatalf("SaveSavedState: %v", err)
 	}
-	if _, err := testDrafts().Replace(ctx, scope, 1, func(session *draft.Session) error {
+	replaced, err := testDrafts().Replace(ctx, scope, true, func(session *draft.Session) error {
 		return session.Replace(ctx, draft.Content{})
-	}); err != nil {
+	})
+	if err != nil {
 		t.Fatalf("Replace: %v", err)
 	}
-	if !read().HasUnsavedChanges() {
-		t.Errorf("a replacement of an older SavedState than the last one is clean")
+	if replaced.HasUnsavedChanges() || read().HasUnsavedChanges() {
+		t.Errorf("a replacement of an older SavedState than the last one is unsaved")
 	}
 }
 
@@ -471,7 +471,7 @@ func TestDraftReplace_RemovesThePairsTheDeploymentLacks(t *testing.T) {
 	})
 
 	// The Deployment the Discard restores holds the Environment with one pair.
-	if _, err := testDrafts().Replace(ctx, draft.ProjectScope(mainProject), 0, func(session *draft.Session) error {
+	if _, err := testDrafts().Replace(ctx, draft.ProjectScope(mainProject), false, func(session *draft.Session) error {
 		return session.Replace(ctx, draft.Content{
 			Devices:            []device.Device{one, two},
 			Environments:       []device.Environment{environment},
@@ -803,7 +803,7 @@ func TestDraftLibrary_ReplaceRestoresTheSavedStateAndClearsTheStack(t *testing.T
 	}
 
 	before := libraryDraftVersionOf(t, repo.libraryID)
-	result, err := testDrafts().Replace(ctx, scope, 0, func(session *draft.Session) error {
+	result, err := testDrafts().Replace(ctx, scope, true, func(session *draft.Session) error {
 		return session.ReplaceWidgetTypes(ctx, saved)
 	})
 	if err != nil {

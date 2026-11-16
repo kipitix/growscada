@@ -78,6 +78,20 @@ func PanelBack(title, name string, onBack func(ctx app.Context, e app.Event)) ap
 		Body(body...)
 }
 
+// PanelBackArrow is the single way back of a mode's panel (task 91): the arrow
+// alone, without the entity's name, which the navigation line above carries.
+// A nil handler draws nothing — a mode nothing wired has no page to return to.
+func PanelBackArrow(title string, onBack func(ctx app.Context, e app.Event)) app.UI {
+	if onBack == nil {
+		return app.Div()
+	}
+	return app.Div().
+		Attr("data-panel-back", "true").
+		Style("display", "flex").
+		Style("align-items", "center").
+		Body(PanelButton(IconBack(), true, title, onBack, app.EventScope("back")))
+}
+
 // PageBar is the header of a Misc page (task 90): the way back with its hover
 // text and the page's name, or the name alone when the page has no way back.
 // It matches the panel of the Library and the Project: 13 px, weight 600 and a

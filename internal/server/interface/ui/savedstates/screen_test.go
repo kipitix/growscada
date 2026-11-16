@@ -31,6 +31,8 @@ func TestScreen_RowsAndActions(t *testing.T) {
 	for _, want := range []string{
 		`data-history-screen`,
 		`data-history-list`,
+		`data-draft-state-row`,
+		`data-save-title`,
 		`data-saved-state-row="2"`,
 		`data-saved-state-time="2"`,
 		"13.11.2026 21:04",
@@ -39,7 +41,7 @@ func TestScreen_RowsAndActions(t *testing.T) {
 		`data-saved-state-row="1"`,
 		"First save",
 		"Bob",
-		">Load<",
+		`data-icon="load"`,
 	} {
 		if !strings.Contains(html, want) {
 			t.Errorf("the screen does not hold %q: %s", want, html)
@@ -94,14 +96,28 @@ func TestScreen_RenameInPlace(t *testing.T) {
 	}
 }
 
-// TestScreen_BackIsTheWayToTheDraft: the screen names its own title and offers
-// the way back, which the mode wires (task 84).
-func TestScreen_BackIsTheWayToTheDraft(t *testing.T) {
+// TestScreen_HasTheSaveFormAndNoBack: the screen names its title and holds the
+// form that names a new saved state; the way back is the panel's single arrow,
+// so the screen draws none of its own (task 91).
+func TestScreen_HasTheSaveFormAndNoBack(t *testing.T) {
 	s := New()
 	s.Loaded = true
+	s.CanSave = true
+	s.StartNew("A new name")
 	html := app.HTMLString(s.Render())
-	if !strings.Contains(html, "Saved states") || !strings.Contains(html, `aria-label="Back to the Draft"`) {
-		t.Errorf("the screen's own header: %s", html)
+	for _, want := range []string{
+		"Saved states",
+		`data-draft-state-row`,
+		`data-save-title`,
+		"A new name",
+		`data-save-confirm`,
+	} {
+		if !strings.Contains(html, want) {
+			t.Errorf("the screen's own header lacks %q: %s", want, html)
+		}
+	}
+	if strings.Contains(html, `aria-label="Back to the Draft"`) {
+		t.Errorf("the screen draws a second way back: %s", html)
 	}
 }
 
@@ -123,7 +139,7 @@ func TestScreen_LabelsChipsAndMenu(t *testing.T) {
 		`data-label-id="` + marked.ID.String() + `"`,
 		"ready_for_deploy",
 		`data-label-add="1"`,
-		">+ label<",
+		`data-icon="label"`,
 	} {
 		if !strings.Contains(html, want) {
 			t.Errorf("the labels of the row do not hold %q: %s", want, html)
@@ -156,7 +172,7 @@ func TestScreen_LabelMenuWithNoLabels(t *testing.T) {
 	s.Rows = []Row{{Number: 1, Title: "First save", SavedAt: at(12, 10)}}
 	s.labelMenu = 1
 	html := app.HTMLString(s.Render())
-	for _, want := range []string{`data-label-menu="1"`, "No labels yet", "Manage labels"} {
+	for _, want := range []string{`data-label-menu="1"`, "No labels yet", `aria-label="Open the Labels page"`} {
 		if !strings.Contains(html, want) {
 			t.Errorf("the empty menu does not hold %q: %s", want, html)
 		}

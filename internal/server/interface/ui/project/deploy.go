@@ -569,40 +569,19 @@ func (p *Project) showLoadWarnings(ctx app.Context, warnings []apiv0.DiscardWarn
 	}})
 }
 
-// renderDeployBar is the project's panel: the Deployment it runs and the saved
-// state it came from, and the Deploy, Deployments and project file actions.
+// renderDeployBar is the project's panel: the way back, the floppy that opens
+// the saved states, Undo and Redo with the unsaved-changes mark after them, and
+// the Deploy, Deployments and project file actions (task 91).
 func (p *Project) renderDeployBar() app.UI {
-	badge := "Not deployed"
-	switch {
-	case p.deployed && p.deployment.SavedStateNumber != nil:
-		// The saved state is what people choose and name; the Deployment
-		// number stays in the Deployments history and the detail (task 85_4).
-		badge = fmt.Sprintf("Saved state #%d · running", *p.deployment.SavedStateNumber)
-	case p.deployed:
-		badge = fmt.Sprintf("Deployment %d · no saved state", p.deployment.Number)
-	case p.deploymentFailed:
-		// The read failed: the mode does not claim the project is not
-		// deployed (task 72_4).
-		badge = "Deployment unknown"
-	}
 	busy := p.deploying || p.loadingSavedState != 0
 
 	body := []app.UI{
 		p.renderBackButton(),
 		uiutil.BarDivider(),
-	}
-	body = append(body, p.renderSavedStateBar()...)
-	body = append(body,
+		p.renderSaveButton(),
 		uiutil.BarDivider(),
 		p.renderDraftChangesBar(),
-		uiutil.BarDivider(),
-		app.Span().
-			Attr("data-deploy-running", "true").
-			Style("font-size", "12px").
-			Style("font-weight", "600").
-			Style("color", "var(--text-2)").
-			Style("white-space", "nowrap").
-			Text(badge),
+		p.renderUnsavedIndicator(),
 		app.Div().Style("flex", "1"),
 		p.panelButton("project-file", uiutil.IconFile(), "Download the Draft, open a file, or deploy one",
 			!busy && !p.projectFileBusy, func(ctx app.Context) {
@@ -616,16 +595,13 @@ func (p *Project) renderDeployBar() app.UI {
 			!busy, func(ctx app.Context) {
 				p.openDeployDialog(ctx)
 			}),
-	)
+	}
 
 	if p.deploymentsDialog {
 		body = append(body, p.renderDeploymentsDialog())
 	}
 	if p.projectFileDialog {
 		body = append(body, p.renderProjectFileDialog())
-	}
-	if p.saveDialog {
-		body = append(body, p.renderSaveDialog())
 	}
 	if p.deployDialog {
 		body = append(body, p.renderDeployDialog())
@@ -643,19 +619,21 @@ func (p *Project) renderDeployBar() app.UI {
 		Body(body...)
 }
 
-// renderBackButton is the way back to the selection page (task 84), with the
-// name of the project shown. Root wires both — it owns the page and the name
-// the selection announced —, so a mode nothing wired shows the name alone.
+// renderBackButton is the panel's single way back (task 84, task 91): from the
+// saved states to the content, from the content to the selection page. Root
+// owns the page; a mode nothing wired shows no arrow. The project's name is not
+// repeated beside it.
 func (p *Project) renderBackButton() app.UI {
-	name := ""
-	if p.BackName != nil {
-		name = p.BackName()
+	if p.historyScreen {
+		return uiutil.PanelBackArrow("Back to the Draft", func(ctx app.Context, e app.Event) {
+			p.closeHistory()
+		})
 	}
 	var back func(ctx app.Context, e app.Event)
 	if p.OnBack != nil {
 		back = func(ctx app.Context, e app.Event) { p.OnBack() }
 	}
-	return uiutil.PanelBack("Back to the projects", name, back)
+	return uiutil.PanelBackArrow("Back to the projects", back)
 }
 
 // deployButtonTitle is the Deploy button's hover text: a Draft with nothing

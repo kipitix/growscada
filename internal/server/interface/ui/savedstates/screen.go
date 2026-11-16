@@ -50,17 +50,29 @@ type Screen struct {
 	// a saved state may carry any number of them (task 85_3).
 	AllLabels []apiv0.LabelResponse
 
-	// OnBack shows the Draft again; OnLoad and OnRename act on the row they
-	// name. OnAssign places a label on the row's saved state and OnUnassign
-	// takes it off; OnManageLabels opens the Labels page, where new labels
-	// are named and colored. A mode confirms a load on its own: the screen only
-	// says which row was asked for.
-	OnBack         func(ctx app.Context)
+	// CanSave reports whether the Draft has changes worth saving and Saving
+	// marks a Save in flight; the form at the top offers Save only then
+	// (task 91). OnSave fixes the Draft as a new saved state under the name
+	// the form holds.
+	CanSave bool
+	Saving  bool
+	OnSave  func(ctx app.Context, title string)
+
+	// OnLoad and OnRename act on the row they name. OnAssign places a label
+	// on the row's saved state and OnUnassign takes it off; OnManageLabels
+	// opens the Labels page, where new labels are named and colored. A mode
+	// confirms a load on its own: the screen only says which row was asked
+	// for.
 	OnLoad         func(ctx app.Context, number int)
 	OnRename       func(ctx app.Context, number int, title string)
 	OnAssign       func(ctx app.Context, number int, labelID uuid.UUID)
 	OnUnassign     func(ctx app.Context, number int, labelID uuid.UUID)
 	OnManageLabels func(ctx app.Context)
+
+	// newTitle is the name the form at the top gives the next saved state.
+	// StartNew fills it when the screen opens; typing keeps it here until the
+	// Save or the screen closes.
+	newTitle string
 
 	// renaming is the number of the saved state whose name is edited in place
 	// (0: none), renameText the text of the editor. The screen owns them: a
@@ -74,13 +86,33 @@ type Screen struct {
 // New creates the screen.
 func New() *Screen { return &Screen{} }
 
-// Reset drops what the screen kept for itself — the name being edited and the
-// open labels menu: the screen closes, and the next one opens on the names and
-// labels as they are.
-func (s *Screen) Reset() { s.renaming, s.renameText, s.labelMenu = 0, "", 0 }
+// Reset drops what the screen kept for itself — the name being edited, the
+// name the form holds and the open labels menu: the screen closes, and the
+// next one opens on the names and labels as they are.
+func (s *Screen) Reset() { s.renaming, s.renameText, s.labelMenu, s.newTitle = 0, "", 0, "" }
 
-// Render draws the screen: the way back with its title, then the rows in a list
-// that scrolls in its own pane.
+// StartNew sets the name the form at the top starts from; the mode calls it
+// when it opens the screen (task 91).
+func (s *Screen) StartNew(title string) { s.newTitle = title }
+
+// canSave reports whether the form may fix the Draft as a saved state: the
+// mode says the Draft has changes, no Save is in flight and a name is given.
+func (s *Screen) canSave() bool {
+	return s.CanSave && !s.Saving && strings.TrimSpace(s.newTitle) != ""
+}
+
+// save hands the name to the mode, which sends the Save: the screen keeps the
+// text until the answer, so a refusal leaves it in place.
+func (s *Screen) save(ctx app.Context) {
+	if !s.canSave() || s.OnSave == nil {
+		return
+	}
+	s.OnSave(ctx, strings.TrimSpace(s.newTitle))
+}
+
+// Render draws the screen: the title, the Draft as its newest state at the top
+// of the list — with the form that names a new saved state —, then the saved
+// states (task 91).
 func (s *Screen) Render() app.UI {
 	rows := []app.UI{}
 	switch {
@@ -106,18 +138,14 @@ func (s *Screen) Render() app.UI {
 		Style("min-height", "0").
 		Body(
 			app.Div().
+				Attr("data-history-bar", "true").
 				Style("display", "flex").
+				Style("flex-wrap", "wrap").
 				Style("align-items", "center").
 				Style("gap", "8px").
 				Style("padding", "6px 10px").
 				Style("border-bottom", "1px solid var(--border)").
 				Body(
-					uiutil.PanelButton(uiutil.IconBack(), true, "Back to the Draft",
-						func(ctx app.Context, e app.Event) {
-							if s.OnBack != nil {
-								s.OnBack(ctx)
-							}
-						}, app.EventScope("history-back")),
 					app.Span().
 						Attr("data-history-title", "true").
 						Style("font-size", "13px").
@@ -130,7 +158,63 @@ func (s *Screen) Render() app.UI {
 				Style("min-height", "0").
 				Style("overflow-y", "auto").
 				Style("padding", "4px 10px").
-				Body(rows...),
+				Body(append([]app.UI{s.renderDraftRow()}, rows...)...),
+		)
+}
+
+// renderDraftRow is the Draft itself as the newest state: always the top row,
+// with the name the next Save gives it. Only the Save is enabled when the
+// Draft has changes (task 91).
+func (s *Screen) renderDraftRow() app.UI {
+	saveTitle := "Save the Draft as a saved state"
+	switch {
+	case s.Saving:
+		saveTitle = "The Draft is being saved"
+	case !s.CanSave:
+		saveTitle = "Nothing to save since the last save"
+	}
+	return app.Div().
+		Attr("data-draft-state-row", "true").
+		Style("display", "flex").
+		Style("flex-wrap", "wrap").
+		Style("align-items", "center").
+		Style("gap", "10px").
+		Style("padding", "6px 4px").
+		Style("border-bottom", "1px solid var(--border)").
+		Body(
+			app.Span().
+				Attr("data-draft-state-label", "true").
+				Style("font-size", "11px").
+				Style("font-weight", "600").
+				Style("width", "118px").
+				Style("flex-shrink", "0").
+				Text("Draft"),
+			app.Input().
+				Attr("data-save-title", "true").
+				Type("text").
+				Value(s.newTitle).
+				Placeholder("Name of the saved state").
+				Style("flex", "1").
+				Style("min-width", "160px").
+				Style("box-sizing", "border-box").
+				Style("padding", "3px 6px").
+				Style("font-size", "12px").
+				Style("border", "1px solid var(--border-input)").
+				Style("border-radius", "4px").
+				Style("background", "var(--input-bg)").
+				Style("color", "var(--text)").
+				OnInput(func(ctx app.Context, e app.Event) {
+					s.newTitle = ctx.JSSrc().Get("value").String()
+					ctx.Update()
+				}).
+				OnKeyDown(func(ctx app.Context, e app.Event) {
+					if e.Get("key").String() == "Enter" {
+						s.save(ctx)
+					}
+				}),
+			uiutil.IconButton(uiutil.IconSave(), "accent", s.canSave(), saveTitle,
+				uiutil.ButtonRow, func(ctx app.Context, e app.Event) { s.save(ctx) }).
+				Attr("data-save-confirm", "true"),
 		)
 }
 
@@ -142,7 +226,7 @@ func (s *Screen) renderRow(row Row) app.UI {
 	details := []app.UI{s.renderName(row)}
 	details = append(details, s.renderLabels(row))
 
-	load := uiutil.Button("Load", "", !s.Loading,
+	load := uiutil.IconButton(uiutil.IconLoad(), "", !s.Loading,
 		"Replace the Draft with this saved state",
 		uiutil.ButtonRow, func(ctx app.Context, e app.Event) {
 			if s.OnLoad != nil {
@@ -246,7 +330,7 @@ func (s *Screen) renderLabels(row Row) app.UI {
 		assigned[l.ID] = true
 		chipsBody = append(chipsBody, LabelChip(l))
 	}
-	chipsBody = append(chipsBody, uiutil.Button("+ label", "", true, "Label this saved state", uiutil.ButtonRow,
+	chipsBody = append(chipsBody, uiutil.IconButton(uiutil.IconLabel(), "", true, "Label this saved state", uiutil.ButtonRow,
 		func(ctx app.Context, e app.Event) {
 			if s.labelMenu == row.Number {
 				s.labelMenu = 0
@@ -283,7 +367,7 @@ func (s *Screen) renderLabelMenu(row Row, assigned map[uuid.UUID]bool) app.UI {
 			Style("color", "var(--text-muted)").
 			Body(
 				app.Span().Text("No labels yet"),
-				uiutil.Button("Manage labels", "", true, "Open the Labels page", uiutil.ButtonRow,
+				uiutil.IconButton(uiutil.IconLabel(), "", true, "Open the Labels page", uiutil.ButtonRow,
 					func(ctx app.Context, e app.Event) {
 						if s.OnManageLabels != nil {
 							s.OnManageLabels(ctx)

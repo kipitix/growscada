@@ -33,16 +33,23 @@ func deployDraft(t *testing.T, api *testAPI) apiv0.DeployResponse {
 	return deployed
 }
 
-// TestDeployBar_ShowsTheDeploymentAndItsSavedState: the bar starts at "Not
-// deployed", and after a Deploy it names the saved state it runs.
-func TestDeployBar_ShowsTheDeploymentAndItsSavedState(t *testing.T) {
+// TestDeployBar_NamesNoSavedState: the bar names no Deployment status and no
+// saved state; the floppy opens the saved states and the deploy actions stay
+// (task 91).
+func TestDeployBar_NamesNoSavedState(t *testing.T) {
 	f := startProject(t)
 
 	if !f.p.deploymentLoaded || f.p.deployed {
 		t.Fatalf("deployment state: loaded %v, deployed %v", f.p.deploymentLoaded, f.p.deployed)
 	}
-	if html := app.HTMLString(f.p.Render()); !strings.Contains(html, "Not deployed") {
-		t.Errorf("the bar does not say the project is not deployed: %s", html)
+	html := app.HTMLString(f.p.Render())
+	for _, unwanted := range []string{"Not deployed", "data-deploy-running"} {
+		if strings.Contains(html, unwanted) {
+			t.Errorf("the bar still shows %q: %s", unwanted, html)
+		}
+	}
+	if !strings.Contains(html, `data-icon="saved-states"`) {
+		t.Errorf("the bar has no saved-states button: %s", html)
 	}
 
 	deployDraft(t, f.api)
@@ -52,8 +59,8 @@ func TestDeployBar_ShowsTheDeploymentAndItsSavedState(t *testing.T) {
 	if !f.p.deployed || f.p.deployment.Number != 1 || f.p.deployment.SavedStateNumber == nil || *f.p.deployment.SavedStateNumber != 1 {
 		t.Fatalf("after Deploy: deployed %v, %+v", f.p.deployed, f.p.deployment)
 	}
-	if html := app.HTMLString(f.p.Render()); !strings.Contains(html, "Saved state #1 · running") {
-		t.Errorf("the bar does not show saved state 1 running: %s", html)
+	if html := app.HTMLString(f.p.Render()); strings.Contains(html, "Saved state #1 · running") {
+		t.Errorf("the bar still shows the running saved state: %s", html)
 	}
 }
 
@@ -116,8 +123,8 @@ func TestDeployWindow_DeploymentWithoutSavedState(t *testing.T) {
 	if !strings.Contains(html, "Running Deployment 4 (no saved state)") {
 		t.Errorf("the window does not say the Deployment has no saved state: %s", html)
 	}
-	if !strings.Contains(html, "Deployment 4 · no saved state") {
-		t.Errorf("the bar does not say the running Deployment has no saved state: %s", html)
+	if strings.Contains(html, "Deployment 4 · no saved state") {
+		t.Errorf("the bar still names the running Deployment: %s", html)
 	}
 	if !strings.Contains(html, `data-saved-state-deploy="1"`) {
 		t.Errorf("the window does not offer the saved state for Deploy: %s", html)
@@ -165,7 +172,7 @@ func TestLoadSavedState_ResetsToTheLastSavedState(t *testing.T) {
 		t.Fatal("the change after the saved state is not unsaved")
 	}
 	html := app.HTMLString(f.p.Render())
-	for _, icon := range []string{"save", "undo", "redo", "history", "deploy"} {
+	for _, icon := range []string{"saved-states", "undo", "redo", "deploy"} {
 		if !strings.Contains(html, `data-icon="`+icon+`"`) {
 			t.Errorf("the panel has no %s action: %s", icon, html)
 		}
@@ -331,8 +338,8 @@ func TestDeployWindow_UnknownDeployment(t *testing.T) {
 	if !f.p.deploymentFailed || f.p.deploymentLoaded {
 		t.Fatalf("the failed read: failed %v, loaded %v", f.p.deploymentFailed, f.p.deploymentLoaded)
 	}
-	if html := app.HTMLString(f.p.Render()); !strings.Contains(html, "Deployment unknown") {
-		t.Errorf("the bar passes an unknown Deployment off as not deployed: %s", html)
+	if html := app.HTMLString(f.p.Render()); strings.Contains(html, "Deployment unknown") {
+		t.Errorf("the bar still names the unknown Deployment: %s", html)
 	}
 
 	f.p.openDeployDialog(f.p.compoCtx)

@@ -10,8 +10,8 @@ http:
 
 docs: |
   The same reset for a Library (task 84): its Draft becomes the WidgetTypes the
-  saved state copied, in one transaction. The Draft is clean exactly when the loaded
-  saved state is its last one.
+  saved state copied, in one transaction. The Draft is clean afterwards, whichever
+  saved state it is (ADR 0016, amendment 2026-11-16).
 
 runtime:
   assertions:
@@ -22,6 +22,9 @@ runtime:
       operator: isDefined
     - expression: 'res.body.version'
       operator: isNumber
+    - expression: 'res.body.has_unsaved_changes'
+      operator: eq
+      value: 'false'
 
 settings:
   encodeUrl: true

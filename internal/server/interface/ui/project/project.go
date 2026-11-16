@@ -96,13 +96,11 @@ type Project struct {
 
 	// ── saved states (task 72_2; ADR 0021) ─────────────────────────────────
 	// savedStates is the history of the Draft, newest first; savedStatesLoaded is
-	// false until its first answer. saveDialog is true while the Save dialog
-	// is open, saveTitle and saveAuthor its fields; savingSavedState marks the
-	// request in flight.
+	// false until its first answer. saveTitle and saveAuthor are the Save
+	// form's fields; savingSavedState marks the request in flight.
 	savedStates         []apiv0.SavedStateResponse
 	savedStatesLoaded   bool
 	savedStatesReloader uiutil.Reloader
-	saveDialog          bool
 	savingSavedState    bool
 	saveTitle           string
 	saveAuthor          string
@@ -137,12 +135,13 @@ type Project struct {
 	historyLabelsLoaded   bool
 	historyLabelsReloader uiutil.Reloader
 
-	// OnBack and BackName are the panel's way back to the selection page and
-	// the project it shows (task 84). Root owns both — the page and the name
-	// the selection announced — and sets them when it builds the mode; a mode
-	// nothing wired shows no way back.
-	OnBack   func()
-	BackName func() string
+	// OnBack is the panel's way back to the selection page (task 84, task 91).
+	// Root owns the page and sets it when it builds the mode; a mode nothing
+	// wired shows no way back. The project's name is not in the panel: the
+	// navigation line above carries it. OnHistory tells Root the saved states
+	// opened or closed, so its navigation line draws the step (task 91).
+	OnBack    func()
+	OnHistory func()
 
 	// ── Import libraries (task 85_6) ───────────────────────────────────────
 	// importDialog is true while the window is shown; importLibraryID is the
@@ -431,7 +430,7 @@ func (p *Project) SetProject(id uuid.UUID) {
 	p.changes, p.changesLoaded = apiv0.DraftChangesResponse{}, false
 	p.undoing, p.redoing = false, false
 	p.savedStates, p.savedStatesLoaded = nil, false
-	p.saveDialog, p.savingSavedState = false, false
+	p.savingSavedState = false
 	p.history.Reset()
 	p.draftUnsaved, p.draftStateLoaded = false, false
 	p.contentReplacements, p.appliedReplacements = 0, 0

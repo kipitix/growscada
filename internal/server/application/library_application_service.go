@@ -308,7 +308,7 @@ func (s libraryServiceImpl) Discard(ctx context.Context, rawID uuid.UUID) (appdt
 	if !ok {
 		return appdto.DraftState{}, fmt.Errorf("saved state %d of library %s holds no widget types", last.Number(), found.ID())
 	}
-	result, err := s.content.Drafts().Replace(ctx, scope, last.Number(), func(session *draft.Session) error {
+	result, err := s.content.Drafts().Replace(ctx, scope, true, func(session *draft.Session) error {
 		return session.ReplaceWidgetTypes(ctx, types)
 	})
 	if err != nil {
@@ -334,10 +334,9 @@ func (s libraryServiceImpl) LoadSavedState(ctx context.Context, rawID uuid.UUID,
 	if !ok {
 		return appdto.LoadedDraft{}, fmt.Errorf("saved state %d of library %s holds no widget types", savedState.Number(), found.ID())
 	}
-	// The loaded content is the Draft's clean state only when it is the last
-	// saved state: an older one leaves the Draft with unsaved changes (task 74).
-	// The comparison is the repository's, under the Draft's lock.
-	result, err := s.content.Drafts().Replace(ctx, scope, savedState.Number(),
+	// The loaded content is a saved state's, the one named here: the Draft is
+	// clean whichever state it is (ADR 0016, amendment 2026-11-16).
+	result, err := s.content.Drafts().Replace(ctx, scope, true,
 		func(session *draft.Session) error {
 			return session.ReplaceWidgetTypes(ctx, types)
 		})

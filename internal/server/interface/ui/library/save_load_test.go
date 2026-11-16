@@ -16,7 +16,7 @@ import (
 // The Library's Save flow of task 72_7: Ctrl+S, the status of the list, a load
 // of a saved state and a Discard made in another tab.
 
-// saveWithUI fixes the Draft as a saved state through the Save dialog and
+// saveWithUI fixes the Draft as a saved state through the Save form and
 // consumes its confirmation toast.
 func saveWithUI(t *testing.T, f *fixture, title string) {
 	t.Helper()
@@ -28,24 +28,28 @@ func saveWithUI(t *testing.T, f *fixture, title string) {
 	}
 }
 
-// TestSaveFromShortcut_OpensTheDialogOnlyWithChanges: Ctrl+S opens the Save
-// dialog when the Draft moved since its last saved state, nothing otherwise
-// (task 72_7; ADR 0021).
-func TestSaveFromShortcut_OpensTheDialogOnlyWithChanges(t *testing.T) {
+// TestSaveFromShortcut_OpensTheHistoryOnlyWithChanges: Ctrl+S opens the history
+// screen with its Save form when the Draft moved since its last saved state,
+// nothing otherwise (task 72_7, task 91; ADR 0021).
+func TestSaveFromShortcut_OpensTheHistoryOnlyWithChanges(t *testing.T) {
 	f, _ := selected(t)
 	f.run()
 	if !f.l.hasUnsavedChanges() {
 		t.Fatal("a Draft written but never saved reports no unsaved changes")
 	}
 	f.l.saveFromShortcut(f.l.compoCtx)
-	if !f.l.saveDialog {
-		t.Fatal("Ctrl+S did not open the Save dialog with unsaved changes")
+	if !f.l.historyScreen {
+		t.Fatal("Ctrl+S did not open the history screen with unsaved changes")
+	}
+	if html := app.HTMLString(f.l.Render()); !strings.Contains(html, `data-save-title`) {
+		t.Errorf("the history screen has no Save form: %s", html)
 	}
 	saveWithUI(t, f, "First save")
 
+	f.l.closeHistory()
 	f.l.saveFromShortcut(f.l.compoCtx)
-	if f.l.saveDialog {
-		t.Error("Ctrl+S opened the Save dialog with nothing to save")
+	if f.l.historyScreen {
+		t.Error("Ctrl+S opened the history screen with nothing to save")
 	}
 }
 
@@ -143,10 +147,10 @@ func TestLoadSavedState_ReplacesTheEditor(t *testing.T) {
 	}
 }
 
-// TestLoadSavedState_OlderSavedStateLeavesTheDraftUnsaved: a saved state that
-// is not the last one becomes the Draft too, and the server then reports it
-// unsaved — it differs from the newest saved state (task 74; task 84).
-func TestLoadSavedState_OlderSavedStateLeavesTheDraftUnsaved(t *testing.T) {
+// TestLoadSavedState_OlderSavedStateIsSaved: a saved state that is not the last
+// one becomes the Draft too, and the server reports it saved — loading any saved
+// state leaves the Draft clean (ADR 0016, amendment 2026-11-16; task 84).
+func TestLoadSavedState_OlderSavedStateIsSaved(t *testing.T) {
 	f, _ := selected(t)
 	f.run()
 	saveWithUI(t, f, "First save")
@@ -161,35 +165,34 @@ func TestLoadSavedState_OlderSavedStateLeavesTheDraftUnsaved(t *testing.T) {
 	if got := f.oneToast(); !strings.Contains(got.Title, "Saved state 1 loaded") {
 		t.Errorf("the load confirmation: %+v", got)
 	}
-	if !f.l.hasUnsavedChanges() {
-		t.Error("the Draft loaded from an older saved state reports no unsaved changes")
+	if f.l.hasUnsavedChanges() {
+		t.Error("the Draft loaded from an older saved state reports unsaved changes")
 	}
 	if len(f.l.shownTypes()) != 1 {
 		t.Errorf("the shown Draft after loading saved state 1: %+v, want its one WidgetType", f.l.shownTypes())
 	}
 }
 
-// TestLibraryState_ListsTheStates: the header's state of the selected library
-// follows the Draft: never saved, a saved state, unsaved changes (task 72_7;
-// task 73; task 85_7).
-func TestLibraryState_ListsTheStates(t *testing.T) {
+// TestLibraryPanel_NamesNoSavedState: the panel names no saved state and shows
+// no gray "Saved"; it marks only unsaved changes, after Undo and Redo
+// (task 72_7; task 91).
+func TestLibraryPanel_NamesNoSavedState(t *testing.T) {
 	f, _ := selected(t)
 	f.run()
-	status := func() string { return app.HTMLString(f.l.renderLibraryStatus()) }
-	if html := status(); !strings.Contains(html, "Never saved.") {
-		t.Errorf("the header of a Draft never saved: %s", html)
-	}
 
 	saveWithUI(t, f, "First save")
 	f.run()
-	if html := status(); !strings.Contains(html, "Saved state #1") {
-		t.Errorf("the header does not name the saved state: %s", html)
+	html := app.HTMLString(f.l.Render())
+	for _, unwanted := range []string{"data-library-status", "Saved state #", "data-saved-state-saved"} {
+		if strings.Contains(html, unwanted) {
+			t.Errorf("the panel still names the saved state (%s): %s", unwanted, html)
+		}
 	}
 
 	added := createWidgetType(t, f.api, "Added")
 	f.event(apiv0.Event{Type: apiv0.EventWidgetTypeCreated, ID: added.String(), LibraryID: f.l.libraryID.String()})
-	if html := status(); !strings.Contains(html, "unsaved changes") {
-		t.Errorf("the header does not mark the unsaved Draft: %s", html)
+	if html := app.HTMLString(f.l.Render()); !strings.Contains(html, "data-saved-state-unsaved") {
+		t.Errorf("the panel does not mark the unsaved Draft: %s", html)
 	}
 }
 
@@ -255,7 +258,7 @@ func TestDiscard_AnotherTabsDiscardClearsTheIndicator(t *testing.T) {
 	if f.l.hasUnsavedChanges() {
 		t.Errorf("the indicator stays after another tab's Discard")
 	}
-	if html := app.HTMLString(app.Div().Body(f.l.renderSavedStateBar()...)); strings.Contains(html, "data-saved-state-unsaved") {
+	if html := app.HTMLString(f.l.renderUnsavedIndicator()); strings.Contains(html, "data-saved-state-unsaved") {
 		t.Errorf("the header still marks unsaved changes: %s", html)
 	}
 }

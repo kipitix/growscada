@@ -10,37 +10,55 @@ import (
 	"github.com/kipitix/growscada/internal/server/interface/ui/username"
 )
 
-// TestSavedStateBar_IndicatorKeepsTheButtonPositions: the unsaved-changes
-// indicator is always the panel's second child — hidden when it has nothing
-// to say —, so History never shifts by a position and a reused element keeps
-// its own handler (task 79). TestEngine renders but dispatches no DOM click,
-// so the panels themselves are checked in the browser; this test guards the
-// structure the bug came from.
-func TestSavedStateBar_IndicatorKeepsTheButtonPositions(t *testing.T) {
+// TestHeader_OneSavedStatesButtonAndTheUnsavedMark: the panel's only
+// saved-states action is the list — it opens the history and stays enabled
+// without changes —, the yellow unsaved mark follows Undo and Redo, and the
+// panel names no saved state (task 91).
+func TestHeader_OneSavedStatesButtonAndTheUnsavedMark(t *testing.T) {
 	l := &Library{libraryID: uuid.New()}
-	for _, tc := range []struct {
-		name    string
-		unsaved bool
-		marker  string
-	}{
-		{"unsaved changes", true, `data-saved-state-unsaved`},
-		{"nothing to show", false, `display:none`},
-	} {
-		l.draftUnsaved, l.draftStateLoaded = tc.unsaved, false
-		bar := l.renderSavedStateBar()
-		if len(bar) != 3 {
-			t.Fatalf("%s: the header has %d children, want 3", tc.name, len(bar))
+	l.draftUnsaved = true
+	html := app.HTMLString(l.renderHeader())
+	if strings.Contains(html, `data-icon="history"`) {
+		t.Errorf("the panel still has a History button: %s", html)
+	}
+	if got := strings.Count(html, `data-icon="saved-states"`); got != 1 {
+		t.Errorf("the panel has %d saved-states buttons, want 1: %s", got, html)
+	}
+	if strings.Contains(html, `data-icon="save"`) {
+		t.Errorf("the panel still carries the floppy, which belongs to Save: %s", html)
+	}
+	if i, j := strings.Index(html, "data-draft-changes-bar"), strings.Index(html, "data-saved-state-unsaved"); i < 0 || j < 0 || i > j {
+		t.Errorf("the unsaved mark does not follow Undo and Redo: %s", html)
+	}
+	for _, unwanted := range []string{"data-saved-state-saved", "Saved state #", "data-library-status"} {
+		if strings.Contains(html, unwanted) {
+			t.Errorf("the panel still names the saved state (%s): %s", unwanted, html)
 		}
-		if html := app.HTMLString(bar[0]); !strings.Contains(html, `data-icon="save"`) {
-			t.Errorf("%s: the first child is not Save: %s", tc.name, html)
-		}
-		if html := app.HTMLString(bar[1]); !strings.Contains(html, tc.marker) {
-			t.Errorf("%s: the indicator: %s", tc.name, html)
-		}
-		if html := app.HTMLString(bar[2]); !strings.Contains(html, `data-icon="history"`) {
-			t.Errorf("%s: the third child is not History: %s", tc.name, html)
-		}
+	}
 
+	l.draftUnsaved = false
+	if html := app.HTMLString(l.renderHeader()); strings.Contains(html, "data-saved-state-unsaved") {
+		t.Errorf("a clean Draft still marks unsaved changes: %s", html)
+	}
+}
+
+// TestSavedStatesButton_TogglesTheEditor: the panel's list opens the saved
+// states and pressing it again returns to the Draft (task 91).
+func TestSavedStatesButton_TogglesTheEditor(t *testing.T) {
+	f, _ := selected(t)
+	f.run()
+	f.l.toggleHistory()
+	f.run()
+	if !f.l.historyScreen {
+		t.Fatal("the saved-states button did not open the history")
+	}
+	if html := app.HTMLString(f.l.renderHeader()); !strings.Contains(html, `aria-label="Back to the Draft"`) {
+		t.Errorf("the button does not offer the way back while the history is open: %s", html)
+	}
+	f.l.toggleHistory()
+	f.run()
+	if f.l.historyScreen {
+		t.Error("the saved-states button did not return to the editor")
 	}
 }
 
@@ -66,6 +84,13 @@ func TestSaveSavedState_LibraryHistoryAndRename(t *testing.T) {
 
 	f.l.saveAuthor = "Ada"
 	f.l.saveTitle = "Widgets before the demo"
+	f.l.openSaveForm()
+	if !f.l.historyScreen {
+		t.Fatal("the Save button did not open the history screen")
+	}
+	if html := app.HTMLString(f.l.Render()); !strings.Contains(html, `data-save-title`) {
+		t.Errorf("the history screen has no Save form: %s", html)
+	}
 	f.l.saveSavedState()
 	f.run()
 
@@ -93,28 +118,24 @@ func TestSaveSavedState_LibraryHistoryAndRename(t *testing.T) {
 	}
 }
 
-// TestSaveSavedState_LibraryShortcutsWaitForTheDialogs: the Save and the
-// History dialogs of the mode hold the Draft's shortcuts (task 72_2; ADR 0021).
-func TestSaveSavedState_LibraryShortcutsWaitForTheDialogs(t *testing.T) {
+// TestSaveSavedState_LibraryShortcutsWaitForTheHistory: the History screen of
+// the mode holds the Draft's shortcuts (task 72_2, task 91; ADR 0021).
+func TestSaveSavedState_LibraryShortcutsWaitForTheHistory(t *testing.T) {
 	url, api := newServer(t)
 	f := mount(t, url, api)
 	f.run()
 	if !f.l.keyActionAllowed() {
 		t.Fatal("a shortcut is refused without a dialog")
 	}
-	f.l.saveDialog = true
+	f.l.historyScreen = true
 	if f.l.keyActionAllowed() {
-		t.Errorf("a shortcut acts behind the Save dialog")
-	}
-	f.l.saveDialog, f.l.historyScreen = false, true
-	if f.l.keyActionAllowed() {
-		t.Errorf("a shortcut acts behind the History dialog")
+		t.Errorf("a shortcut acts behind the History screen")
 	}
 }
 
 // TestHeader_HasNoAuthorBar: the user name is set in the Misc section and is
-// not repeated in the header; the Save dialog fills it in, and the User name
-// page's change reaches the next dialog (task 90).
+// not repeated in the header; the Save form at the top of the history takes it
+// as the author, and the User name page's change reaches it (task 90, task 91).
 func TestHeader_HasNoAuthorBar(t *testing.T) {
 	url, api := newServer(t)
 	f := mount(t, url, api)
@@ -133,9 +154,13 @@ func TestHeader_HasNoAuthorBar(t *testing.T) {
 	if f.l.saveAuthor != "Grace" {
 		t.Errorf("the author after the User name page wrote one: %q", f.l.saveAuthor)
 	}
-	f.l.openSaveDialog()
+	f.l.openSaveForm()
 	f.run()
-	if html := app.HTMLString(f.l.Render()); !strings.Contains(html, `data-save-author`) {
-		t.Errorf("the Save dialog has no author field: %s", html)
+	html := app.HTMLString(f.l.Render())
+	if !strings.Contains(html, `data-save-title`) {
+		t.Errorf("the Save form has no name field: %s", html)
+	}
+	if strings.Contains(html, `data-save-author`) {
+		t.Errorf("the Save form still asks for an author: %s", html)
 	}
 }
